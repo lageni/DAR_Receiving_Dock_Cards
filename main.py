@@ -38,21 +38,18 @@ def get_db_connection():
         )
         return ibm_db.connect(conn_str, "", "")
     except Exception as e:
-        raise ConnectionError(f"Failed to connect to Informix: {str(e)}"))
+        raise ConnectionError(f"Failed to connect to Informix: {str(e)}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """App lifecycle management."""
     # Startup
-    try:
-        conn = get_db_connection()
-        conn.close()
-        print("✅ Informix connection successful")
-    except Exception as e:
-        print(f"⚠️ Warning: Could not verify DB connection: {e}")
+    print("[CodePuppy DAR] Starting up...")
+    print("[CodePuppy DAR] Dashboard ready at http://localhost:8000")
     yield
     # Shutdown
+    print("[CodePuppy DAR] Shutting down...")
 
 
 app = FastAPI(title="CodePuppy DAR - Deliveries", lifespan=lifespan)
