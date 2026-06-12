@@ -87,9 +87,13 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
         <div style="height: 300px; position: relative;">
             <canvas id="{chart_id}"></canvas>
         </div>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
         <script>
             (function() {{
+                // Wait for Chart.js to be ready
+                if (typeof Chart === 'undefined') {{
+                    setTimeout(arguments.callee, 100);
+                    return;
+                }}
                 var ctx = document.getElementById("{chart_id}").getContext("2d");
                 var labels = {labels_json};
                 var values = {values_json};
@@ -104,7 +108,9 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
                             backgroundColor: "rgba(0, 83, 226, 0.1)",
                             borderWidth: 2,
                             fill: true,
-                            tension: 0.3
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: "#0053e2"
                         }}]
                     }},
                     options: {{
@@ -139,6 +145,7 @@ async def root():
     <title>CodePuppy DAR</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body class="bg-gray-50">
     <header class="bg-white border-b px-4 py-6">
