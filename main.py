@@ -1,252 +1,394 @@
 import os
-from typing import Optional
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, HTTPException
+import json
+from pathlib import Path
+from urllib.parse import urlencode
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+import httpx
 from dotenv import load_dotenv
-import ibm_db
 
-# Load environment variables
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
-# Database connection config
-DB_CONFIG = {
-    "host": os.getenv("INFORMIX_HOST"),
-    "server": os.getenv("INFORMIX_SERVER"),
-    "port": int(os.getenv("INFORMIX_PORT", 23301)),
-    "user": os.getenv("INFORMIX_USER"),
-    "password": os.getenv("INFORMIX_PASSWORD"),
-    "database": os.getenv("INFORMIX_DATABASE"),
-}
-
-
-class Delivery(BaseModel):
-    delivery_id: str
-    customer_name: Optional[str] = None
-    delivery_date: Optional[str] = None
-    status: Optional[str] = None
-    address: Optional[str] = None
-
-
-def get_db_connection():
-    """Create Informix database connection."""
-    try:
-        conn_str = (
-            f"DRIVER={{IBM INFORMIX ODBC DRIVER}};SERVER={DB_CONFIG['server']};DATABASE={DB_CONFIG['database']};HOST={DB_CONFIG['host']};PORT={DB_CONFIG['port']};UID={DB_CONFIG['user']};PWD={DB_CONFIG['password']}"
-        )
-        return ibm_db.connect(conn_str, "", "")
-    except Exception as e:
-        raise ConnectionError(f"Failed to connect to Informix: {str(e)}")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """App lifecycle management."""
-    # Startup
-    print("[CodePuppy DAR] Starting up...")
-    print("[CodePuppy DAR] Dashboard ready at http://localhost:8000")
-    yield
-    # Shutdown
-    print("[CodePuppy DAR] Shutting down...")
-
-
-app = FastAPI(title="CodePuppy DAR - Deliveries", lifespan=lifespan)
+app = FastAPI(title="CodePuppy DAR")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve main dashboard."""
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>CodePuppy DAR - Deliveries</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-        <style>
-            :root {
-                --color-primary: #0053e2;
-                --color-accent: #ffc220;
-                --color-success: #2a8703;
-                --color-error: #ea1100;
-            }
-        </style>
-    </head>
-    <body class="bg-gray-50">
-        <div class="min-h-screen">
-            <!-- Header -->
-            <header class="bg-white border-b border-gray-100">
-                <div class="max-w-7xl mx-auto px-4 py-6">
-                    <h1 class="text-3xl font-bold" style="color: var(--color-primary);">
-                        🐶 CodePuppy DAR
-                    </h1>
-                    <p class="text-gray-600 mt-1">Informix Deliveries Dashboard</p>
-                </div>
-            </header>
-
-            <!-- Main Content -->
-            <main class="max-w-7xl mx-auto px-4 py-8">
-                <!-- Stats Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                    <div class="bg-white rounded-lg border border-gray-100 p-6">
-                        <p class="text-gray-600 text-sm">Total Deliveries</p>
-                        <p class="text-3xl font-bold mt-2" style="color: var(--color-primary);">
-                            <span hx-get="/api/stats/total" hx-trigger="load">-</span>
-                        </p>
-                    </div>
-                    <div class="bg-white rounded-lg border border-gray-100 p-6">
-                        <p class="text-gray-600 text-sm">Pending</p>
-                        <p class="text-3xl font-bold mt-2" style="color: var(--color-accent);">
-                            <span hx-get="/api/stats/pending" hx-trigger="load">-</span>
-                        </p>
-                    </div>
-                    <div class="bg-white rounded-lg border border-gray-100 p-6">
-                        <p class="text-gray-600 text-sm">Delivered</p>
-                        <p class="text-3xl font-bold mt-2" style="color: var(--color-success);">
-                            <span hx-get="/api/stats/delivered" hx-trigger="load">-</span>
-                        </p>
-                    </div>
-                    <div class="bg-white rounded-lg border border-gray-100 p-6">
-                        <p class="text-gray-600 text-sm">Issues</p>
-                        <p class="text-3xl font-bold mt-2" style="color: var(--color-error);">
-                            <span hx-get="/api/stats/issues" hx-trigger="load">-</span>
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Deliveries Table -->
-                <div class="bg-white rounded-lg border border-gray-100 overflow-hidden">
-                    <div class="p-6 border-b border-gray-100">
-                        <h2 class="text-xl font-bold">Recent Deliveries</h2>
-                    </div>
-                    <div hx-get="/api/deliveries" hx-trigger="load" hx-swap="innerHTML">
-                        <div class="p-6 text-center text-gray-500">Loading deliveries...</div>
-                    </div>
-                </div>
-            </main>
+    return """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodePuppy DAR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-white border-b px-4 py-6">
+        <h1 class="text-3xl font-bold text-blue-600">CodePuppy DAR</h1>
+        <p class="text-sm text-gray-600">Inventory Search</p>
+    </header>
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded border shadow-sm">
+                <h2 class="font-bold mb-4">Search</h2>
+                <form id="searchForm" hx-get="/api/inventory/search" hx-target="#results">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Item ID</label>
+                            <input type="text" id="itemIdInput" name="item_id" placeholder="665540630" required class="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">ID Type</label>
+                            <select name="id_type" class="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="ITEM_NUMBER">Item Number</option>
+                                <option value="UPC">UPC</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Node</label>
+                            <input type="text" name="node" value="6068" class="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+               </div>
+                    <button type="submit" class="w-full mt-4 bg-blue-600 text-white py-2 rounded font-semibold hover:bg-blue-700">Search</button>
+                </form>
+                <button onclick="loadExample()" class="w-full mt-2 bg-gray-200 text-gray-800 py-2 rounded font-semibold hover:bg-gray-300">Load Example (665540630)</button>
+            </div>
+            <div class="lg:col-span-2 bg-white p-6 rounded border shadow-sm">
+                <div id="results" class="text-sm text-gray-500">Results appear here...</div>
+            </div>
         </div>
-    </body>
-    </html>
-    """
+    </main>
+    <script>
+        function loadExample() {
+            document.getElementById('itemIdInput').value = '665540630';
+            htmx.ajax('GET', '/api/inventory/search?item_id=665540630&id_type=ITEM_NUMBER&node=6068', '#results');
+        }
+    </script>
+</body>
+</html>"""
 
 
-@app.get("/api/deliveries", response_class=HTMLResponse)
-async def get_deliveries():
-    """Fetch deliveries from Informix and return as HTML table."""
+@app.get("/api/inventory/search", response_class=HTMLResponse)
+async def search_inventory(item_id: str, id_type: str = "ITEM_NUMBER", node: str = None):
     try:
-        conn = get_db_connection()
-        
-        # TODO: Replace with actual deliveries table query
-        query = """
-            SELECT 
-                1 as delivery_id,
-                'John Doe' as customer_name,
-                TODAY() as delivery_date,
-                'PENDING' as status,
-                '123 Main St' as address
-        """
-        
-        stmt = ibm_db.exec_immediate(conn, query)
-        rows = ibm_db.fetch_both(stmt)
-        rows_list = []
-        while rows:
-            rows_list.append(rows)
-            rows = ibm_db.fetch_both(stmt)
-        ibm_db.close(conn)
-        
-        if not rows:
-            return "<div class='p-6 text-center text-gray-500'>No deliveries found</div>"
-        
-        html = '<table class="w-full text-left">'
-        html += '<thead class="bg-gray-50 border-b border-gray-100"><tr>'
-        html += '<th class="px-6 py-3 text-xs font-semibold text-gray-700">ID</th>'
-        html += '<th class="px-6 py-3 text-xs font-semibold text-gray-700">Customer</th>'
-        html += '<th class="px-6 py-3 text-xs font-semibold text-gray-700">Date</th>'
-        html += '<th class="px-6 py-3 text-xs font-semibold text-gray-700">Status</th>'
-        html += '<th class="px-6 py-3 text-xs font-semibold text-gray-700">Address</th>'
-        html += '</tr></thead><tbody>'
-        
-        for row in rows:
-            status_color = {
-                'PENDING': 'bg-yellow-50 text-yellow-700',
-                'DELIVERED': 'bg-green-50 text-green-700',
-                'FAILED': 'bg-red-50 text-red-700',
-            }.get(row[3], 'bg-gray-50 text-gray-700')
-            
-            html += f'<tr class="border-b border-gray-100 hover:bg-gray-50">'
-            html += f'<td class="px-6 py-4 text-sm">{row[0]}</td>'
-            html += f'<td class="px-6 py-4 text-sm">{row[1]}</td>'
-            html += f'<td class="px-6 py-4 text-sm">{row[2]}</td>'
-            html += f'<td class="px-6 py-4 text-sm"><span class="px-2 py-1 rounded text-xs font-semibold {status_color}">{row[3]}</span></td>'
-            html += f'<td class="px-6 py-4 text-sm">{row[4]}</td>'
-            html += '</tr>'
-        
-        html += '</tbody></table>'
-        return html
-        
+        jwt = os.getenv("INVENTORY_JWT_TOKEN")
+        user_id = os.getenv("INVENTORY_USER_ID")
+        api_url = os.getenv("INVENTORY_API_URL", "https://inventory-viewer.prod.walmart.net")
+        node = node or os.getenv("INVENTORY_DEFAULT_NODE", "6068")
+        country_code = os.getenv("INVENTORY_COUNTRY_CODE", "US")
+
+        if not jwt or not user_id:
+            return '<div class="text-red-600">Error: Missing credentials in .env</div>'
+
+        headers = {"Authorization": jwt, "UserId": user_id}
+        params = {
+            "node": node,
+            "itemId": item_id,
+            "idType": id_type,
+            "userName": user_id,
+            "countryCode": country_code,
+            "isOfferIdRollupEnabled": "false",
+        }
+
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+            response = await client.get(f"{api_url}/get-summary", params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        return format_results(data, item_id)
+
+    except httpx.HTTPStatusError as e:
+        return f'<div class="text-red-600">API Error {e.response.status_code}</div>'
     except Exception as e:
-        return f"<div class='p-6 text-center text-red-600'>Error: {str(e)}</div>"
+        return f'<div class="text-red-600">Error: {str(e)}</div>'
 
 
-@app.get("/api/stats/total")
-async def stats_total():
-    """Get total deliveries count."""
+@app.get("/print-card", response_class=HTMLResponse)
+async def print_card(item_id: str, product_id: str = "", gtin: str = "", supplier_dept: str = ""):
     try:
-        conn = get_db_connection()
-        stmt = ibm_db.exec_immediate(conn, "SELECT COUNT(*) as cnt FROM delivery")
-        row = ibm_db.fetch_both(stmt)
-        count = row.get(0, row.get('cnt', 0)) if row else 0
-        ibm_db.close(conn)
-        return str(count)
-    except:
-        return "0"
+        jwt = os.getenv("INVENTORY_JWT_TOKEN")
+        user_id = os.getenv("INVENTORY_USER_ID")
+        api_url = os.getenv("INVENTORY_API_URL", "https://inventory-viewer.prod.walmart.net")
+        node = os.getenv("INVENTORY_DEFAULT_NODE", "6068")
+        country_code = os.getenv("INVENTORY_COUNTRY_CODE", "US")
+
+        if not jwt or not user_id:
+            return '<div class="text-red-600">Error: Missing credentials in .env</div>'
+
+        headers = {"Authorization": jwt, "UserId": user_id}
+        params = {
+            "node": node,
+            "itemId": item_id,
+            "idType": "ITEM_NUMBER",
+            "userName": user_id,
+            "countryCode": country_code,
+            "isOfferIdRollupEnabled": "false",
+        }
+
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+            response = await client.get(f"{api_url}/get-summary", params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        return generate_print_card(data, item_id)
+
+    except Exception as e:
+        return f'<div class="text-red-600">Error: {str(e)}</div>'
 
 
-@app.get("/api/stats/pending")
-async def stats_pending():
-    """Get pending deliveries count."""
-    try:
-        conn = get_db_connection()
-        stmt = ibm_db.exec_immediate(conn, "SELECT COUNT(*) as cnt FROM delivery WHERE status = 'PENDING'")
-        row = ibm_db.fetch_both(stmt)
-        count = row.get(0, row.get('cnt', 0)) if row else 0
-        ibm_db.close(conn)
-        return str(count)
-    except:
-        return "0"
+def format_results(data: dict, item_id: str) -> str:
+    json_str = json.dumps(data, indent=2)
+    item_data = extract_item_data(data)
+    item_name = item_data["item_name"]
+    image_url = item_data["image_url"]
+    gtin = item_data["gtin"]
+    product_id = item_data["product_id"]
+    supplier_dept = item_data["supplier_dept"]
+
+    image_html = ""
+    if image_url:
+        image_html = f'<img src="{image_url}" alt="{item_name}" class="w-full h-48 object-cover rounded border mb-3">'
+
+    url_html = ""
+    if image_url:
+        url_html = f'<div class="text-xs text-gray-600 mt-2 break-all"><strong>Image URL:</strong><br><code class="text-blue-600 text-xs"><a href="{image_url}" target="_blank" class="underline">{image_url}</a></code></div>'
+
+    print_params = urlencode({
+        "item_id": item_id,
+        "product_id": product_id,
+        "gtin": gtin,
+        "supplier_dept": supplier_dept
+    })
+    print_card_html = f'<a href="/print-card?{print_params}" target="_blank" class="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Print Card</a>'
+
+    return f"""<div class="space-y-4">
+        <div class="bg-blue-50 p-4 rounded border border-blue-200">
+            {image_html}
+            <h3 class="font-bold">{item_name}</h3>
+            <p class="text-xs text-gray-600 mt-1">Item: <code class="bg-white px-2 py-1 rounded text-blue-600 font-mono text-xs">{item_id}</code></p>
+            {url_html}
+            {print_card_html}
+        </div>
+        <div class="bg-white p-4 rounded border">
+            <h4 class="text-sm font-bold mb-2">Full Response</h4>
+            <pre class="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-96 font-mono border">{json_str}</pre>
+        </div>
+    </div>"""
 
 
-@app.get("/api/stats/delivered")
-async def stats_delivered():
-    """Get delivered count."""
-    try:
-        conn = get_db_connection()
-        stmt = ibm_db.exec_immediate(conn, "SELECT COUNT(*) as cnt FROM delivery WHERE status = 'DELIVERED'")
-        row = ibm_db.fetch_both(stmt)
-        count = row.get(0, row.get('cnt', 0)) if row else 0
-        ibm_db.close(conn)
-        return str(count)
-    except:
-        return "0"
+def extract_item_data(data: dict) -> dict:
+    """Extract product and inventory data from API response."""
+    item_data = {
+        "item_name": "Unknown Item",
+        "image_url": "",
+        "gtin": "",
+        "product_id": "",
+        "supplier_dept": "",
+        "inventory_status": "Unknown"
+    }
+    
+    if isinstance(data, dict) and "productResponse" in data:
+        product_resp = data["productResponse"]
+        if isinstance(product_resp, dict) and "docs" in product_resp:
+            docs = product_resp["docs"]
+            if isinstance(docs, list) and len(docs) > 0:
+                doc = docs[0]
+                if isinstance(doc, dict):
+                    item_data["item_name"] = doc.get("product.product_name", "Unknown Item")
+                    item_data["image_url"] = doc.get("product.primary_image_url", "")
+                    item_data["gtin"] = doc.get("si.consumableGtin", doc.get("product.gtin", ""))
+                    item_data["product_id"] = doc.get("product.product_id", "")
+                    item_data["supplier_dept"] = str(doc.get("si.supplierDeptNbr", ""))
+    
+    if isinstance(data, dict) and "inventoryResponse" in data:
+        inv_resp = data["inventoryResponse"]
+        if isinstance(inv_resp, dict):
+            status_code = inv_resp.get("statusCode")
+            item_data["inventory_status"] = "In Stock" if status_code == 200 else f"Status: {status_code}"
+    
+    return item_data
 
 
-@app.get("/api/stats/issues")
-async def stats_issues():
-    """Get issues count."""
-    try:
-        conn = get_db_connection()
-        stmt = ibm_db.exec_immediate(conn, "SELECT COUNT(*) as cnt FROM delivery WHERE status IN ('FAILED', 'CANCELLED')")
-        row = ibm_db.fetch_both(stmt)
-        count = row.get(0, row.get('cnt', 0)) if row else 0
-        ibm_db.close(conn)
-        return str(count)
-    except:
-        return "0"
+def generate_print_card(data: dict, item_id: str) -> str:
+    item_data = extract_item_data(data)
+    item_name = item_data["item_name"]
+    image_url = item_data["image_url"]
+    gtin = item_data["gtin"]
+    product_id = item_data["product_id"]
+    supplier_dept = item_data["supplier_dept"]
+    inventory_status = item_data["inventory_status"]
+
+    image_section = ""
+    if image_url:
+        image_section = f'<div class="card-image"><img src="{image_url}" alt="{item_name}"></div>'
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{item_name} - Print Card</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }}
+        .print-container {{
+            width: 100%;
+            max-width: 11in;
+            height: 8.5in;
+            background: white;
+            margin: 0 auto;
+            padding: 40px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: 3.5in 1fr;
+            gap: 30px;
+            align-items: start;
+        }}
+        .card-image {{
+            width: 100%;
+            height: 100%;
+            max-height: 6.5in;
+            overflow: hidden;
+            border-radius: 8px;
+            border: 2px solid #0071ce;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f9f9f9;
+        }}
+        .card-image img {{
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }}
+        .card-content {{
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 16px;
+        }}
+        .product-name {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #0071ce;
+            line-height: 1.3;
+        }}
+        .info-section {{
+            border-top: 1px solid #ddd;
+            padding-top: 12px;
+        }}
+        .info-row {{
+            display: flex;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }}
+        .info-label {{
+            font-weight: 600;
+            color: #333;
+            width: 120px;
+            flex-shrink: 0;
+        }}
+        .info-value {{
+            color: #666;
+            word-break: break-word;
+            flex: 1;
+        }}
+        .status-badge {{
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+            margin-top: 8px;
+        }}
+        .status-in-stock {{
+            background: #d4edda;
+            color: #155724;
+        }}
+        .status-unknown {{
+            background: #fff3cd;
+            color: #856404;
+        }}
+        .footer {{
+            margin-top: 20px;
+            font-size: 10px;
+            color: #999;
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }}
+        @media print {{
+            body {{
+                background: white;
+                padding: 0;
+            }}
+            .print-container {{
+                max-width: 100%;
+                box-shadow: none;
+                margin: 0;
+            }}
+            .no-print {{
+                display: none;
+            }}
+        }}
+        .no-print {{
+            text-align: center;
+            margin-top: 20px;
+        }}
+        .no-print button {{
+            padding: 10px 24px;
+            background: #0071ce;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 0 8px;
+        }}
+        .no-print button:hover {{
+            background: #005a9c;
+        }}
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        {image_section}
+        <div class="card-content">
+            <div class="product-name">{item_name}</div>
+            <div class="info-section">
+                <div class="info-row">
+                    <div class="info-label">Item ID:</div>
+                    <div class="info-value">{item_id}</div>
+                </div>
+                {f'<div class="info-row"><div class="info-label">GTIN:</div><div class="info-value">{gtin}</div></div>' if gtin else ''}
+                {f'<div class="info-row"><div class="info-label">Product ID:</div><div class="info-value">{product_id}</div></div>' if product_id else ''}
+                {f'<div class="info-row"><div class="info-label">Supplier Dept:</div><div class="info-value">{supplier_dept}</div></div>' if supplier_dept else ''}
+            </div>
+            <div class="info-section">
+                <div class="info-label">Inventory Status</div>
+                <div class="status-badge {'status-in-stock' if 'In Stock' in inventory_status else 'status-unknown'}">{inventory_status}</div>
+            </div>
+            <div class="footer">
+                <p>CodePuppy DAR - Inventory Viewer</p>
+                <p>Generated for quick reference</p>
+            </div>
+        </div>
+    </div>
+    <div class="no-print">
+        <button onclick="window.print()">Print Card</button>
+        <button onclick="window.history.back()">Back</button>
+    </div>
+</body>
+</html>"""
 
 
 if __name__ == "__main__":
