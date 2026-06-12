@@ -704,13 +704,56 @@ def generate_pdf(item_data: dict) -> bytes:
     
     pdf.cell(5.5, 0.25, inventory_status, align='L')
     
-    # Read Rates section
-    current_y += 0.35
-    pdf.set_xy(content_x, current_y)
+    # Move to bottom of page for Read Rates section
+    # Use a fixed position in the lower area
+    current_y = 5.2  # Near bottom of landscape letter
+    
+    # Draw red dotted border box
+    pdf.set_draw_color(255, 0, 0)  # Red
+    pdf.set_line_width(0.02)
+    # Dotted line using dashes
+    box_x = 0.4
+    box_y = 4.8
+    box_width = 10.2
+    box_height = 2.8
+    
+    # Draw dotted rectangle
+    dash_length = 0.15
+    gap_length = 0.1
+    
+    # Top line
+    x = box_x
+    while x < box_x + box_width:
+        pdf.line(x, box_y, min(x + dash_length, box_x + box_width), box_y)
+        x += dash_length + gap_length
+    
+    # Bottom line
+    x = box_x
+    while x < box_x + box_width:
+        pdf.line(x, box_y + box_height, min(x + dash_length, box_x + box_width), box_y + box_height)
+        x += dash_length + gap_length
+    
+    # Left line
+    y = box_y
+    while y < box_y + box_height:
+        pdf.line(box_x, y, box_x, min(y + dash_length, box_y + box_height))
+        y += dash_length + gap_length
+    
+    # Right line
+    y = box_y
+    while y < box_y + box_height:
+        pdf.line(box_x + box_width, y, box_x + box_width, min(y + dash_length, box_y + box_height))
+        y += dash_length + gap_length
+    
+    # Content inside box
+    content_x_box = 0.6
+    current_y_box = 5.0
+    
+    pdf.set_xy(content_x_box, current_y_box)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 0, 0)
     pdf.cell(6.8, 0.25, "Read Rates (Null %)", align='L')
-    current_y += 0.28
+    current_y_box += 0.28
     
     # Get read rates for this item (use original item_id for lookup)
     rates = load_read_rates()
@@ -719,27 +762,34 @@ def generate_pdf(item_data: dict) -> bytes:
     if item_rates:
         # Show latest record
         latest = item_rates[-1]
-        pdf.set_xy(content_x, current_y)
+        pdf.set_xy(content_x_box, current_y_box)
         pdf.set_font("Helvetica", "", 9)
         pdf.cell(2.0, 0.25, f"Latest ({latest['date']}):", align='L')
         pdf.cell(4.8, 0.25, f"{latest['null_pct']:.1f}% null", align='L')
-        current_y += 0.25
+        current_y_box += 0.25
         
         # Show trend if more than 1 record
         if len(item_rates) > 1:
             first = item_rates[0]
-            trend = "improving" if latest['null_pct'] > first['null_pct'] else "declining"
-            pdf.set_xy(content_x, current_y)
+            # Fixed trend logic: check for stable/improving/declining
+            if abs(latest['null_pct'] - first['null_pct']) < 0.01:  # stable (within 0.01%)
+                trend = "stable"
+            elif latest['null_pct'] > first['null_pct']:
+                trend = "improving"
+            else:
+                trend = "declining"
+            
+            pdf.set_xy(content_x_box, current_y_box)
             pdf.cell(2.0, 0.25, f"Trend:", align='L')
             pdf.cell(4.8, 0.25, f"{trend} ({first['null_pct']:.1f}% -> {latest['null_pct']:.1f}%)", align='L')
-            current_y += 0.35
+            current_y_box += 0.35
             
-            # Draw simple trend visualization
+            # Draw simple trend visualization inside the box
             # Chart dimensions
-            chart_width = 5.0
-            chart_height = 1.0
-            chart_x = content_x + 0.5
-            chart_y = current_y
+            chart_width = 4.5
+            chart_height = 0.8
+            chart_x = content_x_box + 0.5
+            chart_y = current_y_box
             
             # Draw axes
             pdf.set_draw_color(100, 100, 100)
@@ -748,19 +798,19 @@ def generate_pdf(item_data: dict) -> bytes:
             pdf.line(chart_x, chart_y + chart_height, chart_x + chart_width, chart_y + chart_height)  # X-axis
             
             # Draw grid lines and labels
-            pdf.set_font("Helvetica", "", 7)
+            pdf.set_font("Helvetica", "", 6)
             pdf.set_draw_color(200, 200, 200)
             pdf.set_line_width(0.01)
             for pct in [0, 25, 50, 75, 100]:
                 y_pos = chart_y + chart_height - (pct / 100.0) * chart_height
                 pdf.line(chart_x - 0.1, y_pos, chart_x + chart_width, y_pos)
-                pdf.set_xy(chart_x - 0.3, y_pos - 0.05)
-                pdf.cell(0.25, 0.15, str(pct), align='R', border=0)
+                pdf.set_xy(chart_x - 0.25, y_pos - 0.04)
+                pdf.cell(0.2, 0.12, str(pct), align='R', border=0)
             
             # Plot data points and connect with line
             if len(item_rates) > 0:
                 pdf.set_draw_color(0, 83, 226)  # Walmart Blue
-                pdf.set_line_width(0.03)
+                pdf.set_line_width(0.025)
                 
                 points = []
                 for rate in item_rates:
@@ -777,9 +827,9 @@ def generate_pdf(item_data: dict) -> bytes:
                 # Draw points
                 pdf.set_fill_color(0, 83, 226)
                 for x, y in points:
-                    pdf.circle(x, y, 0.05, style='F')
+                    pdf.circle(x, y, 0.04, style='F')
     else:
-        pdf.set_xy(content_x, current_y)
+        pdf.set_xy(content_x_box, current_y_box)
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(150, 150, 150)
         pdf.cell(6.8, 0.25, "No read rate data available", align='L')
