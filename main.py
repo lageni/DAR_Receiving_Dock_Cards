@@ -77,6 +77,56 @@ def format_date_for_chart(date_str: str) -> str:
     return date_str
 
 
+def get_avg_performance(item_rates: list) -> float:
+    """Calculate average null percentage (ACL Performance)."""
+    if not item_rates:
+        return 0
+    total = sum(r['null_pct'] for r in item_rates)
+    return total / len(item_rates)
+
+
+def get_trend_status(item_rates: list) -> str:
+    """Determine trend: Improving, Consistent, Inconsistent, or Declining."""
+    if len(item_rates) < 2:
+        return "N/A"
+    
+    # Calculate trend by comparing first half to second half
+    mid = len(item_rates) // 2
+    first_half = item_rates[:mid]
+    second_half = item_rates[mid:]
+    
+    avg_first = sum(r['null_pct'] for r in first_half) / len(first_half) if first_half else 0
+    avg_second = sum(r['null_pct'] for r in second_half) / len(second_half) if second_half else 0
+    
+    # Check for consistency
+    first_values = [r['null_pct'] for r in first_half]
+    second_values = [r['null_pct'] for r in second_half]
+    first_std = max(first_values) - min(first_values) if first_values else 0
+    second_std = max(second_values) - min(second_values) if second_values else 0
+    
+    # Determine status
+    if first_std < 1 and second_std < 1:  # Both halves stable
+        return "Consistent"
+    elif avg_second > avg_first:  # Getting better
+        return "Improving"
+    elif abs(avg_second - avg_first) < 2:  # Similar trend
+        return "Consistent"
+    else:  # Getting worse
+        return "Declining"
+
+
+def get_color_for_performance(pct: float) -> str:
+    """Get gradient color from red (0%) to green (100%)."""
+    if pct < 25:
+        return "#dc2626"  # Red
+    elif pct < 50:
+        return "#f59e0b"  # Amber
+    elif pct < 75:
+        return "#eab308"  # Yellow
+    else:
+        return "#16a34a"  # Green
+
+
 def get_read_rate_chart(mds_fam_id: str) -> str:
     """Generate Chart.js HTML for read rate trend."""
     rates = load_read_rates()
@@ -89,6 +139,11 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     labels = [format_date_for_chart(d["date"]) for d in data]
     values = [d["null_pct"] for d in data]
     
+    # Calculate metrics
+    avg_perf = get_avg_performance(data)
+    trend_status = get_trend_status(data)
+    color = get_color_for_performance(avg_perf)
+    
     # Create chart ID
     chart_id = f"chart_{mds_fam_id}"
     
@@ -96,9 +151,22 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     labels_json = json.dumps(labels)
     values_json = json.dumps(values)
     
+    # Create performance cards
+    perf_card = f'''<div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="bg-white p-3 rounded border text-center">
+            <div class="text-xs text-gray-600 font-semibold">AVG PERFORMANCE</div>
+            <div class="text-2xl font-bold mt-2" style="color: {color};">{avg_perf:.1f}%</div>
+        </div>
+        <div class="bg-white p-3 rounded border text-center">
+            <div class="text-xs text-gray-600 font-semibold">TREND</div>
+            <div class="text-lg font-bold mt-2">{trend_status}</div>
+        </div>
+    </div>'''
+    
     return f'''<div class="mt-6 bg-white p-4 rounded border">
-        <h4 class="text-sm font-bold mb-3">Null Read % Trend</h4>
-        <div style="height: 300px; position: relative;">
+        <h4 class="text-sm font-bold mb-3">ACL Performance %</h4>
+        {perf_card}
+        <div style="height: 200px; position: relative;">
             <canvas id="{chart_id}"></canvas>
         </div>
         <script>
@@ -116,14 +184,14 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
                     data: {{
                         labels: labels,
                         datasets: [{{
-                            label: "Null Read %",
+                            label: "ACL Performance %",
                             data: values,
                             borderColor: "#0053e2",
                             backgroundColor: "rgba(0, 83, 226, 0.1)",
                             borderWidth: 2,
                             fill: true,
                             tension: 0.3,
-                            pointRadius: 4,
+                            pointRadius: 3,
                             pointBackgroundColor: "#0053e2"
                         }}]
                     }},
@@ -132,8 +200,7 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
                         maintainAspectRatio: false,
                         plugins: {{
                             legend: {{
-                                display: true,
-                                position: "top"
+                                display: false
                             }}
                         }},
                         scales: {{
@@ -334,10 +401,6 @@ def format_results(data: dict, item_id: str) -> str:
     if image_url:
         image_html = f'<img src="{image_url}" alt="{item_name}" class="w-full h-48 object-cover rounded border mb-3">'
 
-    url_html = ""
-    if image_url:
-        url_html = f'<div class="text-xs text-gray-600 mt-2 break-all"><strong>Image URL:</strong><br><code class="text-blue-600 text-xs"><a href="{image_url}" target="_blank" class="underline">{image_url}</a></code></div>'
-
     print_params = urlencode({
         "item_id": item_id,
         "product_id": product_id,
@@ -354,7 +417,6 @@ def format_results(data: dict, item_id: str) -> str:
             {image_html}
             <h3 class="font-bold">{item_name}</h3>
             <p class="text-xs text-gray-600 mt-1">Item: <code class="bg-white px-2 py-1 rounded text-blue-600 font-mono text-xs">{item_id}</code></p>
-            {url_html}
             {print_card_html}
         </div>
         {chart_html}
@@ -752,87 +814,97 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.set_xy(content_x_box, current_y_box)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(6.8, 0.25, "Read Rates (Null %)", align='L')
-    current_y_box += 0.28
+    pdf.cell(6.8, 0.25, "ACL Performance %", align='L')
+    current_y_box += 0.35
     
     # Get read rates for this item (use original item_id for lookup)
     rates = load_read_rates()
     item_rates = rates.get(str(item_id_orig), [])
     
     if item_rates:
-        # Show latest record
-        latest = item_rates[-1]
+        # Calculate metrics
+        avg_perf = get_avg_performance(item_rates)
+        trend_status = get_trend_status(item_rates)
+        color = get_color_for_performance(avg_perf)
+        
+        # Display metrics side by side
+        # Average Performance
         pdf.set_xy(content_x_box, current_y_box)
-        pdf.set_font("Helvetica", "", 9)
-        pdf.cell(2.0, 0.25, f"Latest ({latest['date']}):", align='L')
-        pdf.cell(4.8, 0.25, f"{latest['null_pct']:.1f}% null", align='L')
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(2.4, 0.2, "AVG PERFORMANCE", align='L')
+        
+        # Trend Status
+        pdf.set_xy(content_x_box + 2.6, current_y_box)
+        pdf.cell(2.4, 0.2, "TREND", align='L')
         current_y_box += 0.25
         
-        # Show trend if more than 1 record
+        # Values
+        pdf.set_xy(content_x_box, current_y_box)
+        pdf.set_font("Helvetica", "B", 14)
+        # Convert hex color to RGB
+        if color == "#dc2626":
+            pdf.set_text_color(220, 38, 38)
+        elif color == "#f59e0b":
+            pdf.set_text_color(245, 158, 11)
+        elif color == "#eab308":
+            pdf.set_text_color(234, 179, 8)
+        else:  # green
+            pdf.set_text_color(22, 163, 74)
+        pdf.cell(2.4, 0.3, f"{avg_perf:.1f}%", align='L')
+        
+        pdf.set_xy(content_x_box + 2.6, current_y_box)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(2.4, 0.3, trend_status, align='L')
+        current_y_box += 0.4
+        
+        # Draw trend visualization (smaller, compact)
         if len(item_rates) > 1:
-            first = item_rates[0]
-            # Fixed trend logic: check for stable/improving/declining
-            if abs(latest['null_pct'] - first['null_pct']) < 0.01:  # stable (within 0.01%)
-                trend = "stable"
-            elif latest['null_pct'] > first['null_pct']:
-                trend = "improving"
-            else:
-                trend = "declining"
-            
-            pdf.set_xy(content_x_box, current_y_box)
-            pdf.cell(2.0, 0.25, f"Trend:", align='L')
-            pdf.cell(4.8, 0.25, f"{trend} ({first['null_pct']:.1f}% -> {latest['null_pct']:.1f}%)", align='L')
-            current_y_box += 0.35
-            
-            # Draw simple trend visualization inside the box
-            # Chart dimensions
-            chart_width = 4.5
-            chart_height = 0.8
-            chart_x = content_x_box + 0.5
+            # Chart dimensions - compact
+            chart_width = 2.8
+            chart_height = 0.6
+            chart_x = content_x_box + 0.2
             chart_y = current_y_box
             
             # Draw axes
             pdf.set_draw_color(100, 100, 100)
-            pdf.set_line_width(0.02)
+            pdf.set_line_width(0.015)
             pdf.line(chart_x, chart_y + chart_height, chart_x, chart_y)  # Y-axis
             pdf.line(chart_x, chart_y + chart_height, chart_x + chart_width, chart_y + chart_height)  # X-axis
             
-            # Draw grid lines and labels
-            pdf.set_font("Helvetica", "", 6)
+            # Draw grid lines
             pdf.set_draw_color(200, 200, 200)
-            pdf.set_line_width(0.01)
-            for pct in [0, 25, 50, 75, 100]:
+            pdf.set_line_width(0.008)
+            for pct in [0, 50, 100]:
                 y_pos = chart_y + chart_height - (pct / 100.0) * chart_height
-                pdf.line(chart_x - 0.1, y_pos, chart_x + chart_width, y_pos)
-                pdf.set_xy(chart_x - 0.25, y_pos - 0.04)
-                pdf.cell(0.2, 0.12, str(pct), align='R', border=0)
+                pdf.line(chart_x - 0.05, y_pos, chart_x + chart_width, y_pos)
             
             # Plot data points and connect with line
-            if len(item_rates) > 0:
-                pdf.set_draw_color(0, 83, 226)  # Walmart Blue
-                pdf.set_line_width(0.025)
-                
-                points = []
-                for rate in item_rates:
-                    x = chart_x + (len(points) / max(len(item_rates) - 1, 1)) * chart_width
-                    y = chart_y + chart_height - (rate['null_pct'] / 100.0) * chart_height
-                    points.append((x, y))
-                
-                # Draw line connecting points
-                for i in range(len(points) - 1):
-                    x1, y1 = points[i]
-                    x2, y2 = points[i + 1]
-                    pdf.line(x1, y1, x2, y2)
-                
-                # Draw points
-                pdf.set_fill_color(0, 83, 226)
-                for x, y in points:
-                    pdf.circle(x, y, 0.04, style='F')
+            pdf.set_draw_color(0, 83, 226)  # Walmart Blue
+            pdf.set_line_width(0.02)
+            
+            points = []
+            for rate in item_rates:
+                x = chart_x + (len(points) / max(len(item_rates) - 1, 1)) * chart_width
+                y = chart_y + chart_height - (rate['null_pct'] / 100.0) * chart_height
+                points.append((x, y))
+            
+            # Draw line connecting points
+            for i in range(len(points) - 1):
+                x1, y1 = points[i]
+                x2, y2 = points[i + 1]
+                pdf.line(x1, y1, x2, y2)
+            
+            # Draw points
+            pdf.set_fill_color(0, 83, 226)
+            for x, y in points:
+                pdf.circle(x, y, 0.03, style='F')
     else:
         pdf.set_xy(content_x_box, current_y_box)
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(150, 150, 150)
-        pdf.cell(6.8, 0.25, "No read rate data available", align='L')
+        pdf.cell(6.8, 0.25, "No ACL data available", align='L')
     
     # Convert to bytes
     result = pdf.output(dest='S')
