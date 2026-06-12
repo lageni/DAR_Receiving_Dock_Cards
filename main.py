@@ -556,19 +556,43 @@ def generate_print_card(data: dict, item_id: str) -> str:
 </html>"""
 
 
+def sanitize_for_pdf(text: str) -> str:
+    """Remove Unicode chars that Helvetica font can't render."""
+    if not text:
+        return ""
+    # Replace smart quotes and common Unicode chars with ASCII equivalents
+    replacements = {
+        "\u201c": '"',  # left double quote
+        "\u201d": '"',  # right double quote
+        "\u2018": "'",  # left single quote
+        "\u2019": "'",  # right single quote
+        "\u2013": "-",   # en dash
+        "\u2014": "-",   # em dash
+        "\u2022": "*",   # bullet
+        "\u00a9": "(c)", # copyright
+        "\u00ae": "(R)", # registered
+        "\u2122": "(TM)", # trademark
+    }
+    result = str(text)
+    for unicode_char, ascii_equiv in replacements.items():
+        result = result.replace(unicode_char, ascii_equiv)
+    # Strip any remaining non-ASCII characters
+    return result.encode('ascii', errors='ignore').decode('ascii')
+
+
 def generate_pdf(item_data: dict) -> bytes:
     """Generate a clean landscape PDF card with product information."""
     pdf = FPDF(orientation='L', unit='in', format='Letter')  # 11" x 8.5" landscape
     pdf.add_page()
     pdf.set_margins(0.4, 0.4, 0.4)
     
-    item_name = item_data.get("item_name", "Unknown Item")
+    item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
     image_url = item_data.get("image_url", "")
-    gtin = item_data.get("gtin", "")
-    product_id = item_data.get("product_id", "")
-    supplier_dept = item_data.get("supplier_dept", "")
-    inventory_status = item_data.get("inventory_status", "Unknown")
-    item_id = item_data.get("item_id", "")
+    gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+    product_id = sanitize_for_pdf(item_data.get("product_id", ""))
+    supplier_dept = sanitize_for_pdf(item_data.get("supplier_dept", ""))
+    inventory_status = sanitize_for_pdf(item_data.get("inventory_status", "Unknown"))
+    item_id = sanitize_for_pdf(item_data.get("item_id", ""))
     
     # LEFT COLUMN: Product Image
     img_x = 0.4
@@ -599,7 +623,7 @@ def generate_pdf(item_data: dict) -> bytes:
     
     # Product Name (title)
     pdf.set_xy(content_x, current_y)
-    pdf.set_font("DejaVuSans", "B", 18)
+    pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(0, 83, 226)  # Walmart Blue
     pdf.multi_cell(6.8, 0.4, item_name, align='L')
     current_y = pdf.get_y() + 0.1
@@ -611,7 +635,7 @@ def generate_pdf(item_data: dict) -> bytes:
     current_y += 0.2
     
     # Details in a clean format
-    pdf.set_font("DejaVuSans", "", 11)
+    pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(0, 0, 0)
     
     details = []
@@ -627,22 +651,22 @@ def generate_pdf(item_data: dict) -> bytes:
     # Draw details as label: value pairs
     for label, value in details:
         pdf.set_xy(content_x, current_y)
-        pdf.set_font("DejaVuSans", "B", 10)
+        pdf.set_font("Helvetica", "B", 10)
         pdf.cell(1.2, 0.25, label, align='L')
         
         pdf.set_xy(content_x + 1.3, current_y)
-        pdf.set_font("DejaVuSans", "", 10)
+        pdf.set_font("Helvetica", "", 10)
         pdf.cell(5.5, 0.25, str(value), align='L')
         current_y += 0.28
     
     # Status section
     current_y += 0.15
     pdf.set_xy(content_x, current_y)
-    pdf.set_font("DejaVuSans", "B", 10)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.cell(1.2, 0.25, "Status:", align='L')
     
     pdf.set_xy(content_x + 1.3, current_y)
-    pdf.set_font("DejaVuSans", "B", 10)
+    pdf.set_font("Helvetica", "B", 10)
     
     # Color-code status
     if "In Stock" in inventory_status or "200" in inventory_status:
