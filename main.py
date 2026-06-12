@@ -678,6 +678,40 @@ def generate_pdf(item_data: dict) -> bytes:
     
     pdf.cell(5.5, 0.25, inventory_status, align='L')
     
+    # Read Rates section
+    current_y += 0.35
+    pdf.set_xy(content_x, current_y)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(6.8, 0.25, "Read Rates (Null %)", align='L')
+    current_y += 0.28
+    
+    # Get read rates for this item
+    rates = load_read_rates()
+    item_rates = rates.get(item_id, [])
+    
+    if item_rates:
+        # Show latest record
+        latest = item_rates[-1]
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.cell(2.0, 0.25, f"Latest ({latest['date']}):", align='L')
+        pdf.cell(4.8, 0.25, f"{latest['null_pct']:.1f}% null", align='L')
+        current_y += 0.25
+        
+        # Show trend if more than 1 record
+        if len(item_rates) > 1:
+            first = item_rates[0]
+            trend = "improving" if latest['null_pct'] > first['null_pct'] else "declining"
+            pdf.set_xy(content_x, current_y)
+            pdf.cell(2.0, 0.25, f"Trend:", align='L')
+            pdf.cell(4.8, 0.25, f"{trend} ({first['null_pct']:.1f}% -> {latest['null_pct']:.1f}%)", align='L')
+    else:
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(6.8, 0.25, "No read rate data available", align='L')
+    
     # Convert to bytes
     result = pdf.output(dest='S')
     return bytes(result) if isinstance(result, bytearray) else result
