@@ -166,7 +166,7 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     return f'''<div class="mt-6 bg-white p-4 rounded border">
         <h4 class="text-sm font-bold mb-3">ACL Performance %</h4>
         {perf_card}
-        <div style="height: 200px; position: relative;">
+        <div style="height: 400px; position: relative;">
             <canvas id="{chart_id}"></canvas>
         </div>
         <script>
@@ -233,33 +233,33 @@ async def root():
         <h1 class="text-3xl font-bold text-blue-600">CodePuppy DAR</h1>
         <p class="text-sm text-gray-600">Inventory Search</p>
     </header>
-    <main class="max-w-4xl mx-auto px-4 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="bg-white p-6 rounded border shadow-sm">
-                <h2 class="font-bold mb-4">Search</h2>
+    <main class="w-full px-2 py-4">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-2">
+            <div class="bg-white p-4 rounded border shadow-sm">
+                <h2 class="font-bold mb-3 text-sm">Search</h2>
                 <form id="searchForm" hx-get="/api/inventory/search" hx-target="#results">
-                    <div class="space-y-3">
+                    <div class="space-y-2">
                         <div>
                             <label class="block text-xs font-semibold text-gray-700 mb-1">Item ID</label>
-                            <input type="text" id="itemIdInput" name="item_id" placeholder="665540630" required class="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <input type="text" id="itemIdInput" name="item_id" placeholder="665540630" required class="w-full px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-700 mb-1">ID Type</label>
-                            <select name="id_type" class="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <select name="id_type" class="w-full px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                 <option value="ITEM_NUMBER">Item Number</option>
                                 <option value="UPC">UPC</option>
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-700 mb-1">Node</label>
-                            <input type="text" name="node" value="6068" class="w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <input type="text" name="node" value="6068" class="w-full px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
                         </div>
-               </div>
-                    <button type="submit" class="w-full mt-4 bg-blue-600 text-white py-2 rounded font-semibold hover:bg-blue-700">Search</button>
+                    </div>
+                    <button type="submit" class="w-full mt-3 bg-blue-600 text-white py-2 rounded font-semibold text-sm hover:bg-blue-700">Search</button>
                 </form>
-                <button onclick="loadExample()" class="w-full mt-2 bg-gray-200 text-gray-800 py-2 rounded font-semibold hover:bg-gray-300">Load Example (665540630)</button>
+                <button onclick="loadExample()" class="w-full mt-1 bg-gray-200 text-gray-800 py-1 rounded font-semibold text-xs hover:bg-gray-300">Load Example</button>
             </div>
-            <div class="lg:col-span-2 bg-white p-6 rounded border shadow-sm">
+            <div class="lg:col-span-3 bg-white p-4 rounded border shadow-sm">
                 <div id="results" class="text-sm text-gray-500">Results appear here...</div>
             </div>
         </div>
@@ -304,9 +304,19 @@ async def search_inventory(item_id: str, id_type: str = "ITEM_NUMBER", node: str
         return format_results(data, item_id)
 
     except httpx.HTTPStatusError as e:
-        return f'<div class="text-red-600">API Error {e.response.status_code}</div>'
+        error_msg = f"API Error {e.response.status_code}"
+        if e.response.status_code == 404:
+            error_msg = "Item not found. Please check the Item ID and try again."
+        return f'''<div class="bg-red-50 p-4 rounded border-2 border-red-300 text-center">
+            <div class="text-red-700 font-bold text-lg">Item Not Found</div>
+            <p class="text-red-600 text-sm mt-2">{error_msg}</p>
+            <p class="text-gray-500 text-xs mt-3">Try searching with a different Item ID</p>
+        </div>'''
     except Exception as e:
-        return f'<div class="text-red-600">Error: {str(e)}</div>'
+        return f'''<div class="bg-red-50 p-4 rounded border-2 border-red-300 text-center">
+            <div class="text-red-700 font-bold text-lg">Error</div>
+            <p class="text-red-600 text-sm mt-2">{str(e)}</p>
+        </div>'''
 
 
 @app.get("/print-card", response_class=HTMLResponse)
@@ -412,18 +422,20 @@ def format_results(data: dict, item_id: str) -> str:
     # Get read rate trend chart
     chart_html = get_read_rate_chart(item_id)
 
-    return f"""<div class="space-y-4">
+    return f"""<div class="space-y-3">
         <div class="bg-blue-50 p-4 rounded border border-blue-200">
             {image_html}
-            <h3 class="font-bold">{item_name}</h3>
-            <p class="text-xs text-gray-600 mt-1">Item: <code class="bg-white px-2 py-1 rounded text-blue-600 font-mono text-xs">{item_id}</code></p>
+            <h3 class="font-bold text-sm">{item_name}</h3>
+            <p class="text-xs text-gray-600 mt-1">Item: <code class="bg-white px-1 py-0.5 rounded text-blue-600 font-mono text-xs">{item_id}</code></p>
             {print_card_html}
         </div>
         {chart_html}
-        <div class="bg-white p-4 rounded border">
-            <h4 class="text-sm font-bold mb-2">Full Response</h4>
-            <pre class="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-96 font-mono border">{json_str}</pre>
-        </div>
+        <details class="bg-white p-3 rounded border cursor-pointer group">
+            <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none"> Developer Info</summary>
+            <div class="mt-2 pt-2 border-t">
+                <pre class="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-64 font-mono border">{json_str}</pre>
+            </div>
+        </details>
     </div>"""
 
 
@@ -766,18 +778,18 @@ def generate_pdf(item_data: dict) -> bytes:
     
     pdf.cell(5.5, 0.25, inventory_status, align='L')
     
-    # Move to bottom of page for Read Rates section
-    # Use a fixed position in the lower area
-    current_y = 5.2  # Near bottom of landscape letter
+    # Move to bottom-left quadrant for ACL Performance section
+    # Use a fixed position in the lower-left area only
+    current_y = 5.2
     
-    # Draw red dotted border box
+    # Draw red dotted border box (bottom-left quadrant only)
     pdf.set_draw_color(255, 0, 0)  # Red
     pdf.set_line_width(0.02)
     # Dotted line using dashes
     box_x = 0.4
-    box_y = 4.8
-    box_width = 10.2
-    box_height = 2.8
+    box_y = 4.6
+    box_width = 5.2  # Left half only, not full width
+    box_height = 3.2
     
     # Draw dotted rectangle
     dash_length = 0.15
