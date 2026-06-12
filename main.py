@@ -732,6 +732,52 @@ def generate_pdf(item_data: dict) -> bytes:
             pdf.set_xy(content_x, current_y)
             pdf.cell(2.0, 0.25, f"Trend:", align='L')
             pdf.cell(4.8, 0.25, f"{trend} ({first['null_pct']:.1f}% -> {latest['null_pct']:.1f}%)", align='L')
+            current_y += 0.35
+            
+            # Draw simple trend visualization
+            # Chart dimensions
+            chart_width = 5.0
+            chart_height = 1.0
+            chart_x = content_x + 0.5
+            chart_y = current_y
+            
+            # Draw axes
+            pdf.set_draw_color(100, 100, 100)
+            pdf.set_line_width(0.02)
+            pdf.line(chart_x, chart_y + chart_height, chart_x, chart_y)  # Y-axis
+            pdf.line(chart_x, chart_y + chart_height, chart_x + chart_width, chart_y + chart_height)  # X-axis
+            
+            # Draw grid lines and labels
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_draw_color(200, 200, 200)
+            pdf.set_line_width(0.01)
+            for pct in [0, 25, 50, 75, 100]:
+                y_pos = chart_y + chart_height - (pct / 100.0) * chart_height
+                pdf.line(chart_x - 0.1, y_pos, chart_x + chart_width, y_pos)
+                pdf.set_xy(chart_x - 0.3, y_pos - 0.05)
+                pdf.cell(0.25, 0.15, str(pct), align='R', border=0)
+            
+            # Plot data points and connect with line
+            if len(item_rates) > 0:
+                pdf.set_draw_color(0, 83, 226)  # Walmart Blue
+                pdf.set_line_width(0.03)
+                
+                points = []
+                for rate in item_rates:
+                    x = chart_x + (len(points) / max(len(item_rates) - 1, 1)) * chart_width
+                    y = chart_y + chart_height - (rate['null_pct'] / 100.0) * chart_height
+                    points.append((x, y))
+                
+                # Draw line connecting points
+                for i in range(len(points) - 1):
+                    x1, y1 = points[i]
+                    x2, y2 = points[i + 1]
+                    pdf.line(x1, y1, x2, y2)
+                
+                # Draw points
+                pdf.set_fill_color(0, 83, 226)
+                for x, y in points:
+                    pdf.circle(x, y, 0.05, style='F')
     else:
         pdf.set_xy(content_x, current_y)
         pdf.set_font("Helvetica", "", 9)
