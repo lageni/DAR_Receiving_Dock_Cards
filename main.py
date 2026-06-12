@@ -443,9 +443,9 @@ def generate_print_card(data: dict, item_id: str) -> str:
 
 def generate_pdf(item_data: dict) -> bytes:
     """Generate a clean landscape PDF card with product information."""
-    pdf = FPDF(orientation='L', unit='in', format='A5')  # 5.8" x 8.3" landscape
+    pdf = FPDF(orientation='L', unit='in', format='Letter')  # 11" x 8.5" landscape
     pdf.add_page()
-    pdf.set_margins(0.25, 0.25, 0.25)
+    pdf.set_margins(0.4, 0.4, 0.4)
     
     item_name = item_data.get("item_name", "Unknown Item")
     image_url = item_data.get("image_url", "")
@@ -455,7 +455,17 @@ def generate_pdf(item_data: dict) -> bytes:
     inventory_status = item_data.get("inventory_status", "Unknown")
     item_id = item_data.get("item_id", "")
     
-    # Download and embed product image (left side)
+    # LEFT COLUMN: Product Image
+    img_x = 0.4
+    img_y = 0.4
+    img_width = 2.8
+    img_height = 3.2
+    
+    # Draw image border
+    pdf.set_draw_color(0, 83, 226)
+    pdf.set_line_width(0.02)
+    pdf.rect(img_x, img_y, img_width, img_height)
+    
     if image_url:
         try:
             img_response = requests.get(image_url, timeout=5)
@@ -463,41 +473,71 @@ def generate_pdf(item_data: dict) -> bytes:
             temp_img = "/tmp/product.jpg"
             with open(temp_img, 'wb') as f:
                 f.write(img_bytes.getvalue())
-            pdf.image(temp_img, x=0.25, y=0.25, w=1.8, h=1.8)
+            # Center image in the box
+            pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
         except:
-            pass  # Image download failed, continue without it
+            pass
     
-    # Right column: Product details
-    pdf.set_xy(2.1, 0.25)
-    pdf.set_font("Helvetica", "B", 13)
+    # RIGHT COLUMN: Product Details (starting at x=3.5")
+    content_x = 3.5
+    current_y = 0.4
+    
+    # Product Name (title)
+    pdf.set_xy(content_x, current_y)
+    pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(0, 83, 226)  # Walmart Blue
-    pdf.multi_cell(2.0, 0.22, item_name, align='L')
+    pdf.multi_cell(w=6.8, h=0.4, text=item_name, align='L')
+    current_y = pdf.get_y() + 0.1
     
-    # Details section
-    pdf.set_xy(2.1, 0.85)
-    pdf.set_font("Helvetica", "", 9)
+    # Separator line
+    pdf.set_draw_color(200, 200, 200)
+    pdf.set_line_width(0.01)
+    pdf.line(content_x, current_y, 10.2, current_y)
+    current_y += 0.2
+    
+    # Details in a clean format
+    pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(0, 0, 0)
     
     details = []
     if item_id:
-        details.append(f"Item ID: {item_id}")
-    if gtin:
-        details.append(f"GTIN: {gtin}")
+        details.append(("Item ID:", item_id))
     if product_id:
-        details.append(f"Product ID: {product_id}")
+        details.append(("Product ID:", product_id))
+    if gtin:
+        details.append(("GTIN:", gtin))
     if supplier_dept:
-        details.append(f"Supplier Dept: {supplier_dept}")
+        details.append(("Supplier Dept:", supplier_dept))
     
-    for detail in details:
-        pdf.multi_cell(2.0, 0.16, detail, align='L')
+    # Draw details as label: value pairs
+    for label, value in details:
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(1.2, 0.25, label, align='L')
+        
+        pdf.set_xy(content_x + 1.3, current_y)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(5.5, 0.25, str(value), align='L')
+        current_y += 0.28
     
     # Status section
-    pdf.set_xy(2.1, 1.6)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(2.0, 0.16, "Status:", ln=True)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(0, 100, 0) if "In Stock" in inventory_status else pdf.set_text_color(200, 0, 0)
-    pdf.cell(2.0, 0.16, inventory_status, ln=True)
+    current_y += 0.15
+    pdf.set_xy(content_x, current_y)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(1.2, 0.25, "Status:", align='L')
+    
+    pdf.set_xy(content_x + 1.3, current_y)
+    pdf.set_font("Helvetica", "B", 10)
+    
+    # Color-code status
+    if "In Stock" in inventory_status or "200" in inventory_status:
+        pdf.set_text_color(0, 128, 0)  # Green
+    elif "404" in inventory_status or "Unknown" in inventory_status:
+        pdf.set_text_color(255, 0, 0)  # Red
+    else:
+        pdf.set_text_color(200, 140, 0)  # Orange
+    
+    pdf.cell(5.5, 0.25, inventory_status, align='L')
     
     # Convert to bytes
     result = pdf.output(dest='S')
