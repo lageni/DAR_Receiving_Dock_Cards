@@ -68,62 +68,65 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     rates = load_read_rates()
     data = rates.get(str(mds_fam_id), [])
     
-    if not data:
+    if not data or len(data) == 0:
         return ""
     
     # Format data for Chart.js
     labels = [d["date"] for d in data]
     values = [d["null_pct"] for d in data]
     
-    # Create chart data
+    # Create chart ID
     chart_id = f"chart_{mds_fam_id}"
-    chart_data = json.dumps({
-        "labels": labels,
-        "datasets": [{
-            "label": "Null Read %",
-            "data": values,
-            "borderColor": "#0053e2",
-            "backgroundColor": "rgba(0, 83, 226, 0.1)",
-            "borderWidth": 2,
-            "fill": True,
-            "tension": 0.3
-        }]
-    })
     
-    return f"""<div class="mt-6 bg-white p-4 rounded border">
+    # Safely build the data JSON string
+    labels_json = json.dumps(labels)
+    values_json = json.dumps(values)
+    
+    return f'''<div class="mt-6 bg-white p-4 rounded border">
         <h4 class="text-sm font-bold mb-3">Null Read % Trend</h4>
         <div style="height: 300px; position: relative;">
             <canvas id="{chart_id}"></canvas>
         </div>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"><\/script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
         <script>
-            var ctx = document.getElementById("{chart_id}").getContext("2d");
-            new Chart(ctx, {{
-                type: "line",
-                data: {chart_data},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {{
-                        legend: {{
-                            display: true,
-                            position: "top"
-                        }}
+            (function() {{
+                var ctx = document.getElementById("{chart_id}").getContext("2d");
+                var labels = {labels_json};
+                var values = {values_json};
+                new Chart(ctx, {{
+                    type: "line",
+                    data: {{
+                        labels: labels,
+                        datasets: [{{
+                            label: "Null Read %",
+                            data: values,
+                            borderColor: "#0053e2",
+                            backgroundColor: "rgba(0, 83, 226, 0.1)",
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3
+                        }}]
                     }},
-                    scales: {{
-                        y: {{
-                            beginAtZero: true,
-                            max: 100,
-                            title: {{
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {{
+                            legend: {{
                                 display: true,
-                                text: "Percentage (%)"
+                                position: "top"
+                            }}
+                        }},
+                        scales: {{
+                            y: {{
+                                beginAtZero: true,
+                                max: 100
                             }}
                         }}
                     }}
-                }}
-            }});
-        <\/script>
-    </div>"""
+                }});
+            }})();
+        </script>
+    </div>'''
 
 
 @app.get("/", response_class=HTMLResponse)
