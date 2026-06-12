@@ -6,7 +6,6 @@ from io import BytesIO
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
 import httpx
-import requests
 from fpdf import FPDF
 from dotenv import load_dotenv
 
@@ -468,7 +467,7 @@ def generate_pdf(item_data: dict) -> bytes:
     
     if image_url:
         try:
-            img_response = requests.get(image_url, timeout=5)
+            img_response = httpx.get(image_url, timeout=5)
             img_bytes = BytesIO(img_response.content)
             temp_img = "/tmp/product.jpg"
             with open(temp_img, 'wb') as f:
@@ -486,7 +485,7 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.set_xy(content_x, current_y)
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(0, 83, 226)  # Walmart Blue
-    pdf.multi_cell(w=6.8, h=0.4, text=item_name, align='L')
+    pdf.multi_cell(6.8, 0.4, item_name, align='L')
     current_y = pdf.get_y() + 0.1
     
     # Separator line
