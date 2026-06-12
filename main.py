@@ -2,9 +2,12 @@ import os
 import json
 from pathlib import Path
 from urllib.parse import urlencode
+from io import BytesIO
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 import httpx
+import requests
+from fpdf import FPDF
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
@@ -137,6 +140,52 @@ async def print_card(item_id: str, product_id: str = "", gtin: str = "", supplie
         return f'<div class="text-red-600">Error: {str(e)}</div>'
 
 
+@app.get("/print-card-pdf")
+async def print_card_pdf(item_id: str, product_id: str = "", gtin: str = "", supplier_dept: str = ""):
+    """Generate a clean PDF of the print card for download."""
+    try:
+        jwt = os.getenv("INVENTORY_JWT_TOKEN")
+        user_id = os.getenv("INVENTORY_USER_ID")
+        api_url = os.getenv("INVENTORY_API_URL", "https://inventory-viewer.prod.walmart.net")
+        node = os.getenv("INVENTORY_DEFAULT_NODE", "6068")
+        country_code = os.getenv("INVENTORY_COUNTRY_CODE", "US")
+
+        if not jwt or not user_id:
+            return '<div class="text-red-600">Error: Missing credentials in .env</div>'
+
+        headers = {"Authorization": jwt, "UserId": user_id}
+        params = {
+            "node": node,
+            "itemId": item_id,
+            "idType": "ITEM_NUMBER",
+            "userName": user_id,
+            "countryCode": country_code,
+            "isOfferIdRollupEnabled": "false",
+        }
+
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+            response = await client.get(f"{api_url}/get-summary", params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        item_data = extract_item_data(data)
+        item_data["item_id"] = item_id  # Add the searched item_id
+        pdf_bytes = generate_pdf(item_data)
+        
+        # Sanitize filename
+        safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '' for c in item_data["item_name"])
+        safe_name = safe_name.replace(' ', '_').strip('_') + '.pdf'
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}"'}
+        )
+
+    except Exception as e:
+        return f'<div class="text-red-600">Error: {str(e)}</div>'
+
+
 def format_results(data: dict, item_id: str) -> str:
     json_str = json.dumps(data, indent=2)
     item_data = extract_item_data(data)
@@ -160,7 +209,7 @@ def format_results(data: dict, item_id: str) -> str:
         "gtin": gtin,
         "supplier_dept": supplier_dept
     })
-    print_card_html = f'<a href="/print-card?{print_params}" target="_blank" class="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Print Card</a>'
+    print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
 
     return f"""<div class="space-y-4">
         <div class="bg-blue-50 p-4 rounded border border-blue-200">
@@ -181,6 +230,7 @@ def extract_item_data(data: dict) -> dict:
     """Extract product and inventory data from API response."""
     item_data = {
         "item_name": "Unknown Item",
+        "item_id": "",
         "image_url": "",
         "gtin": "",
         "product_id": "",
@@ -389,6 +439,69 @@ def generate_print_card(data: dict, item_id: str) -> str:
     </div>
 </body>
 </html>"""
+
+
+def generate_pdf(item_data: dict) -> bytes:
+    """Generate a clean landscape PDF card with product information."""
+    pdf = FPDF(orientation='L', unit='in', format='A5')  # 5.8" x 8.3" landscape
+    pdf.add_page()
+    pdf.set_margins(0.25, 0.25, 0.25)
+    
+    item_name = item_data.get("item_name", "Unknown Item")
+    image_url = item_data.get("image_url", "")
+    gtin = item_data.get("gtin", "")
+    product_id = item_data.get("product_id", "")
+    supplier_dept = item_data.get("supplier_dept", "")
+    inventory_status = item_data.get("inventory_status", "Unknown")
+    item_id = item_data.get("item_id", "")
+    
+    # Download and embed product image (left side)
+    if image_url:
+        try:
+            img_response = requests.get(image_url, timeout=5)
+            img_bytes = BytesIO(img_response.content)
+            temp_img = "/tmp/product.jpg"
+            with open(temp_img, 'wb') as f:
+                f.write(img_bytes.getvalue())
+            pdf.image(temp_img, x=0.25, y=0.25, w=1.8, h=1.8)
+        except:
+            pass  # Image download failed, continue without it
+    
+    # Right column: Product details
+    pdf.set_xy(2.1, 0.25)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(0, 83, 226)  # Walmart Blue
+    pdf.multi_cell(2.0, 0.22, item_name, align='L')
+    
+    # Details section
+    pdf.set_xy(2.1, 0.85)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(0, 0, 0)
+    
+    details = []
+    if item_id:
+        details.append(f"Item ID: {item_id}")
+    if gtin:
+        details.append(f"GTIN: {gtin}")
+    if product_id:
+        details.append(f"Product ID: {product_id}")
+    if supplier_dept:
+        details.append(f"Supplier Dept: {supplier_dept}")
+    
+    for detail in details:
+        pdf.multi_cell(2.0, 0.16, detail, align='L')
+    
+    # Status section
+    pdf.set_xy(2.1, 1.6)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(2.0, 0.16, "Status:", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(0, 100, 0) if "In Stock" in inventory_status else pdf.set_text_color(200, 0, 0)
+    pdf.cell(2.0, 0.16, inventory_status, ln=True)
+    
+    # Convert to bytes
+    result = pdf.output(dest='S')
+    return bytes(result) if isinstance(result, bytearray) else result
 
 
 if __name__ == "__main__":
