@@ -599,7 +599,7 @@ def generate_pdf(item_data: dict) -> bytes:
     
     # Product Name (title)
     pdf.set_xy(content_x, current_y)
-    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_font("DejaVuSans", "B", 18)
     pdf.set_text_color(0, 83, 226)  # Walmart Blue
     pdf.multi_cell(6.8, 0.4, item_name, align='L')
     current_y = pdf.get_y() + 0.1
@@ -611,7 +611,7 @@ def generate_pdf(item_data: dict) -> bytes:
     current_y += 0.2
     
     # Details in a clean format
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font("DejaVuSans", "", 11)
     pdf.set_text_color(0, 0, 0)
     
     details = []
@@ -627,22 +627,22 @@ def generate_pdf(item_data: dict) -> bytes:
     # Draw details as label: value pairs
     for label, value in details:
         pdf.set_xy(content_x, current_y)
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font("DejaVuSans", "B", 10)
         pdf.cell(1.2, 0.25, label, align='L')
         
         pdf.set_xy(content_x + 1.3, current_y)
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font("DejaVuSans", "", 10)
         pdf.cell(5.5, 0.25, str(value), align='L')
         current_y += 0.28
     
     # Status section
     current_y += 0.15
     pdf.set_xy(content_x, current_y)
-    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_font("DejaVuSans", "B", 10)
     pdf.cell(1.2, 0.25, "Status:", align='L')
     
     pdf.set_xy(content_x + 1.3, current_y)
-    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_font("DejaVuSans", "B", 10)
     
     # Color-code status
     if "In Stock" in inventory_status or "200" in inventory_status:
