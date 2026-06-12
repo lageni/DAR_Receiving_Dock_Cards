@@ -1,8 +1,10 @@
 import os
 import json
+import csv
 from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
+from collections import defaultdict
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
 import httpx
@@ -12,6 +14,116 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 app = FastAPI(title="CodePuppy DAR")
+
+# Cache for read rates data
+_read_rates_cache = None
+
+
+def load_read_rates():
+    """Load read_rates.csv and cache it. Returns dict[mds_fam_id] -> list of records."""
+    global _read_rates_cache
+    if _read_rates_cache is not None:
+        return _read_rates_cache
+    
+    csv_path = Path(__file__).parent / "read_rates.csv"
+    if not csv_path.exists():
+        return {}
+    
+    rates_by_family = defaultdict(list)
+    try:
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    mds_fam_id = row.get("MDS_FAM_ID", "").strip()
+                    ts_date = row.get("TS_DATE", "").strip()
+                    event_cnt = int(row.get("ACL_EVENT_CNT", 0))
+                    null_cnt = int(row.get("ACL_NULL_CNT", 0))
+                    
+                    if mds_fam_id and event_cnt > 0:
+                        null_pct = (null_cnt / event_cnt) * 100
+                        rates_by_family[mds_fam_id].append({
+                            "date": ts_date,
+                            "null_pct": null_pct,
+                            "event_cnt": event_cnt,
+                            "null_cnt": null_cnt
+                        })
+                except (ValueError, KeyError):
+                    pass
+        
+        # Sort each family's records by date
+        for fam_id in rates_by_family:
+            rates_by_family[fam_id].sort(key=lambda x: x["date"])
+        
+        _read_rates_cache = rates_by_family
+    except Exception as e:
+        print(f"Error loading read_rates.csv: {e}")
+        _read_rates_cache = {}
+    
+    return _read_rates_cache
+
+
+def get_read_rate_chart(mds_fam_id: str) -> str:
+    """Generate Chart.js HTML for read rate trend."""
+    rates = load_read_rates()
+    data = rates.get(str(mds_fam_id), [])
+    
+    if not data:
+        return ""
+    
+    # Format data for Chart.js
+    labels = [d["date"] for d in data]
+    values = [d["null_pct"] for d in data]
+    
+    # Create chart data
+    chart_id = f"chart_{mds_fam_id}"
+    chart_data = json.dumps({
+        "labels": labels,
+        "datasets": [{
+            "label": "Null Read %",
+            "data": values,
+            "borderColor": "#0053e2",
+            "backgroundColor": "rgba(0, 83, 226, 0.1)",
+            "borderWidth": 2,
+            "fill": True,
+            "tension": 0.3
+        }]
+    })
+    
+    return f"""<div class="mt-6 bg-white p-4 rounded border">
+        <h4 class="text-sm font-bold mb-3">Null Read % Trend</h4>
+        <div style="height: 300px; position: relative;">
+            <canvas id="{chart_id}"></canvas>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"><\/script>
+        <script>
+            var ctx = document.getElementById("{chart_id}").getContext("2d");
+            new Chart(ctx, {{
+                type: "line",
+                data: {chart_data},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {{
+                        legend: {{
+                            display: true,
+                            position: "top"
+                        }}
+                    }},
+                    scales: {{
+                        y: {{
+                            beginAtZero: true,
+                            max: 100,
+                            title: {{
+                                display: true,
+                                text: "Percentage (%)"
+                            }}
+                        }}
+                    }}
+                }}
+            }});
+        <\/script>
+    </div>"""
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -209,6 +321,9 @@ def format_results(data: dict, item_id: str) -> str:
         "supplier_dept": supplier_dept
     })
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
+    
+    # Get read rate trend chart
+    chart_html = get_read_rate_chart(item_id)
 
     return f"""<div class="space-y-4">
         <div class="bg-blue-50 p-4 rounded border border-blue-200">
@@ -218,6 +333,7 @@ def format_results(data: dict, item_id: str) -> str:
             {url_html}
             {print_card_html}
         </div>
+        {chart_html}
         <div class="bg-white p-4 rounded border">
             <h4 class="text-sm font-bold mb-2">Full Response</h4>
             <pre class="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-96 font-mono border">{json_str}</pre>
