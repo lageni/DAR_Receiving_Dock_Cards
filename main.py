@@ -63,6 +63,20 @@ def load_read_rates():
     return _read_rates_cache
 
 
+def format_date_for_chart(date_str: str) -> str:
+    """Convert YYYY-MM-DD to abbreviated month+year (e.g., 'Dec 2025')."""
+    try:
+        parts = date_str.split('-')
+        if len(parts) == 3:
+            year, month, day = parts
+            months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            month_int = int(month)
+            return f"{months[month_int]} {year}"
+    except:
+        pass
+    return date_str
+
+
 def get_read_rate_chart(mds_fam_id: str) -> str:
     """Generate Chart.js HTML for read rate trend."""
     rates = load_read_rates()
@@ -71,8 +85,8 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     if not data or len(data) == 0:
         return ""
     
-    # Format data for Chart.js
-    labels = [d["date"] for d in data]
+    # Format data for Chart.js - use abbreviated month+year for labels
+    labels = [format_date_for_chart(d["date"]) for d in data]
     values = [d["null_pct"] for d in data]
     
     # Create chart ID
@@ -602,7 +616,9 @@ def generate_pdf(item_data: dict) -> bytes:
     product_id = sanitize_for_pdf(item_data.get("product_id", ""))
     supplier_dept = sanitize_for_pdf(item_data.get("supplier_dept", ""))
     inventory_status = sanitize_for_pdf(item_data.get("inventory_status", "Unknown"))
-    item_id = sanitize_for_pdf(item_data.get("item_id", ""))
+    # Keep original item_id for dictionary lookup, use sanitized version for PDF display
+    item_id_orig = item_data.get("item_id", "")
+    item_id = sanitize_for_pdf(item_id_orig)
     
     # LEFT COLUMN: Product Image
     img_x = 0.4
@@ -696,9 +712,9 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.cell(6.8, 0.25, "Read Rates (Null %)", align='L')
     current_y += 0.28
     
-    # Get read rates for this item
+    # Get read rates for this item (use original item_id for lookup)
     rates = load_read_rates()
-    item_rates = rates.get(item_id, [])
+    item_rates = rates.get(str(item_id_orig), [])
     
     if item_rates:
         # Show latest record
