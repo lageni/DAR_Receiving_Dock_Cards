@@ -423,11 +423,19 @@ def format_results(data: dict, item_id: str) -> str:
     chart_html = get_read_rate_chart(item_id)
 
     return f"""<div class="space-y-3">
-        <div class="bg-blue-50 p-4 rounded border border-blue-200">
+        <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded border-2 border-blue-300">
             {image_html}
-            <h3 class="font-bold text-sm">{item_name}</h3>
-            <p class="text-xs text-gray-600 mt-1">Item: <code class="bg-white px-1 py-0.5 rounded text-blue-600 font-mono text-xs">{item_id}</code></p>
-            {print_card_html}
+            <h2 class="font-bold text-2xl text-blue-700 text-center mt-2 mb-3">{item_name}</h2>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <div class="bg-white p-2 rounded border border-blue-200 shadow-sm">
+                    <span class="text-xs font-semibold text-gray-600">Item ID</span>
+                    <p class="text-sm font-mono text-blue-600 font-bold">{item_id}</p>
+                </div>
+                {f'<div class="bg-white p-2 rounded border border-blue-200 shadow-sm"><span class="text-xs font-semibold text-gray-600">Product ID</span><p class="text-sm font-mono text-blue-600 font-bold">{product_id}</p></div>' if product_id else '<div></div>'}
+                {f'<div class="bg-white p-2 rounded border border-blue-200 shadow-sm"><span class="text-xs font-semibold text-gray-600">GTIN</span><p class="text-sm font-mono text-blue-600 font-bold">{gtin}</p></div>' if gtin else '<div></div>'}
+                {f'<div class="bg-white p-2 rounded border border-blue-200 shadow-sm"><span class="text-xs font-semibold text-gray-600">Supplier Dept</span><p class="text-sm font-mono text-blue-600 font-bold">{supplier_dept}</p></div>' if supplier_dept else '<div></div>'}
+            </div>
+            <div class="mt-3 text-center">{print_card_html}</div>
         </div>
         {chart_html}
         <details class="bg-white p-3 rounded border cursor-pointer group">
@@ -721,52 +729,69 @@ def generate_pdf(item_data: dict) -> bytes:
     content_x = 3.5
     current_y = 0.4
     
-    # Product Name (title)
+    # Product Name (title) - centered and larger
     pdf.set_xy(content_x, current_y)
-    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_font("Helvetica", "B", 16)
     pdf.set_text_color(0, 83, 226)  # Walmart Blue
-    pdf.multi_cell(6.8, 0.4, item_name, align='L')
-    current_y = pdf.get_y() + 0.1
+    # Center the title
+    title_width = 6.8
+    pdf.multi_cell(title_width, 0.35, item_name, align='C')
+    current_y = pdf.get_y() + 0.15
     
     # Separator line
-    pdf.set_draw_color(200, 200, 200)
-    pdf.set_line_width(0.01)
-    pdf.line(content_x, current_y, 10.2, current_y)
-    current_y += 0.2
+    pdf.set_draw_color(0, 83, 226)
+    pdf.set_line_width(0.02)
+    pdf.line(content_x, current_y, content_x + 6.8, current_y)
+    current_y += 0.25
     
-    # Details in a clean format
-    pdf.set_font("Helvetica", "", 11)
+    # Details in colored boxes
+    pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(0, 0, 0)
     
     details = []
     if item_id:
-        details.append(("Item ID:", item_id))
+        details.append(("Item ID", item_id))
     if product_id:
-        details.append(("Product ID:", product_id))
+        details.append(("Product ID", product_id))
     if gtin:
-        details.append(("GTIN:", gtin))
+        details.append(("GTIN", gtin))
     if supplier_dept:
-        details.append(("Supplier Dept:", supplier_dept))
+        details.append(("Supplier Dept", supplier_dept))
     
-    # Draw details as label: value pairs
-    for label, value in details:
-        pdf.set_xy(content_x, current_y)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(1.2, 0.25, label, align='L')
+    # Draw details with colored backgrounds
+    for idx, (label, value) in enumerate(details):
+        # Draw light blue background box
+        pdf.set_fill_color(230, 240, 255)  # Light blue
+        pdf.set_draw_color(0, 83, 226)  # Blue border
+        pdf.set_line_width(0.01)
+        pdf.rect(content_x, current_y, 6.8, 0.24, style='FD')
         
-        pdf.set_xy(content_x + 1.3, current_y)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(5.5, 0.25, str(value), align='L')
-        current_y += 0.28
+        # Label
+        pdf.set_xy(content_x + 0.1, current_y + 0.02)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(1.5, 0.1, label, align='L')
+        
+        # Value
+        pdf.set_xy(content_x + 2.0, current_y + 0.02)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.cell(4.7, 0.1, sanitize_for_pdf(str(value)), align='L')
+        current_y += 0.26
     
-    # Status section
-    current_y += 0.15
-    pdf.set_xy(content_x, current_y)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(1.2, 0.25, "Status:", align='L')
+    # Status section with colored background
+    current_y += 0.1
+    pdf.set_fill_color(230, 240, 255)  # Light blue
+    pdf.set_draw_color(0, 83, 226)  # Blue border
+    pdf.set_line_width(0.01)
+    pdf.rect(content_x, current_y, 6.8, 0.24, style='FD')
     
-    pdf.set_xy(content_x + 1.3, current_y)
-    pdf.set_font("Helvetica", "B", 10)
+    # Status label
+    pdf.set_xy(content_x + 0.1, current_y + 0.02)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(1.5, 0.1, "Status", align='L')
+    
+    # Status value with color coding
+    pdf.set_xy(content_x + 2.0, current_y + 0.02)
+    pdf.set_font("Helvetica", "B", 9)
     
     # Color-code status
     if "In Stock" in inventory_status or "200" in inventory_status:
@@ -776,7 +801,8 @@ def generate_pdf(item_data: dict) -> bytes:
     else:
         pdf.set_text_color(200, 140, 0)  # Orange
     
-    pdf.cell(5.5, 0.25, inventory_status, align='L')
+    pdf.cell(4.7, 0.1, inventory_status, align='L')
+    current_y += 0.26
     
     # Move to bottom-left quadrant for ACL Performance section
     # Use a fixed position in the lower-left area only
