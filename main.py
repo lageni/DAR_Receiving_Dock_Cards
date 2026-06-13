@@ -151,20 +151,24 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     labels_json = json.dumps(labels)
     values_json = json.dumps(values)
     
-    # Create performance cards
-    perf_card = f'''<div class="grid grid-cols-2 gap-3 mb-4">
-        <div class="bg-white p-3 rounded border text-center">
-            <div class="text-xs text-gray-600 font-semibold">AVG PERFORMANCE</div>
-            <div class="text-2xl font-bold mt-2" style="color: {color};">{avg_perf:.1f}%</div>
+    # Create performance cards (prettier, much bigger)
+    perf_card = f'''<div class="grid grid-cols-2 gap-4 mb-4">
+        <div class="bg-gradient-to-br from-amber-50 via-yellow-50 to-yellow-100 p-6 rounded-xl border-2 border-yellow-300 shadow-lg hover:shadow-xl transition transform hover:scale-105">
+            <div class="text-center">
+                <div class="text-sm text-yellow-700 font-bold uppercase tracking-widest">Avg Performance</div>
+                <div class="text-5xl font-black mt-3" style="color: {color};">{avg_perf:.1f}%</div>
+            </div>
         </div>
-        <div class="bg-white p-3 rounded border text-center">
-            <div class="text-xs text-gray-600 font-semibold">TREND</div>
-            <div class="text-lg font-bold mt-2">{trend_status}</div>
+        <div class="bg-gradient-to-br from-purple-50 via-indigo-50 to-indigo-100 p-6 rounded-xl border-2 border-purple-300 shadow-lg hover:shadow-xl transition transform hover:scale-105">
+            <div class="text-center">
+                <div class="text-sm text-purple-700 font-bold uppercase tracking-widest">Trend</div>
+                <div class="text-4xl font-black mt-3 text-purple-900">{trend_status}</div>
+            </div>
         </div>
     </div>'''
     
-    return f'''<div class="mt-6 bg-white p-4 rounded border">
-        <h4 class="text-sm font-bold mb-3">ACL Performance %</h4>
+    return f'''<div class="mt-4 bg-white p-4 rounded border">
+        <h2 class="text-3xl font-black text-center text-blue-600 mb-4">ACL Performance %</h2>
         {perf_card}
         <div style="height: 400px; position: relative;">
             <canvas id="{chart_id}"></canvas>
@@ -409,7 +413,17 @@ def format_results(data: dict, item_id: str) -> str:
 
     image_html = ""
     if image_url:
-        image_html = f'<img src="{image_url}" alt="{item_name}" class="w-full h-48 object-cover rounded border mb-3">'
+        image_html = f'<img src="{image_url}" alt="{item_name}" class="w-full h-auto object-cover rounded border mb-2">'
+
+    # Simple item details - minimal styling
+    item_details = f'<div class="text-center space-y-1 text-xs text-gray-700"><p><strong>Item:</strong> {item_id}</p>'
+    if product_id:
+        item_details += f'<p><strong>Product ID:</strong> {product_id}</p>'
+    if gtin:
+        item_details += f'<p><strong>GTIN:</strong> {gtin}</p>'
+    if supplier_dept:
+        item_details += f'<p><strong>Supplier:</strong> {supplier_dept}</p>'
+    item_details += '</div>'
 
     print_params = urlencode({
         "item_id": item_id,
@@ -417,29 +431,21 @@ def format_results(data: dict, item_id: str) -> str:
         "gtin": gtin,
         "supplier_dept": supplier_dept
     })
-    print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
+    print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
     
     # Get read rate trend chart
     chart_html = get_read_rate_chart(item_id)
 
     return f"""<div class="space-y-3">
-        <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded border-2 border-blue-300">
+        <div class="bg-white p-3 rounded border">
             {image_html}
-            <h2 class="font-bold text-2xl text-blue-700 text-center mt-2 mb-3">{item_name}</h2>
-            <div class="grid grid-cols-2 gap-2 text-sm">
-                <div class="bg-white p-2 rounded border border-blue-200 shadow-sm">
-                    <span class="text-xs font-semibold text-gray-600">Item ID</span>
-                    <p class="text-sm font-mono text-blue-600 font-bold">{item_id}</p>
-                </div>
-                {f'<div class="bg-white p-2 rounded border border-blue-200 shadow-sm"><span class="text-xs font-semibold text-gray-600">Product ID</span><p class="text-sm font-mono text-blue-600 font-bold">{product_id}</p></div>' if product_id else '<div></div>'}
-                {f'<div class="bg-white p-2 rounded border border-blue-200 shadow-sm"><span class="text-xs font-semibold text-gray-600">GTIN</span><p class="text-sm font-mono text-blue-600 font-bold">{gtin}</p></div>' if gtin else '<div></div>'}
-                {f'<div class="bg-white p-2 rounded border border-blue-200 shadow-sm"><span class="text-xs font-semibold text-gray-600">Supplier Dept</span><p class="text-sm font-mono text-blue-600 font-bold">{supplier_dept}</p></div>' if supplier_dept else '<div></div>'}
-            </div>
-            <div class="mt-3 text-center">{print_card_html}</div>
+            <h2 class="font-bold text-xl text-blue-600 text-center mt-2 mb-1">{item_name}</h2>
+            {item_details}
+            <div class="text-center mt-2">{print_card_html}</div>
         </div>
         {chart_html}
         <details class="bg-white p-3 rounded border cursor-pointer group">
-            <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none"> Developer Info</summary>
+            <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">Developer Info</summary>
             <div class="mt-2 pt-2 border-t">
                 <pre class="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-64 font-mono border">{json_str}</pre>
             </div>
@@ -702,11 +708,11 @@ def generate_pdf(item_data: dict) -> bytes:
     item_id_orig = item_data.get("item_id", "")
     item_id = sanitize_for_pdf(item_id_orig)
     
-    # LEFT COLUMN: Product Image
+    # LEFT COLUMN: Product Image (larger)
     img_x = 0.4
     img_y = 0.4
-    img_width = 2.8
-    img_height = 3.2
+    img_width = 3.2  # Wider
+    img_height = 3.8  # Taller
     
     # Draw image border
     pdf.set_draw_color(0, 83, 226)
@@ -725,84 +731,32 @@ def generate_pdf(item_data: dict) -> bytes:
         except:
             pass
     
-    # RIGHT COLUMN: Product Details (starting at x=3.5")
-    content_x = 3.5
+    # RIGHT COLUMN: Product Details (starting at x=3.8") - simpler layout
+    content_x = 3.8
     current_y = 0.4
     
-    # Product Name (title) - centered and larger
+    # Product Name (title) - centered and larger, Walmart Blue
     pdf.set_xy(content_x, current_y)
-    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.set_text_color(0, 83, 226)  # Walmart Blue
-    # Center the title
-    title_width = 6.8
-    pdf.multi_cell(title_width, 0.35, item_name, align='C')
-    current_y = pdf.get_y() + 0.15
+    pdf.multi_cell(6.5, 0.32, item_name, align='C')
+    current_y = pdf.get_y() + 0.1
     
-    # Separator line
-    pdf.set_draw_color(0, 83, 226)
-    pdf.set_line_width(0.02)
-    pdf.line(content_x, current_y, content_x + 6.8, current_y)
-    current_y += 0.25
+    # Simple item details (small, plain text)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(80, 80, 80)
+    pdf.set_xy(content_x, current_y)
     
-    # Details in colored boxes
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(0, 0, 0)
-    
-    details = []
-    if item_id:
-        details.append(("Item ID", item_id))
+    details_text = f"Item: {item_id}"
     if product_id:
-        details.append(("Product ID", product_id))
+        details_text += f" | Product ID: {product_id}"
     if gtin:
-        details.append(("GTIN", gtin))
+        details_text += f" | GTIN: {gtin}"
     if supplier_dept:
-        details.append(("Supplier Dept", supplier_dept))
+        details_text += f" | Supplier: {supplier_dept}"
     
-    # Draw details with colored backgrounds
-    for idx, (label, value) in enumerate(details):
-        # Draw light blue background box
-        pdf.set_fill_color(230, 240, 255)  # Light blue
-        pdf.set_draw_color(0, 83, 226)  # Blue border
-        pdf.set_line_width(0.01)
-        pdf.rect(content_x, current_y, 6.8, 0.24, style='FD')
-        
-        # Label
-        pdf.set_xy(content_x + 0.1, current_y + 0.02)
-        pdf.set_font("Helvetica", "B", 8)
-        pdf.cell(1.5, 0.1, label, align='L')
-        
-        # Value
-        pdf.set_xy(content_x + 2.0, current_y + 0.02)
-        pdf.set_font("Helvetica", "", 9)
-        pdf.cell(4.7, 0.1, sanitize_for_pdf(str(value)), align='L')
-        current_y += 0.26
-    
-    # Status section with colored background
-    current_y += 0.1
-    pdf.set_fill_color(230, 240, 255)  # Light blue
-    pdf.set_draw_color(0, 83, 226)  # Blue border
-    pdf.set_line_width(0.01)
-    pdf.rect(content_x, current_y, 6.8, 0.24, style='FD')
-    
-    # Status label
-    pdf.set_xy(content_x + 0.1, current_y + 0.02)
-    pdf.set_font("Helvetica", "B", 8)
-    pdf.cell(1.5, 0.1, "Status", align='L')
-    
-    # Status value with color coding
-    pdf.set_xy(content_x + 2.0, current_y + 0.02)
-    pdf.set_font("Helvetica", "B", 9)
-    
-    # Color-code status
-    if "In Stock" in inventory_status or "200" in inventory_status:
-        pdf.set_text_color(0, 128, 0)  # Green
-    elif "404" in inventory_status or "Unknown" in inventory_status:
-        pdf.set_text_color(255, 0, 0)  # Red
-    else:
-        pdf.set_text_color(200, 140, 0)  # Orange
-    
-    pdf.cell(4.7, 0.1, inventory_status, align='L')
-    current_y += 0.26
+    pdf.multi_cell(6.5, 0.2, details_text, align='C')
+    current_y = pdf.get_y() + 0.1
     
     # Move to bottom-left quadrant for ACL Performance section
     # Use a fixed position in the lower-left area only
@@ -850,10 +804,10 @@ def generate_pdf(item_data: dict) -> bytes:
     current_y_box = 5.0
     
     pdf.set_xy(content_x_box, current_y_box)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(6.8, 0.25, "ACL Performance %", align='L')
-    current_y_box += 0.35
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(0, 83, 226)  # Walmart Blue
+    pdf.cell(4.6, 0.3, "ACL Performance %", align='C')
+    current_y_box += 0.4
     
     # Get read rates for this item (use original item_id for lookup)
     rates = load_read_rates()
@@ -865,21 +819,20 @@ def generate_pdf(item_data: dict) -> bytes:
         trend_status = get_trend_status(item_rates)
         color = get_color_for_performance(avg_perf)
         
-        # Display metrics side by side
-        # Average Performance
-        pdf.set_xy(content_x_box, current_y_box)
-        pdf.set_font("Helvetica", "B", 8)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(2.4, 0.2, "AVG PERFORMANCE", align='L')
+        # Display metrics in two boxes side by side
+        # AVG PERFORMANCE box
+        pdf.set_fill_color(255, 250, 220)  # Light yellow
+        pdf.set_draw_color(218, 165, 32)  # Goldenrod border
+        pdf.set_line_width(0.02)
+        pdf.rect(content_x_box, current_y_box, 2.1, 0.7, style='FD')
         
-        # Trend Status
-        pdf.set_xy(content_x_box + 2.6, current_y_box)
-        pdf.cell(2.4, 0.2, "TREND", align='L')
-        current_y_box += 0.25
+        pdf.set_xy(content_x_box + 0.1, current_y_box + 0.05)
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_text_color(180, 140, 0)
+        pdf.cell(1.9, 0.15, "AVG PERFORMANCE", align='C')
         
-        # Values
-        pdf.set_xy(content_x_box, current_y_box)
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_xy(content_x_box + 0.1, current_y_box + 0.25)
+        pdf.set_font("Helvetica", "B", 16)
         # Convert hex color to RGB
         if color == "#dc2626":
             pdf.set_text_color(220, 38, 38)
@@ -889,13 +842,25 @@ def generate_pdf(item_data: dict) -> bytes:
             pdf.set_text_color(234, 179, 8)
         else:  # green
             pdf.set_text_color(22, 163, 74)
-        pdf.cell(2.4, 0.3, f"{avg_perf:.1f}%", align='L')
+        pdf.cell(1.9, 0.3, f"{avg_perf:.1f}%", align='C')
         
-        pdf.set_xy(content_x_box + 2.6, current_y_box)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(2.4, 0.3, trend_status, align='L')
-        current_y_box += 0.4
+        # TREND box
+        pdf.set_fill_color(240, 230, 255)  # Light purple
+        pdf.set_draw_color(147, 112, 219)  # Medium purple border
+        pdf.set_line_width(0.02)
+        pdf.rect(content_x_box + 2.3, current_y_box, 2.1, 0.7, style='FD')
+        
+        pdf.set_xy(content_x_box + 2.4, current_y_box + 0.05)
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_text_color(140, 100, 180)
+        pdf.cell(1.9, 0.15, "TREND", align='C')
+        
+        pdf.set_xy(content_x_box + 2.4, current_y_box + 0.25)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(60, 20, 140)
+        pdf.cell(1.9, 0.3, trend_status, align='C')
+        
+        current_y_box += 0.8
         
         # Draw trend visualization (smaller, compact)
         if len(item_rates) > 1:
