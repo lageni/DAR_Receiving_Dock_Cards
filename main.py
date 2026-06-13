@@ -238,34 +238,23 @@ async def root():
         <p class="text-sm text-gray-600">Inventory Search</p>
     </header>
     <main class="w-full px-2 py-4">
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-2">
-            <div class="bg-white p-4 rounded border shadow-sm">
-                <h2 class="font-bold mb-3 text-sm">Search</h2>
-                <form id="searchForm" hx-get="/api/inventory/search" hx-target="#results">
-                    <div class="space-y-2">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1">Item ID</label>
-                            <input type="text" id="itemIdInput" name="item_id" placeholder="665540630" required class="w-full px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1">ID Type</label>
-                            <select name="id_type" class="w-full px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="ITEM_NUMBER">Item Number</option>
-                                <option value="UPC">UPC</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1">Node</label>
-                            <input type="text" name="node" value="6068" class="w-full px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        </div>
-                    </div>
-                    <button type="submit" class="w-full mt-3 bg-blue-600 text-white py-2 rounded font-semibold text-sm hover:bg-blue-700">Search</button>
-                </form>
-                <button onclick="loadExample()" class="w-full mt-1 bg-gray-200 text-gray-800 py-1 rounded font-semibold text-xs hover:bg-gray-300">Load Example</button>
-            </div>
-            <div class="lg:col-span-3 bg-white p-4 rounded border shadow-sm">
-                <div id="results" class="text-sm text-gray-500">Results appear here...</div>
-            </div>
+        <!-- Search Bar at Top -->
+        <div class="bg-white p-3 rounded border shadow-sm mb-4">
+            <form id="searchForm" hx-get="/api/inventory/search" hx-target="#results" class="flex gap-2">
+                <input type="text" id="itemIdInput" name="item_id" placeholder="Enter Item ID (e.g., 665540630)" required class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <input type="hidden" name="id_type" value="ITEM_NUMBER">
+                <input type="hidden" name="node" value="6068">
+                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded font-semibold text-sm hover:bg-blue-700">Search</button>
+                <button type="button" onclick="loadExample()" class="bg-gray-300 text-gray-800 px-4 py-2 rounded font-semibold text-sm hover:bg-gray-400">Example</button>
+            </form>
+        </div>
+        
+        <!-- Results: Two-column layout (Image on left, Graph on right) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            <!-- LEFT: Product Image + Details -->
+            <div id="results" class="text-sm text-gray-500">Results appear here...</div>
+            <!-- RIGHT: ACL Performance Graph -->
+            <div id="results-chart" class="text-sm text-gray-500"></div>
         </div>
     </main>
     <script>
@@ -436,21 +425,36 @@ def format_results(data: dict, item_id: str) -> str:
     # Get read rate trend chart
     chart_html = get_read_rate_chart(item_id)
 
-    return f"""<div class="space-y-3">
+    # LEFT column: Product image and details
+    left_html = f"""<div class="space-y-3">
         <div class="bg-white p-3 rounded border">
             {image_html}
             <h2 class="font-bold text-xl text-blue-600 text-center mt-2 mb-1">{item_name}</h2>
             {item_details}
             <div class="text-center mt-2">{print_card_html}</div>
         </div>
-        {chart_html}
         <details class="bg-white p-3 rounded border cursor-pointer group">
             <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">Developer Info</summary>
             <div class="mt-2 pt-2 border-t">
-                <pre class="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-64 font-mono border">{json_str}</pre>
+                <pre class="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-32 font-mono border">{json_str}</pre>
             </div>
         </details>
-    </div>"""
+    </div>
+    <div id="chart-placeholder" style="display:none;">{chart_html}</div>
+    <script>
+        setTimeout(function() {{
+            var chartDiv = document.getElementById('results-chart');
+            var placeholder = document.getElementById('chart-placeholder');
+            if (chartDiv && placeholder) {{
+                chartDiv.innerHTML = placeholder.innerHTML;
+                placeholder.remove();
+            }}
+        }}, 100);
+    </script>"""
+    
+    return left_html
+
+
 
 
 def extract_item_data(data: dict) -> dict:
