@@ -749,7 +749,7 @@ def generate_print_card(data: dict, item_id: str) -> str:
                     <div class="info-value">{item_id}</div>
                 </div>
                 {f'<div class="info-row"><div class="info-label">GTIN:</div><div class="info-value">{gtin}</div></div>' if gtin else ''}
-                {f'<div class="info-row"><div class="info-label">Catalog GTIN:</div><div class="info-value">{catalog_gtin}</div></div>' if catalog_gtin else ''}
+                {'<div class="info-row"><div class="info-label">Catalog GTIN:</div><div class="info-value">' + catalog_gtin + '</div></div>' if catalog_gtin else ''}
                 {f'<div class="info-row"><div class="info-label">Product ID:</div><div class="info-value">{product_id}</div></div>' if product_id else ''}
                 {f'<div class="info-row"><div class="info-label">Supplier Dept:</div><div class="info-value">{supplier_dept}</div></div>' if supplier_dept else ''}
             </div>
