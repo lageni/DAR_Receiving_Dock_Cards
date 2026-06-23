@@ -1086,11 +1086,12 @@ async def sync_bigquery():
         
         print(f"[SYNC] Step 6: Building BigQuery query...")
         print(f"[DEBUG] Missing {len(missing_dates)} dates to sync: {missing_dates}")
-        dates_list = "', '".join(missing_dates)
+        # Use double quotes for BigQuery date strings
+        dates_list = ", ".join([f'"{d}"' for d in missing_dates])
         query = f"""SELECT acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt
             FROM `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
             WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')
-            AND acl_insert_date IN ('{dates_list}')"""
+            AND acl_insert_date IN ({dates_list})"""
         print("[OK] Query built with filter: PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')")
         print(f"[DEBUG] Query: {query[:250]}...")
         
