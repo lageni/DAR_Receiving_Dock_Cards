@@ -1,0 +1,60 @@
+GITHUB PUSH INSTRUCTIONS
+========================
+
+STATUS: Code is committed locally and ready to push
+
+Current git log:
+- Latest commit: CodePuppyDAR initial commit with all features
+- Branch: master
+- Remote: origin -> https://github.com/dylanhoang11/DAR-Receiving-Frictions.git
+
+TO PUSH TO GITHUB:
+
+1. Make sure the repository exists on GitHub:
+   - Go to: https://github.com/dylanhoang11/DAR-Receiving-Frictions
+   - Create it if it doesn't exist (empty repo, no README)
+
+2. From this folder, run:
+   git push -u origin master
+
+3. You'll be prompted for authentication:
+   - Option A: Enter GitHub username/token (personal access token)
+   - Option B: Use GitHub CLI (gh auth login first)
+   - Option C: SSH key (if configured)
+
+WHAT'S COMMITTED:
+
+Core Application:
+ main.py - FastAPI inventory search app
+ db.py - SQLite database management
+ gcs_sync.py - Google Cloud BigQuery sync
+ error_logger.py - Error logging system
+ RUN.bat - Consolidated startup script
+
+Documentation:
+ README.md - Project overview
+ DATABASE.md - Database architecture
+ NETWORK_SETUP_GUIDE.md - Deployment instructions
+ DEPLOYMENT_CHECKLIST.md - Verification steps
+ QUICK_REFERENCE.txt - User guide
+ *.md files - Various documentation
+
+Supporting Files:
+ mdm_item_api_response_example.json - Sample API response
+ pyproject.toml - Project configuration
+ uv.lock - Dependency lock file
+
+Excluded (via .gitignore):
+ .env - Credentials (keep local!)
+ read_rates.csv - Large data file (6.4 MB)
+ read_rates.db - SQLite database (16.3 MB)
+ error_logs.jsonl - Runtime logs
+ __pycache__ - Python cache
+
+NEXT STEPS:
+
+1. Create GitHub repo (if needed)
+2. Run: git push -u origin master
+3. Verify on GitHub
+
+The admin page issue I caused will be fixed separately - the core app is working.
