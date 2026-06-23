@@ -1024,28 +1024,43 @@ def generate_pdf(item_data: dict) -> bytes:
 
 
 
-        
 @app.post("/api/admin/sync-bigquery")
 async def sync_bigquery():
-    """Sync missing dates from BigQuery to local database."""
+    print("\n" + "="*70)
+    print("[SYNC] BigQuery sync started")
+    print("="*70)
+    
     try:
         from gcs_sync import GoogleCloudSync
         from db import get_database_stats
         import sqlite3
         from datetime import datetime, timedelta
         
+        print("[SYNC] Step 1: Initializing GoogleCloudSync...")
         sync = GoogleCloudSync()
-        if not sync.initialize():
-            return JSONResponse({"status": "error", "message": "Failed to initialize BigQuery"}, status_code=400)
+        init_result = sync.initialize()
+        if not init_result:
+            print("[ERROR] Failed to initialize BigQuery")
+            return JSONResponse({"status": "error", "message": "BigQuery init failed"}, status_code=400)
+        print("[OK] BigQuery initialized")
         
+        print("[SYNC] Step 2: Getting database stats...")
         stats = get_database_stats()
         max_date = stats.get('max_date', '2024-01-01')
+        total_rows = stats.get('total_rows', 0)
+        print(f"[OK] DB: {total_rows} rows, max_date={max_date}")
         
+        print("[SYNC] Step 3: Connecting to database...")
         conn = sqlite3.connect("read_rates.db")
         cursor = conn.cursor()
+        print("[OK] Connected")
+        
+        print("[SYNC] Step 4: Reading existing dates...")
         cursor.execute("SELECT DISTINCT acl_insert_date FROM read_rates ORDER BY acl_insert_date")
         existing_dates = {row[0] for row in cursor.fetchall()}
+        print(f"[OK] Found {len(existing_dates)} dates in database")
         
+        print("[SYNC] Step 5: Calculating missing dates...")
         if max_date and max_date != 'N/A':
             last_date = datetime.strptime(max_date, '%Y-%m-%d')
         else:
@@ -1060,43 +1075,60 @@ async def sync_bigquery():
                 missing_dates.append(date_str)
             current += timedelta(days=1)
         
+        print(f"[OK] Found {len(missing_dates)} missing dates")
+        if missing_dates:
+            print(f"     Range: {missing_dates[0]} to {missing_dates[-1]}")
+        
         if not missing_dates:
+            print("[OK] Database is current, no missing dates")
             conn.close()
             return JSONResponse({"status": "success", "message": "No missing dates", "rows_appended": 0, "dates_synced": 0})
         
+        print(f"[SYNC] Step 6: Building BigQuery query...")
         dates_list = "', '".join(missing_dates)
-        query = f"""
-            SELECT acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt
+        query = f"""SELECT acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt
             FROM `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
             WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')
-            AND acl_insert_date IN ('{dates_list}')
-        """
+            AND acl_insert_date IN ('{dates_list}')"""
+        print("[OK] Query ready")
         
+        print(f"[SYNC] Step 7: Querying BigQuery (may take 10-30 seconds)...")
         query_job = sync.client.query(query)
         results = query_job.result()
+        print("[OK] Results received")
         
+        print(f"[SYNC] Step 8: Inserting rows...")
         inserted = 0
+        total = 0
         for row in results:
+            total += 1
             try:
-                cursor.execute('''
-                    INSERT OR IGNORE INTO read_rates 
-                    (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt)
-                    VALUES (?, ?, ?, ?)
-                ''', (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0,
-                      int(row.acl_event_cnt) if row.acl_event_cnt else 0,
-                      int(row.acl_null_cnt) if row.acl_null_cnt else 0))
+                cursor.execute('''INSERT OR IGNORE INTO read_rates (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt) VALUES (?, ?, ?, ?)''', (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0, int(row.acl_event_cnt) if row.acl_event_cnt else 0, int(row.acl_null_cnt) if row.acl_null_cnt else 0))
                 if cursor.rowcount > 0:
                     inserted += 1
+                if total % 100 == 0:
+                    print(f"     {total} processed, {inserted} new")
             except Exception as e:
-                print(f"[WARN] Insert failed: {e}")
+                print(f"[WARN] Row {total} failed: {e}")
         
+        print(f"[OK] Processed {total} rows, inserted {inserted}")
+        
+        print("[SYNC] Step 9: Committing...")
         conn.commit()
         conn.close()
+        print("[OK] Committed")
         
-        return JSONResponse({"status": "success", "message": f"Synced {len(missing_dates)} dates",
-                           "rows_appended": inserted, "dates_synced": len(missing_dates)})
+        print("\n" + "="*70)
+        print(f"[SUCCESS] Sync complete: {len(missing_dates)} dates, {inserted} rows")
+        print("="*70 + "\n")
+        
+        return JSONResponse({"status": "success", "message": f"Synced {len(missing_dates)} dates, {inserted} rows", "rows_appended": inserted, "dates_synced": len(missing_dates)})
     
     except Exception as e:
+        print(f"\n[ERROR] Sync failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("="*70 + "\n")
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
