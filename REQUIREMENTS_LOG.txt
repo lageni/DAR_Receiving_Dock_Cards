@@ -18,6 +18,38 @@ Developer Notes:
   - Displayed prominently on search results and PDF
   - Rules may be adjusted based on operational feedback
   - Subject to ongoing refinement and testing
+
+KNOWN ISSUES:
+=============
+
+1. Chart/Graph Not Rendering on Search Results Page
+   - Status: IN PROGRESS
+   - Issue: Canvas element for Chart.js not rendering in HTMX response
+   - Workaround: Chart data is generated and available in backend
+   - Impact: Visual chart missing, but metrics (% and trend) display correctly
+   - Root Cause: Likely timing issue with HTMX injection and Canvas initialization
+   - Next Steps: Consider client-side chart rendering or Canvas initialization refactor
+
+2. Chart Not Showing on Print Card
+   - Status: TODO
+   - Note: Print card displays recommendation and metrics correctly
+   - Chart visualization would be helpful for print reference
+
+RECENT CHANGES:
+===============
+
+- ACL Recommendation System fully implemented and working
+- Directive Actions ruleset displayed as collapsible legend on main page
+- Print cards include recommendation display with color coding
+- MDM API integration complete and tested
+- Database lookup working correctly (item_id -> mds_fam_id)
+- Admin page operational
+
+CURRENT PRIORITY:
+=================
+
+Fix Chart.js rendering in HTMX response. This is the only major blocking issue.
+All other features are functional and ready for use.
 CODEPUPPYDAR - REQUIREMENTS LOG
 ================================
 Last Updated: 2026-06-19

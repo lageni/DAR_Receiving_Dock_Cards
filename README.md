@@ -1,75 +1,129 @@
-# CodePuppyDAR - MDM Item Inventory Search
+# CodePuppyDAR - Inventory Search & ACL Performance Analysis
 
-A FastAPI application for searching Walmart MDM inventory items with ACL performance tracking.
-
-## Quick Start
-
-```bash
-python main.py
-```
-
-Open browser: **http://localhost:8000**
+A FastAPI-based inventory search application that integrates MDM (Master Data Management) APIs with ACL (Automated Cycle Logistics) performance analytics.
 
 ## Features
 
-- Search items by **Item ID**
-- Display product details (name, image, GTIN, Catalog GTIN)
-- View **ACL Performance %** trends with charts
-- Download PDF print cards
-- Real-time API integration with Walmart MDM
+- **MDM API Integration**: Search inventory by item number
+- **Product Details**: Display product image, GTIN, supplier information
+- **ACL Performance Metrics**: View average performance % and trend analysis
+- **Directive Actions**: Automated recommendations based on ACL performance ruleset
+- **Print Cards**: Generate and download PDF print cards for items
+- **SQLite Database**: Local caching of ACL read rate metrics
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.10+
+- FastAPI
+- MDM API credentials
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/dylanhoang11/DAR-Receiving-Frictions.git
+   cd CodePuppyDAR
+   ```
+
+2. Install dependencies:
+   ```bash
+   uv sync
+   ```
+
+3. Configure `.env` file:
+   ```
+   MDM_API_KEY=your-api-key-here
+   MDM_FACILITY_NUM=6068
+   MDM_FACILITY_COUNTRY_CODE=US
+   MDM_WMT_USERID=mdm-ui
+   ```
+
+4. Run the application:
+   ```bash
+   python main.py
+   ```
+
+5. Open browser:
+   ```
+   http://localhost:8000
+   ```
+
+## Usage
+
+### Search for an Item
+
+1. Enter item number (e.g., 659608850)
+2. Click **Search** or **Example** for demo
+3. View:
+   - Product image and details
+   - ACL Performance metrics
+   - Directive action recommendation
+   - Performance trend
+
+### Directive Actions Ruleset
+
+The system automatically recommends actions based on ACL performance:
+
+- **ACL APPROVED** (Green): Performance >= 85% - No action needed
+- **ADEQUATE PERFORMANCE** (Yellow): Performance < 85% & Improving - Monitor closely
+- **REQUIRES MANUAL INSPECTION** (Yellow): Performance < 85% & Declining - Review needed
+- **WORKSTATION RECOMMENDED** (Red): Performance < 50% - Immediate action required
+
+### Download Print Card
+
+Click **Download PDF** to generate a printable card with:
+- Product image
+- Item details (GTIN, supplier, etc.)
+- ACL performance metrics
+- Directive action recommendation
 
 ## Architecture
 
-### Key Data Relationships
+### Core Files
 
-**IMPORTANT:** The `read_rates.csv` file uses `MDS_FAM_ID` column to store **ITEM NUMBERS**.
+- **main.py** - FastAPI application, search endpoints, UI routes
+- **db.py** - SQLite database management for ACL metrics
+- **gcs_sync.py** - Google Cloud BigQuery integration (optional)
+- **error_logger.py** - Centralized error logging
 
-When searching for an item:
-1. User enters: **Item ID** (e.g., 659608850)
-2. App searches: **MDM API** by Item ID → returns product details
-3. App looks up ACL data: **read_rates.csv** using `MDS_FAM_ID` column (which equals the Item ID)
-4. Display: Product info + ACL Performance chart (if data exists in CSV)
-
-### Files
-
-- **main.py** - FastAPI application
-- **read_rates.csv** - ACL performance data (6.4 MB)
-  - Columns: `MDS_FAM_ID` (=Item ID), `TS_DATE`, `ACL_EVENT_CNT`, `ACL_NULL_CNT`, etc.
-  - Keyed by Item Number in `MDS_FAM_ID` column
-- **.env** - Configuration (API keys, facility info)
-- **mdm_item_api_response_example.json** - Sample API response
-
-## Configuration (.env)
-
-```env
-MDM_API_KEY=<your-api-key>
-MDM_FACILITY_NUM=6068
-MDM_FACILITY_COUNTRY_CODE=US
-MDM_WMT_USERID=mdm-ui
-INFORMIX_HOST=<db-host>
-INFORMIX_USER=<db-user>
-INFORMIX_PASSWORD=<db-pass>
-```
-
-## API Endpoints
+### Key Endpoints
 
 - `GET /` - Main search page
-- `GET /api/inventory/search?item_id=<id>` - Search and display results
-- `GET /print-card?item_id=<id>` - HTML print card
-- `GET /print-card-pdf?item_id=<id>` - PDF download
+- `GET /api/inventory/search` - Item search via MDM API
+- `GET /print-card` - HTML print card view
+- `GET /print-card-pdf` - PDF download endpoint
+- `GET /admin` - Admin dashboard
 
-## ACL Data Lookup
+## Database
 
-The app automatically correlates:
-- **Item ID** → MDM API call
-- **Item ID** → read_rates.csv lookup (via `MDS_FAM_ID` column = Item ID)
+### read_rates.db
 
-If an item doesn't show ACL data on the main page, it means that Item ID doesn't have a record in `read_rates.csv`.
+SQLite database containing ACL performance metrics:
+- **mds_fam_id**: Item number (key for lookups)
+- **acl_event_cnt**: Total ACL events
+- **acl_null_cnt**: Null/failed reads
+- **acl_insert_date**: Date of metric
 
-## GTINs
+Note: Column named `mds_fam_id` contains the item number, not merchandiseFamilyID.
 
-Each item may have:
-- **Catalog GTIN** - Special catalog identifier (if present in API response)
-- **Consumable GTIN** - Standard product barcode
+## API Integration
 
-The app displays **Catalog GTIN** if available, otherwise shows **Consumable GTIN**.
+### MDM API
+
+- **Endpoint**: `https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/`
+- **Headers**: Api-Key, Facilitynum, Facilitycountrycode, Wmt-Userid
+- **Response**: Product details including image URL, GTIN, supplier info
+
+## Development
+
+See `REQUIREMENTS_LOG.txt` for comprehensive requirements, known issues, and development notes.
+
+## Support
+
+For issues or questions, refer to the inline code documentation or REQUIREMENTS_LOG.txt.
+
+## License
+
+Internal Walmart tool - All rights reserved
