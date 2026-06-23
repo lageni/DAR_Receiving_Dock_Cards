@@ -583,6 +583,7 @@ def generate_print_card(data: dict, item_id: str) -> str:
     item_name = item_data["item_name"]
     image_url = item_data["image_url"]
     gtin = item_data["gtin"]
+    catalog_gtin = item_data.get("catalog_gtin", "")
     product_id = item_data["product_id"]
     supplier_dept = item_data["supplier_dept"]
     inventory_status = item_data["inventory_status"]
@@ -748,7 +749,7 @@ def generate_print_card(data: dict, item_id: str) -> str:
                     <div class="info-value">{item_id}</div>
                 </div>
                 {f'<div class="info-row"><div class="info-label">GTIN:</div><div class="info-value">{gtin}</div></div>' if gtin else ''}
-                {f'<div class="info-row"><div class="info-label">Catalog GTIN:</div><div class="info-value">{catalog_gtin}</div></div>' if 'catalog_gtin' in item_data and item_data.get('catalog_gtin') else ''}
+                {f'<div class="info-row"><div class="info-label">Catalog GTIN:</div><div class="info-value">{catalog_gtin}</div></div>' if catalog_gtin else ''}
                 {f'<div class="info-row"><div class="info-label">Product ID:</div><div class="info-value">{product_id}</div></div>' if product_id else ''}
                 {f'<div class="info-row"><div class="info-label">Supplier Dept:</div><div class="info-value">{supplier_dept}</div></div>' if supplier_dept else ''}
             </div>
@@ -756,9 +757,9 @@ def generate_print_card(data: dict, item_id: str) -> str:
                 <div class="info-label">Inventory Status</div>
                 <div class="status-badge {'status-in-stock' if 'In Stock' in inventory_status else 'status-unknown'}">{inventory_status}</div>
             </div>
-            <div class="info-section" style="border: 2px solid {rec_color}; padding: 12px; border-radius: 4px; background: rgba(0,0,0,0.02);">
-                <div style="color: {rec_color}; font-weight: 700; font-size: 14px; text-align: center;">{recommendation}</div>
-                <div style="color: #666; font-size: 9px; text-align: center; margin-top: 4px;">ACL Directive Action</div>
+            <div class="info-section" style="border: 3px solid {rec_color}; padding: 16px; border-radius: 6px; background: rgba(0,0,0,0.03); margin: 12px 0;">
+                <div style="color: #333; font-weight: 700; font-size: 11px; text-align: center; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">ACL Directive Action</div>
+                <div style="color: {rec_color}; font-weight: 900; font-size: 16px; text-align: center; line-height: 1.4;">{recommendation}</div>
             </div>
             <div class="footer">
                 <p>CodePuppy DAR - Inventory Viewer</p>
