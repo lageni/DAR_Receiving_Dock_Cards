@@ -1,0 +1,85 @@
+================================================================================
+                        CodePuppyDAR - QUICK REFERENCE
+================================================================================
+
+HOW TO USE
+----------
+1. Open browser: http://SERVERNAME:8000  (or http://192.168.x.x:8000)
+2. Enter Item ID (e.g., 659608850)
+3. Click Search
+4. View product details + ACL Performance chart
+5. Click "Download PDF" for print card
+
+FEATURES
+--------
+ Search MDM items by Item ID
+ View product images
+ Display Catalog GTIN (when available)
+ Show ACL Performance % trends
+ Download PDF print cards
+ Works on any device (PC, tablet, phone)
+
+SUPPORTED BROWSERS
+------------------
+ Google Chrome (recommended)
+ Microsoft Edge
+ Firefox
+ Safari
+
+TROUBLESHOOTING
+---------------
+Can't connect?
+  • Verify server is running
+  • Try: http://localhost:8000 (from server only)
+  • Contact IT if blocked by firewall
+
+No ACL data shown?
+  • Normal if item is not in database
+  • Product details will still display
+
+PDF won't download?
+  • Check pop-up blocker
+  • Try different browser
+
+API Error (401/400)?
+  • Server credentials may be invalid
+  • Contact IT/Administrator
+
+KEYBOARD SHORTCUTS
+------------------
+Ctrl+P  = Print current page
+Ctrl+S  = Save page
+Ctrl+F  = Search/Find on page
+
+TIPS
+----
+• Bookmark the URL for quick access
+• Catalog GTIN shows if item has one
+• ACL Performance % = (Nulls / Events) × 100
+• Higher % = Better data quality
+
+SERVER STATUS
+-------------
+Server Name:    SERVERNAME
+Server Address: http://192.168.x.x:8000
+Port:           8000
+Updated:        June 2026
+
+FOR ADMINISTRATORS
+------------------
+To start/stop server:
+  • Windows: Run START_SERVER.bat
+  • Command Line: python main.py
+  • Stop: Press Ctrl+C
+
+To check server logs:
+  • Look at command window output
+  • Common errors: API key, CSV file missing
+
+CONTACT
+-------
+Technical Issues:  [Your IT Contact]
+API Credentials:   [Your API Manager]
+Application Help:  See NETWORK_SETUP_GUIDE.md
+
+================================================================================

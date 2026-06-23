@@ -1,75 +1,75 @@
-# CodePuppy DAR - Inventory Search Tool
+# CodePuppyDAR - MDM Item Inventory Search
 
-A lightweight FastAPI web app for searching items in the Walmart inventory-viewer API with full JSON response display.
+A FastAPI application for searching Walmart MDM inventory items with ACL performance tracking.
 
 ## Quick Start
 
-1. **Install dependencies:**
-   ```bash
-   cd CodePuppyDAR
-   uv venv
-   uv sync --index-url https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple --allow-insecure-host pypi.ci.artifacts.walmart.com
-   ```
+```bash
+python main.py
+```
 
-2. **Configure credentials in `.env`:**
-   ```
-   INVENTORY_JWT_TOKEN=your_jwt_token_here
-   INVENTORY_USER_ID=Dylan Hoang - d0h0pf7
-   INVENTORY_API_URL=https://inventory-viewer.prod.walmart.net
-   INVENTORY_DEFAULT_NODE=6068
-   INVENTORY_COUNTRY_CODE=US
-   ```
-   See `.env.example` for details.
-
-3. **Run the server:**
-   ```bash
-   uv run uvicorn main:app --reload
-   ```
-
-4. **Open in browser:**
-   - http://localhost:8000
-
-## How to Use
-
-1. Enter an **Item ID** or **UPC code**
-2. Select the **ID Type** (Item Number or UPC)
-3. Specify the **Node/Store** (default: 6068)
-4. Click **Search Item**
-5. View the full JSON response
-
-## Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `INVENTORY_JWT_TOKEN` | JWT auth token from inventory-viewer | `eyJ...` |
-| `INVENTORY_USER_ID` | Your user ID | `Dylan Hoang - d0h0pf7` |
-| `INVENTORY_API_URL` | API base URL | `https://inventory-viewer.prod.walmart.net` |
-| `INVENTORY_DEFAULT_NODE` | Default store node | `6068` |
-| `INVENTORY_COUNTRY_CODE` | Country code | `US` |
-
-## Getting Your JWT Token
-
-1. Open the inventory-viewer dashboard
-2. Press **F12** to open DevTools
-3. Go to **Network** tab
-4. Refresh the page
-5. Look for any request and check **Request Headers**
-6. Copy the **Authorization** header value
-7. Paste it into `.env` as `INVENTORY_JWT_TOKEN`
-
-## Architecture
-
-- **Backend:** FastAPI
-- **Frontend:** HTMX + Tailwind CSS
-- **API:** Inventory-Viewer (Walmart internal)
+Open browser: **http://localhost:8000**
 
 ## Features
 
-- Fast, lightweight search interface
-- Full JSON response display (pretty-printed)
-- GET-based queries (stateless, cacheable)
-- Static credentials in `.env` (no UI auth required)
+- Search items by **Item ID**
+- Display product details (name, image, GTIN, Catalog GTIN)
+- View **ACL Performance %** trends with charts
+- Download PDF print cards
+- Real-time API integration with Walmart MDM
 
----
+## Architecture
 
-*Created by Rocko the Code Puppy*
+### Key Data Relationships
+
+**IMPORTANT:** The `read_rates.csv` file uses `MDS_FAM_ID` column to store **ITEM NUMBERS**.
+
+When searching for an item:
+1. User enters: **Item ID** (e.g., 659608850)
+2. App searches: **MDM API** by Item ID → returns product details
+3. App looks up ACL data: **read_rates.csv** using `MDS_FAM_ID` column (which equals the Item ID)
+4. Display: Product info + ACL Performance chart (if data exists in CSV)
+
+### Files
+
+- **main.py** - FastAPI application
+- **read_rates.csv** - ACL performance data (6.4 MB)
+  - Columns: `MDS_FAM_ID` (=Item ID), `TS_DATE`, `ACL_EVENT_CNT`, `ACL_NULL_CNT`, etc.
+  - Keyed by Item Number in `MDS_FAM_ID` column
+- **.env** - Configuration (API keys, facility info)
+- **mdm_item_api_response_example.json** - Sample API response
+
+## Configuration (.env)
+
+```env
+MDM_API_KEY=<your-api-key>
+MDM_FACILITY_NUM=6068
+MDM_FACILITY_COUNTRY_CODE=US
+MDM_WMT_USERID=mdm-ui
+INFORMIX_HOST=<db-host>
+INFORMIX_USER=<db-user>
+INFORMIX_PASSWORD=<db-pass>
+```
+
+## API Endpoints
+
+- `GET /` - Main search page
+- `GET /api/inventory/search?item_id=<id>` - Search and display results
+- `GET /print-card?item_id=<id>` - HTML print card
+- `GET /print-card-pdf?item_id=<id>` - PDF download
+
+## ACL Data Lookup
+
+The app automatically correlates:
+- **Item ID** → MDM API call
+- **Item ID** → read_rates.csv lookup (via `MDS_FAM_ID` column = Item ID)
+
+If an item doesn't show ACL data on the main page, it means that Item ID doesn't have a record in `read_rates.csv`.
+
+## GTINs
+
+Each item may have:
+- **Catalog GTIN** - Special catalog identifier (if present in API response)
+- **Consumable GTIN** - Standard product barcode
+
+The app displays **Catalog GTIN** if available, otherwise shows **Consumable GTIN**.

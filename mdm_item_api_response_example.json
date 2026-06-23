@@ -1,0 +1,545 @@
+{
+    "partitionKey": "us-wm-659608850",
+    "number": 659608850,
+    "baseDivisionCode": "wm",
+    "financialReportingGroupCode": "us",
+    "merchandiseFamilyID": 364890068,
+    "description": [
+        {
+            "textValue": "TE LEMON & GINGER        ",
+            "languageCode": "101"
+        }
+    ],
+    "isReplenishable": true,
+    "createDate": "2023-03-14T00:00:00.000+00:00",
+    "effectiveDate": "2023-03-27T00:00:00.000+00:00",
+    "expirationDate": "2049-12-31T00:00:00.000+00:00",
+    "isImport": false,
+    "status": {
+        "code": "A",
+        "description": "ACTIVE                                  "
+    },
+    "itemType": {
+        "code": "20",
+        "description": "Warehouse                               "
+    },
+    "supplierAgreement": {
+        "supplierNumber": 560180,
+        "department": {
+            "number": 92
+        },
+        "sequenceNumber": 0
+    },
+    "warehouseAlignment": {
+        "code": "AS",
+        "description": "ASSEMBLY                                "
+    },
+    "originCountry": [
+        {
+            "code": "US"
+        }
+    ],
+    "isCannedOrder": false,
+    "sendStoreDate": "2023-03-15T00:00:00.000+00:00",
+    "allowedTimeInWarehouse": {
+        "amount": 540
+    },
+    "reserveMerchandiseType": {
+        "code": "0",
+        "description": "NONE                                                                            "
+    },
+    "warehouseRotationType": {
+        "code": "2",
+        "description": "Strict - By Received Date               "
+    },
+    "isCancelWhenOut": false,
+    "replenishSubType": {
+        "code": "0",
+        "description": "WR - WAREHOUSE REGULAR ITEM             "
+    },
+    "isReplenishedByUnit": false,
+    "replenishmentGroup": {
+        "number": 215002977
+    },
+    "isOfferedForSale": true,
+    "orderableQuantity": {
+        "amount": 6
+    },
+    "orderableGTIN": "10083703301961",
+    "orderablePackCost": {
+        "value": 11.16
+    },
+    "warehousePackQuantity": {
+        "amount": 6
+    },
+    "warehousePackGTIN": "10083703301961",
+    "consumableGTIN": "00083703301964",
+    "shelfLabelDescription": [
+        {
+            "textValue": [
+                {
+                    "textValue": "TE LEMON & GINGER        "
+                }
+            ]
+        },
+        {
+            "textValue": [
+                {
+                    "textValue": "TB183               "
+                }
+            ]
+        },
+        {
+            "textValue": [
+                {
+                    "textValue": "NA        "
+                }
+            ]
+        },
+        {
+            "textValue": [
+                {
+                    "textValue": "2 G       "
+                }
+            ]
+        }
+    ],
+    "deptNumber": 92,
+    "subclassNumber": 0,
+    "finelineNumber": 3352,
+    "merchandiseCategoryNumber": 1467,
+    "merchandiseSubcategoryNumber": 29225,
+    "season": {
+        "name": "Basic",
+        "number": 0,
+        "year": "2023"
+    },
+    "warehousePackCalcMethod": {
+        "code": "A",
+        "description": "AVERAGED                                "
+    },
+    "warehousePackSell": {
+        "value": 11.16
+    },
+    "accountingDeptNumber": 92,
+    "supplierCasePackType": {
+        "code": "C",
+        "description": "CASEPACK                                "
+    },
+    "isFreshProductionRetardable": false,
+    "isCorporateReplenishable": true,
+    "isEcommerceReplenishable": true,
+    "lastUpdateTimestamp": "2025-08-10T09:49:08.615+00:00",
+    "supplyItemAttributes": [
+        {
+            "name": "dept_name",
+            "type": "GROCERY DRY GOODS             "
+        }
+    ],
+    "warehouseArea": {
+        "code": "6"
+    },
+    "isShelfLabelRequired": true,
+    "unitCost": 1.86,
+    "informationProviderId": {
+        "value": "560180",
+        "type": "SUPPLIER_NUMBER"
+    },
+    "legacyProductNumber": 267031911,
+    "baseRetail": {
+        "amount": {
+            "value": 2.97
+        },
+        "uom": "EA",
+        "isVatInclusive": false
+    },
+    "customerRetail": {
+        "amount": {
+            "value": 2.97
+        }
+    },
+    "isBackroomScale": false,
+    "isVariableWeight": false,
+    "isVariablePriceComparision": false,
+    "hasRFID": false,
+    "hasSecurityTag": false,
+    "sellTotalContentQuantity": {
+        "amount": 2.0,
+        "uom": "EA"
+    },
+    "supplierStockId": "TB183               ",
+    "hasRigidPlasticPackaging": false,
+    "isHazmat": false,
+    "size": "2 G       ",
+    "color": [
+        {
+            "actual": "NA        "
+        }
+    ],
+    "tradeItems": [
+        {
+            "gtin": "10083703301961",
+            "gtinFormat": "2",
+            "consumerGtin": "8370330196",
+            "consumerGtinFormat": "2",
+            "isMasterCarton": false,
+            "palletTi": 40,
+            "palletHi": 10,
+            "informationProviderId": {
+                "value": "560180",
+                "type": "SUPPLIER_NUMBER"
+            },
+            "weightFormatType": {
+                "code": "F"
+            },
+            "tradeItemType": {
+                "code": "CA"
+            },
+            "weight": {
+                "amount": 1.0,
+                "uom": "LB"
+            },
+            "netWeight": {
+                "uom": "LB"
+            },
+            "dimensions": {
+                "height": 7.0,
+                "width": 5.0,
+                "depth": 8.5,
+                "uom": "IN"
+            },
+            "isGuaranteedSales": false,
+            "cube": {
+                "amount": 0.172,
+                "uom": "CF"
+            },
+            "isDisplayAvailable": false,
+            "palletRoundingPercent": 1.0,
+            "palletSizeType": {
+                "code": "L",
+                "description": "LARGE                                   "
+            },
+            "supplierFirstAvailableDate": "2023-03-14T00:00:00.000+00:00",
+            "isCatchWeight": false,
+            "isDEAReported": false,
+            "storeMinimumLifeRemainingToReceive": {
+                "amount": 730.0
+            },
+            "compositeWoodCertification": {
+                "code": "1"
+            },
+            "createTimestamp": "2025-08-10T09:49:08.615+00:00",
+            "lastUpdateTimestamp": "2025-08-10T09:49:08.615+00:00",
+            "consumerItemNumber": 267031910,
+            "isConveyable": true,
+            "crushFactor": {
+                "code": "1"
+            },
+            "isOrderable": true,
+            "isConsumable": true,
+            "batteryType": {
+                "code": "1"
+            },
+            "licenses": []
+        }
+    ],
+    "storeMinimumLifeRemainingToReceive": {
+        "amount": 730
+    },
+    "palletTi": 40,
+    "palletHi": 10,
+    "weight": {
+        "amount": 1.19,
+        "uom": "LB"
+    },
+    "dimensions": {
+        "height": 3.125,
+        "width": 4.5,
+        "depth": 2.6,
+        "uom": "IN"
+    },
+    "cube": {
+        "amount": 0.021,
+        "uom": "CF"
+    },
+    "tradeItemType": {
+        "code": "EA"
+    },
+    "isConsumable": true,
+    "isConveyable": true,
+    "itemHierarchy": {
+        "department": {
+            "description": "GROCERY DRY GOODS             "
+        }
+    },
+    "productDefinition": {
+        "id": "USWM00083703301964",
+        "name": "Tadin Merchandise                             ",
+        "brand": [
+            {
+                "id": 400273,
+                "name": "TADIN",
+                "isPrivateLabel": false
+            }
+        ],
+        "isTemperatureSensitive": false,
+        "acceptableTemperatureRange": {
+            "uom": "FA"
+        },
+        "idealTemperatureRange": {
+            "uom": "FA"
+        },
+        "shelfLife": {
+            "amount": 730.0
+        },
+        "isControlledSubstance": false,
+        "isIntangible": false,
+        "isVariety": false,
+        "color": [
+            {
+                "actual": "NA        "
+            }
+        ],
+        "size": "2 G       ",
+        "isHazmat": false,
+        "isCPSCRegulated": false,
+        "isAerosol": false,
+        "containsMercury": false,
+        "isPesticide": false,
+        "containsPaperWood": false,
+        "isChemical": false,
+        "isMultipack": false,
+        "merchandiseSegregation": {
+            "code": "1"
+        },
+        "consumableGTINs": [
+            "00083703301964"
+        ],
+        "dietType": {
+            "code": "6"
+        },
+        "specialConsiderationType": [
+            {}
+        ],
+        "imageDimension": {
+            "IMAGE_SIZE_100": "https://i5.walmartimages.com/asr/c7ee779d-76e1-487b-bf45-61b671e4713e.98a30d23dbbf0f7bc05bd4c25c08ddec.jpeg?odnHeight=100&odnWidth=100&odnBg=ffffff",
+            "IMAGE_SIZE_180": "https://i5.walmartimages.com/asr/c7ee779d-76e1-487b-bf45-61b671e4713e.98a30d23dbbf0f7bc05bd4c25c08ddec.jpeg?odnHeight=180&odnWidth=180&odnBg=ffffff",
+            "IMAGE_SIZE_2000": "https://i5.walmartimages.com/asr/c7ee779d-76e1-487b-bf45-61b671e4713e.98a30d23dbbf0f7bc05bd4c25c08ddec.jpeg?odnHeight=2000&odnWidth=2000&odnBg=ffffff",
+            "IMAGE_SIZE_450": "https://i5.walmartimages.com/asr/c7ee779d-76e1-487b-bf45-61b671e4713e.98a30d23dbbf0f7bc05bd4c25c08ddec.jpeg?odnHeight=450&odnWidth=450&odnBg=ffffff",
+            "IMAGE_SIZE_60": "https://i5.walmartimages.com/asr/c7ee779d-76e1-487b-bf45-61b671e4713e.98a30d23dbbf0f7bc05bd4c25c08ddec.jpeg?odnHeight=60&odnWidth=60&odnBg=ffffff"
+        }
+    },
+    "productOfferings": [
+        {
+            "receiptDescription": "TE LMNGNGER    "
+        }
+    ],
+    "dcProperties": {
+        "supplyItem": {
+            "orderableQuantity": {
+                "amount": 6
+            },
+            "orderableGTIN": "10083703301961",
+            "warehousePackQuantity": {
+                "amount": 6
+            },
+            "warehousePackGTIN": "10083703301961",
+            "isHazmat": false,
+            "tradeItems": [
+                {
+                    "gtin": "10083703301961",
+                    "gtinFormat": "2",
+                    "consumerGtin": "8370330196",
+                    "consumerGtinFormat": "2",
+                    "isMasterCarton": false,
+                    "palletTi": 40,
+                    "palletHi": 10,
+                    "informationProviderId": {
+                        "value": "560180",
+                        "type": "SUPPLIER_NUMBER"
+                    },
+                    "weightFormatType": {
+                        "code": "F"
+                    },
+                    "tradeItemType": {
+                        "code": "CA"
+                    },
+                    "weight": {
+                        "amount": 1.0,
+                        "uom": "LB"
+                    },
+                    "netWeight": {
+                        "uom": "LB"
+                    },
+                    "dimensions": {
+                        "height": 7.0,
+                        "width": 5.0,
+                        "depth": 8.5,
+                        "uom": "IN"
+                    },
+                    "isGuaranteedSales": false,
+                    "cube": {
+                        "amount": 0.172,
+                        "uom": "CF"
+                    },
+                    "isDisplayAvailable": false,
+                    "palletRoundingPercent": 1.0,
+                    "palletSizeType": {
+                        "code": "L",
+                        "description": "LARGE                                   "
+                    },
+                    "supplierFirstAvailableDate": "2023-03-14T00:00:00.000+00:00",
+                    "isCatchWeight": false,
+                    "isDEAReported": false,
+                    "storeMinimumLifeRemainingToReceive": {
+                        "amount": 730.0
+                    },
+                    "compositeWoodCertification": {
+                        "code": "1"
+                    },
+                    "createTimestamp": "2025-08-10T09:49:08.615+00:00",
+                    "lastUpdateTimestamp": "2025-08-10T09:49:08.615+00:00",
+                    "consumerItemNumber": 267031910,
+                    "isConveyable": true,
+                    "crushFactor": {
+                        "code": "1"
+                    },
+                    "isOrderable": true,
+                    "isConsumable": true,
+                    "batteryType": {
+                        "code": "1"
+                    },
+                    "licenses": []
+                }
+            ],
+            "weight": {
+                "amount": 1.19,
+                "uom": "LB"
+            },
+            "dimensions": {
+                "height": 3.125,
+                "width": 4.5,
+                "depth": 2.6,
+                "uom": "IN"
+            },
+            "cube": {
+                "amount": 0.021,
+                "uom": "CF"
+            },
+            "isConveyable": true,
+            "warehouse": {
+                "warehouseAlignment": {
+                    "code": "AS",
+                    "description": "ASSEMBLY                                "
+                }
+            }
+        }
+    },
+    "auditDetails": {
+        "createdBy": "fdYri7+wG3xujJR+/iGniw==",
+        "createdTs": "2023-06-06T11:18:03.555Z",
+        "lastUpdatedTs": "2025-08-10T15:50:53.065Z",
+        "lastUpdatedBy": "ENTERPRISE_UPDATE_EVENT"
+    },
+    "supplier": {
+        "supplierID": "1400126650",
+        "supplierName": [
+            {
+                "textValue": "TADIN HERB & TEA COMPANY",
+                "languageCode": "EN"
+            }
+        ],
+        "legalName": [
+            {
+                "textValue": "TADIN LLC",
+                "languageCode": "EN"
+            }
+        ],
+        "legacySupplierID": 560180,
+        "sourceSystem": {
+            "id": "100061",
+            "name": "MDM"
+        },
+        "partnerGuid": "aa761796-45ea-492b-a2c4-7a729b96c1d5",
+        "additionalNames": [
+            {
+                "type": "REMIT",
+                "name": [
+                    {
+                        "textValue": "TADIN LLC",
+                        "languageCode": "EN"
+                    }
+                ]
+            }
+        ],
+        "address": [
+            {
+                "addressLine1": "3345 E SLAUSON AVE",
+                "city": "VERNON",
+                "stateProvince": "CA",
+                "zip": "90058-3914",
+                "country": {
+                    "code": "US",
+                    "name": "USA"
+                },
+                "sourceSystemName": "MDM",
+                "type": {
+                    "code": "0002",
+                    "description": "Physical Address"
+                }
+            },
+            {
+                "addressLine1": "3345 E SLAUSON AVE",
+                "city": "VERNON",
+                "stateProvince": "CA",
+                "zip": "90058-3914",
+                "country": {
+                    "code": "US",
+                    "name": "USA"
+                },
+                "sourceSystemName": "MDM",
+                "type": {
+                    "code": "0001",
+                    "description": "Remit Address"
+                }
+            },
+            {
+                "addressLine1": "3345 E SLAUSON AVE",
+                "city": "VERNON",
+                "stateProvince": "CA",
+                "zip": "90058-3914",
+                "country": {
+                    "code": "US",
+                    "name": "USA"
+                },
+                "sourceSystemName": "MDM",
+                "type": {
+                    "code": "WMT05",
+                    "description": "Legacy Remit Address"
+                }
+            }
+        ],
+        "legacyVendorTypeCode": "P",
+        "legacyVendorTypeDesc": "Purchase",
+        "gssSupplierId": 28065709,
+        "supplierCompany": {
+            "dunAndBradStreet": {
+                "number": "080485929"
+            }
+        },
+        "import": false,
+        "status": {
+            "code": "1",
+            "description": "Active"
+        },
+        "accountGroup": {
+            "code": "Z001",
+            "description": "Merchandise Supplier"
+        },
+        "legalFormType": {
+            "code": "01",
+            "description": "Corporation"
+        }
+    },
+    "marketType": "RDC"
+}
