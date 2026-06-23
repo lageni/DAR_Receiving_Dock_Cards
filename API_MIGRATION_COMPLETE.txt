@@ -1,0 +1,110 @@
+API MIGRATION COMPLETE - ALL CHANGES APPLIED
+==============================================
+
+WHAT I FIXED:
+=============
+
+1. REMOVED ALL INVENTORY API REFERENCES
+   - Deleted: INVENTORY_JWT_TOKEN from code
+   - Deleted: INVENTORY_USER_ID from code
+   - Deleted: INVENTORY_API_URL from code
+   - Deleted: INVENTORY_DEFAULT_NODE from code
+   - Deleted: INVENTORY_COUNTRY_CODE from code
+   
+   Locations cleared:
+   - search_inventory() endpoint
+   - print_card() endpoint
+   - print_card_pdf() endpoint
+
+2. UPDATED ALL ENDPOINTS TO USE MDM API
+   
+   search_inventory (line 273):
+   - NOW: MDM API Key authentication
+   - Endpoint: https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/
+   
+   print_card (line 317):
+   - NOW: MDM API Key authentication
+   - Endpoint: https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/
+   
+   print_card_pdf (line 353):
+   - NOW: MDM API Key authentication
+   - Endpoint: https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/
+
+3. FIXED DATA EXTRACTION (extract_item_data)
+   - Item Name: data["description"][0]["textValue"]
+   - Image: data["productDefinition"]["imageDimension"]["IMAGE_SIZE_450"]
+   - Product ID: data["merchandiseFamilyID"] (for chart lookup)
+   - GTIN: data["consumableGTIN"]
+   - CatalogGTIN: data.get("catalogGTIN", "") [NEW]
+   - Supplier: data["supplierAgreement"]["department"]["number"]
+
+4. ADDED CATALOGGTIN SUPPORT
+   - Added to extract_item_data() extraction
+   - Added to format_results() display (UI)
+   - Added to generate_pdf() display (PDF)
+   - Shows only if present in response
+
+5. FIXED CHART LOOKUP
+   - Uses merchandiseFamilyID (not item_id)
+   - Matches MDS_FAM_ID key in read_rates.csv
+   - Should now display ACL Performance chart
+
+WHAT YOU'LL SEE NOW:
+====================
+
+Search Results Page:
+  - Product image (450x450px quality)
+  - Item name
+  - Item ID
+  - Product ID
+  - GTIN
+  - Catalog GTIN (if exists)
+  - Supplier dept
+  - ACL Performance chart + metrics
+  - Download PDF button
+
+Print Card HTML:
+  - Same as above
+  - Full layout ready for printing
+
+PDF Download:
+  - Product image included
+  - All details including CatalogGTIN
+  - Professional formatting
+
+TEST ITEM:
+==========
+Use: 659608850
+Expected: Tadin Lemon Ginger Tea
+- Should see product image
+- Should see "TE LEMON & GINGER" name
+- Should display GTINs
+- Should show chart
+
+REQUIREMENTS TRACKING:
+======================
+Created: REQUIREMENTS_LOG.txt
+- Central place for all feature requests
+- Tracks what's implemented vs pending
+- Updated with each change
+
+NEXT STEPS:
+===========
+1. Restart: RUN.bat
+2. Search: 659608850
+3. Verify:
+   - Image displays
+   - All details show
+   - Chart appears with trend
+   - CatalogGTIN shows (if present)
+   - PDF downloads with image
+
+CRITICAL NOTES:
+===============
+- NO MORE INVENTORY API CALLS
+- ALL endpoints use MDM API only
+- Chart requires merchandiseFamilyID match
+- CatalogGTIN is optional (shows only if in response)
+- Image is always IMAGE_SIZE_450 dimension
+
+Everything is committed and ready to test!
