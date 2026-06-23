@@ -527,6 +527,10 @@ def extract_item_data(data: dict) -> dict:
         "inventory_status": "Unknown"
     }
     
+    # Debug: Show what's in the response
+    if isinstance(data, dict):
+        print(f"[EXTRACT] MDM response keys: {list(data.keys())}")
+    
     # MDM API response structure
     if isinstance(data, dict):
         # Item description/name
@@ -553,9 +557,17 @@ def extract_item_data(data: dict) -> dict:
         elif "orderableGTIN" in data:
             item_data["gtin"] = data["orderableGTIN"]
         
-        # CatalogGTIN - if it exists (NEW!)
+        # CatalogGTIN - check root level first, then attributes
         if "catalogGTIN" in data:
             item_data["catalog_gtin"] = data["catalogGTIN"]
+        elif "attributes" in data and isinstance(data["attributes"], dict):
+            # Look in attributes for catalogGTIN
+            attrs = data["attributes"]
+            if "catalogGTIN" in attrs:
+                item_data["catalog_gtin"] = attrs["catalogGTIN"]
+            # If not found in attributes, log what keys ARE there for debugging
+            if not item_data["catalog_gtin"]:
+                print(f"[EXTRACT] catalogGTIN not found in attributes. Keys available: {list(attrs.keys())}")
         
         # Product ID - use merchandiseFamilyID
         if "merchandiseFamilyID" in data:
@@ -870,7 +882,7 @@ def generate_pdf(item_data: dict) -> bytes:
         details_text += f" | Supplier: {supplier_dept}"
     
     pdf.multi_cell(6.5, 0.2, details_text, align='C')
-    current_y = pdf.get_y() + 0.2
+    current_y = current_y + 0.8
     
     # Add Directive Action card (in right column, below product details)
     rates = load_read_rates()
@@ -889,23 +901,43 @@ def generate_pdf(item_data: dict) -> bytes:
         elif rec_color_hex == "#dc2626":
             rec_color_rgb = (220, 38, 38)  # red
     
-    # Draw directive action box
+    # Draw directive action box with light background matching the recommendation color
     pdf.set_xy(content_x, current_y)
-    pdf.set_draw_color(rec_color_rgb[0], rec_color_rgb[1], rec_color_rgb[2])
-    pdf.set_line_width(0.03)
-    pdf.rect(content_x, current_y, 6.5, 0.5, style='D')
+    
+    # Create light background fill (very light version of the color)
+    if rec_color_rgb == (34, 197, 94):  # green
+        pdf.set_fill_color(220, 252, 231)  # light green background
+        border_color = (34, 197, 94)
+        text_color = (22, 163, 74)  # darker green
+    elif rec_color_rgb == (245, 158, 11):  # amber
+        pdf.set_fill_color(254, 243, 199)  # light amber background
+        border_color = (245, 158, 11)
+        text_color = (180, 83, 9)  # darker amber
+    elif rec_color_rgb == (220, 38, 38):  # red
+        pdf.set_fill_color(254, 226, 226)  # light red background
+        border_color = (220, 38, 38)
+        text_color = (185, 28, 28)  # darker red
+    else:  # gray
+        pdf.set_fill_color(243, 244, 246)  # light gray background
+        border_color = (107, 114, 128)
+        text_color = (75, 85, 99)
+    
+    # Draw box with border and fill
+    pdf.set_draw_color(border_color[0], border_color[1], border_color[2])
+    pdf.set_line_width(0.04)
+    pdf.rect(content_x, current_y, 6.5, 0.65, style='FD')
     
     # Title
     pdf.set_xy(content_x + 0.1, current_y + 0.08)
     pdf.set_font("Helvetica", "B", 8)
-    pdf.set_text_color(60, 60, 60)
+    pdf.set_text_color(80, 80, 80)
     pdf.cell(6.3, 0.12, "ACL DIRECTIVE ACTION", align='C')
     
-    # Recommendation text
-    pdf.set_xy(content_x + 0.1, current_y + 0.22)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(rec_color_rgb[0], rec_color_rgb[1], rec_color_rgb[2])
-    pdf.cell(6.3, 0.22, recommendation, align='C')
+    # Recommendation text - large and bold
+    pdf.set_xy(content_x + 0.1, current_y + 0.25)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(text_color[0], text_color[1], text_color[2])
+    pdf.cell(6.3, 0.28, recommendation, align='C')
     
     current_y = pdf.get_y() + 0.2
     
