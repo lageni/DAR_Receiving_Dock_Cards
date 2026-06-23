@@ -1,0 +1,86 @@
+ACL RECOMMENDATION SYSTEM - IMPLEMENTED
+========================================
+
+WHAT WAS ADDED:
+===============
+
+1. get_recommendation() Function
+   - Takes: avg_perf (float), trend_status (string)
+   - Returns: (text, color_hex, tailwind_bg_class)
+   - Evaluates performance and trend to determine action
+
+2. Recommendation Rules (Subject to Change):
+
+   >= 85% Performance:
+   - Recommendation: "ACL APPROVED"
+   - Color: GREEN (#16a34a)
+   - Meaning: Item is approved, no action needed
+
+   < 85% and Improving:
+   - Recommendation: "ADEQUATE PERFORMANCE"
+   - Color: YELLOW (#eab308)
+   - Meaning: Item needs monitoring, trend is positive
+
+   < 85% and Declining:
+   - Recommendation: "REQUIRES MANUAL INSPECTION"
+   - Color: YELLOW (#eab308)
+   - Meaning: Item quality declining, needs investigation
+
+   < 50% Performance:
+   - Recommendation: "WORKSTATION RECOMMENDED"
+   - Color: RED (#dc2626)
+   - Meaning: Critical - item needs workstation processing or alternative method
+
+3. Visual Display:
+
+   Search Results Page:
+   - Large bold recommendation card at top (before metrics)
+   - Color-coded background and text
+   - "Directive Action (Subject to Change)" subtitle
+   - Immediately visible to user
+
+   Print Card HTML:
+   - Recommendation displayed prominently
+   - Same color coding for consistency
+
+   PDF Download:
+   - (Will add in next phase if needed)
+
+4. Documentation:
+   - Added to REQUIREMENTS_LOG.txt as priority item
+   - Clearly marked as "guidelines subject to change"
+   - Notes these are "Directive Actions" for operational guidance
+
+EXAMPLE:
+========
+
+Item: 659608850 (Tadin Lemon Ginger Tea)
+- Performance: 80.5%
+- Trend: Declining
+
+Recommendation: "REQUIRES MANUAL INSPECTION" (YELLOW)
+- Because: < 85% AND Declining trend
+- Action: Manual review recommended
+
+NEXT UPDATE:
+============
+
+When testing, the recommendation card should appear:
+1. Immediately after "ACL Performance %" title
+2. Full width, large bold text (5xl)
+3. Color-coded background matching recommendation type
+4. Below performance card, above metrics cards
+
+TEST WITH: 659608850
+- Should show: "REQUIRES MANUAL INSPECTION" (yellow)
+
+These rules are designed to be flexible and may be updated based on:
+- Operational feedback
+- Performance analysis
+- Business requirements
+- Quality standards refinement
+
+STATUS: READY FOR TESTING
+=========================
+
+All code committed. Restart RUN.bat to see recommendations in action!
