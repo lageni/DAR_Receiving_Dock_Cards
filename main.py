@@ -128,12 +128,15 @@ def get_color_for_performance(pct: float) -> str:
 
 
 def get_read_rate_chart(mds_fam_id: str) -> str:
-    """Generate Chart.js HTML for read rate trend."""
+    """Generate Chart.js HTML for read rate trend from read_rates.db"""
     rates = load_read_rates()
     data = rates.get(str(mds_fam_id), [])
     
+    # Debug: if no data, show message
     if not data or len(data) == 0:
-        return ""
+        return f'''<div class="mt-4 bg-yellow-50 p-4 rounded border-2 border-yellow-300">
+            <p class="text-yellow-700 text-sm">No ACL Performance data available for MDS_FAM_ID: {mds_fam_id}</p>
+        </div>'''
     
     # Format data for Chart.js - use abbreviated month+year for labels
     labels = [format_date_for_chart(d["date"]) for d in data]
@@ -244,7 +247,7 @@ async def root():
         <!-- Search Bar at Top -->
         <div class="bg-white p-3 rounded border shadow-sm mb-4">
             <form id="searchForm" hx-get="/api/inventory/search" hx-target="#results" class="flex gap-2">
-                <input type="text" id="itemIdInput" name="item_id" placeholder="Enter Item ID (e.g., 665540630)" required class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <input type="text" id="itemIdInput" name="item_id" placeholder="Enter Item ID (e.g., 659608850)" required class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                 <input type="hidden" name="id_type" value="ITEM_NUMBER">
                 <input type="hidden" name="node" value="6068">
                 <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded font-semibold text-sm hover:bg-blue-700">Search</button>
@@ -262,8 +265,8 @@ async def root():
     </main>
     <script>
         function loadExample() {
-            document.getElementById('itemIdInput').value = '665540630';
-            htmx.ajax('GET', '/api/inventory/search?item_id=665540630&id_type=ITEM_NUMBER&node=6068', '#results');
+            document.getElementById('itemIdInput').value = '659608850';
+            htmx.ajax('GET', '/api/inventory/search?item_id=659608850&id_type=ITEM_NUMBER&node=6068', '#results');
         }
     </script>
 </body>
@@ -342,6 +345,32 @@ async def print_card(item_id: str, product_id: str = "", gtin: str = "", supplie
     except Exception as e:
         return f'<div class="text-red-600">Error: {str(e)}</div>'
 
+
+@app.get("/print-card-pdf")
+async def print_card_pdf(item_id: str, product_id: str = "", gtin: str = "", catalog_gtin: str = "", supplier_dept: str = ""):
+    """Generate PDF of the print card for download (MDM API)."""
+    try:
+        api_key = os.getenv("MDM_API_KEY")
+        facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+        facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+        wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+
+        if not api_key:
+            return '<div class="text-red-600">Error: Missing MDM_API_KEY in .env</div>'
+
+        api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
+        headers = {
+            "Api-Key": api_key,
+            "Facilitynum": facility_num,
+            "Facilitycountrycode": facility_country,
+            "Wmt-Userid": wmt_userid
+        }
+
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+            response = await client.get(api_url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
         item_data = extract_item_data(data)
         item_data["item_id"] = item_id  # Add the searched item_id
         pdf_bytes = generate_pdf(item_data)
@@ -390,6 +419,7 @@ def format_results(data: dict, item_id: str) -> str:
         "item_id": item_id,
         "product_id": product_id,
         "gtin": gtin,
+        "catalog_gtin": catalog_gtin,
         "supplier_dept": supplier_dept
     })
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'

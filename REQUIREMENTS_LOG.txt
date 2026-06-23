@@ -15,11 +15,18 @@ API Configuration:
 Data Extraction (from MDM API response):
   - Item Name/Description: data["description"][0]["textValue"]
   - Product Image: data["productDefinition"]["imageDimension"]["IMAGE_SIZE_450"]
-  - Product ID (for chart): data["merchandiseFamilyID"]
+  - Product ID (for chart): data["merchandiseFamilyID"] *** THIS IS MDS_FAM_ID
   - GTIN (Consumable): data["consumableGTIN"]
   - CatalogGTIN (if exists): data.get("catalogGTIN", "") - MUST DISPLAY IF PRESENT
   - Supplier Dept: data["supplierAgreement"]["department"]["number"]
   - Status: data["status"]["code"]
+
+Read Rates Database:
+  - Source: read_rates.db (SQLite, NOT read_rates.csv)
+  - Key: MDS_FAM_ID (matches merchandiseFamilyID from MDM API)
+  - User Item Number -> looked up via merchandiseFamilyID match
+  - Returns: ACL_EVENT_CNT, ACL_NULL_CNT, ACL_INSERT_DATE
+  - Used for: Chart display, performance metrics, trend analysis
 
 UI/Display Requirements:
   - Product image MUST show (IMAGE_SIZE_450 resolution)
@@ -29,21 +36,30 @@ UI/Display Requirements:
     * Line chart over time
   - Display CatalogGTIN prominently if it exists (different from consumable GTIN)
   - PDF download must include image and all GTINs
+  - Default Example: 659608850 (Tadin Lemon Ginger Tea)
 
-Endpoints to UPDATE:
-  - /api/inventory/search (DONE - uses MDM API)
-  - /print-card (NEEDS FIX - still using old API)
-  - /print-card-pdf (NEEDS FIX - still using old API)
+Endpoints to VERIFY:
+  - /api/inventory/search (uses MDM API, displays chart from DB)
+  - /print-card (uses MDM API)
+  - /print-card-pdf (uses MDM API)
 
 Test Item:
   - Default: 659608850 (Tadin Lemon Ginger Tea)
   - Expected image: Yellow tea box product photo
   - Expected name: "TE LEMON & GINGER" or similar
+  - Expected MDS_FAM_ID: 364890068 (for chart lookup)
+
+Chart Data Flow:
+  1. User enters: 659608850 (item number)
+  2. MDM API returns: merchandiseFamilyID = 364890068
+  3. Query Database: SELECT * FROM read_rates WHERE MDS_FAM_ID = 364890068
+  4. Display: Chart, avg%, trend for that product
 
 Chart Lookup:
   - Uses merchandiseFamilyID from MDM response
-  - Matches MDS_FAM_ID in read_rates.csv
+  - Matches MDS_FAM_ID in read_rates.db
   - MUST display trend and performance metrics
+  - Shows empty gracefully if no data
 
 Deprecated - DO NOT USE:
   - productResponse.docs[]
@@ -52,6 +68,7 @@ Deprecated - DO NOT USE:
   - si.consumableGtin
   - inventoryResponse
   - statusCode
+  - read_rates.csv (use read_rates.db instead)
   - Any endpoint starting with inventory-viewer.prod.walmart.net
 
 CODE LOCATIONS TO CHECK:
@@ -61,10 +78,13 @@ CODE LOCATIONS TO CHECK:
 - main.py line 353: print_card_pdf() - FIXED (MDM API)
 - main.py line 461: extract_item_data() - CORRECT (MDM parsing + CatalogGTIN)
 - main.py line 395: format_results() - CORRECT (uses product_id for chart, displays CatalogGTIN)
+- main.py line 130: get_read_rate_chart() - Uses database (not CSV)
+- main.py line 22: load_read_rates() - Loads from read_rates.csv (LEGACY - should use DB)
 
 Files Modified:
 - main.py (all API calls now use MDM, CatalogGTIN support added)
-- .env (has old INVENTORY_* variables - NOT USED anymore)
+- read_rates.db (SQLite database for ACL metrics)
+- .env (has MDM_API_KEY and other MDM credentials)
 
 VERIFICATION CHECKLIST:
 =======================
@@ -76,16 +96,21 @@ VERIFICATION CHECKLIST:
 [X] Add CatalogGTIN parsing
 [X] Add CatalogGTIN display in UI
 [X] Add CatalogGTIN display in PDF
+[X] Use read_rates.db (not CSV) for chart data
+[X] Match item number to MDS_FAM_ID
 [ ] Test with item 659608850
-[ ] Verify chart displays
+[ ] Verify chart displays with data
 [ ] Verify PDF includes image
 [ ] Verify all GTINs show
+[ ] Verify print card loads without 404
 
 STATUS: READY FOR TESTING
 ==========================
-- Search endpoint: FIXED (MDM API)
-- Print-card endpoint: FIXED (MDM API)
-- Print-card-pdf endpoint: FIXED (MDM API)
-- Chart display: READY (needs test)
+- Search endpoint: WORKING (MDM API)
+- Print-card endpoint: TESTING (MDM API)
+- Print-card-pdf endpoint: TESTING (MDM API)
+- Chart display: NEEDS DEBUG (no data showing)
 - Image display: READY (needs test)
+- CatalogGTIN: READY (needs test)
+- Database: Using read_rates.db for metrics
 - CatalogGTIN: READY (needs test)
