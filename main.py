@@ -457,6 +457,7 @@ def format_results(data: dict, item_id: str) -> str:
     image_url = item_data["image_url"]
     gtin = item_data["gtin"]
     catalog_gtin = item_data.get("catalog_gtin", "")
+    print(f"[PRINT-CARD] Item {item_id}: catalog_gtin='{catalog_gtin}'")
     product_id = item_data["product_id"]
     supplier_dept = item_data["supplier_dept"]
 
