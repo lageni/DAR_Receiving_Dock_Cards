@@ -1088,7 +1088,7 @@ async def sync_bigquery():
         print(f"[DEBUG] Missing {len(missing_dates)} dates to sync: {missing_dates}")
         # Use double quotes for BigQuery date strings
         dates_list = ", ".join([f'"{d}"' for d in missing_dates])
-        query = f"""SELECT acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt
+        query = f"""SELECT acl_insert_date, ts_date, mds_fam_id, slot_id, acl_event_cnt, acl_null_cnt, acl_bypass_cnt, good_read_cnt_null, good_read_cnt_bypass, item_num_read_cnt_null, item_num_read_cnt_bypass, item1_desc, pick_type_code, vnpk_gtin_t
             FROM `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
             WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')
             AND acl_insert_date IN ({dates_list})"""
@@ -1130,8 +1130,8 @@ async def sync_bigquery():
                 print(f"        acl_null_cnt: {row.acl_null_cnt}")
             
             try:
-                insert_sql = '''INSERT OR IGNORE INTO read_rates (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt) VALUES (?, ?, ?, ?)'''
-                insert_values = (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0, int(row.acl_event_cnt) if row.acl_event_cnt else 0, int(row.acl_null_cnt) if row.acl_null_cnt else 0)
+                insert_sql = '''INSERT OR IGNORE INTO read_rates (acl_insert_date, ts_date, mds_fam_id, slot_id, acl_event_cnt, acl_null_cnt, acl_bypass_cnt, good_read_cnt_null, good_read_cnt_bypass, item_num_read_cnt_null, item_num_read_cnt_bypass, item1_desc, pick_type_code, vnpk_gtin_t) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+                insert_values = (str(row.acl_insert_date), str(row.ts_date) if row.ts_date else None, str(row.mds_fam_id), str(row.slot_id) if row.slot_id else None, int(row.acl_event_cnt) if row.acl_event_cnt else 0, int(row.acl_null_cnt) if row.acl_null_cnt else 0, int(row.acl_bypass_cnt) if row.acl_bypass_cnt else 0, int(row.good_read_cnt_null) if row.good_read_cnt_null else 0, int(row.good_read_cnt_bypass) if row.good_read_cnt_bypass else 0, int(row.item_num_read_cnt_null) if row.item_num_read_cnt_null else 0, int(row.item_num_read_cnt_bypass) if row.item_num_read_cnt_bypass else 0, str(row.item1_desc) if row.item1_desc else None, str(row.pick_type_code) if row.pick_type_code else None, str(row.vnpk_gtin_t) if row.vnpk_gtin_t else None)
                 cursor.execute(insert_sql, insert_values)
                 
                 if cursor.rowcount > 0:
