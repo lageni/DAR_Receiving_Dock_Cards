@@ -1,0 +1,65 @@
+DATABASE SCHEMA CLARIFICATION
+=============================
+
+THE CONFUSING PART:
+===================
+
+You'll see this "mds_fam_id" in database column, which SOUNDS like it should be the 
+"merchandiseFamilyID" from the MDM API response. BUT IT'S NOT!
+
+WHAT ACTUALLY HAPPENS:
+======================
+
+1. User searches for: 659608850 (Item Number)
+
+2. We call MDM API: /items/wm/659608850/
+   
+3. MDM returns TWO different IDs:
+   - "number": 659608850 (the item number we searched for)
+   - "merchandiseFamilyID": 364890068 (a DIFFERENT product family ID)
+
+4. Database table has:
+   - Column: mds_fam_id
+   - Value: 659608850 (the ITEM NUMBER!)
+   - NOT: 364890068 (the merchandiseFamilyID)
+
+5. So correct chart lookup is:
+   SELECT * FROM read_rates WHERE mds_fam_id = 659608850  (ITEM NUMBER)
+   NOT: WHERE mds_fam_id = 364890068  (merchandiseFamilyID from MDM)
+
+WHY IS THIS CONFUSING?
+======================
+
+- The column is named "mds_fam_id" 
+- You'd think "fam" means "family"
+- You'd think it should be the merchandiseFamilyID (364890068)
+- BUT it's actually the ITEM NUMBER (659608850)
+
+THE CODE FIX:
+=============
+
+BEFORE (WRONG):
+  chart_html = get_read_rate_chart(product_id)  # product_id = merchandiseFamilyID = 364890068
+
+AFTER (CORRECT):
+  chart_html = get_read_rate_chart(item_id)  # item_id = item number = 659608850
+
+CRITICAL RULE:
+===============
+
+Always use item_id for chart/database lookups, NOT merchandiseFamilyID!
+
+get_read_rate_chart() expects: 659608850 (the item number the user searched for)
+It will NOT find: 364890068 (the merchandiseFamilyID from MDM)
+
+EXAMPLE WITH 659608850:
+======================
+
+User Input:           659608850
+MDM response gives:   number=659608850, merchandiseFamilyID=364890068
+Database has:         mds_fam_id=659608850
+Correct lookup:       WHERE mds_fam_id = 659608850 (use item_id)
+Wrong lookup:         WHERE mds_fam_id = 364890068 (DON'T use merchandiseFamilyID)
+
+This naming is confusing, but it's accurate to your data.
+The database was created with the item number as the key, not the merchandise family ID.
