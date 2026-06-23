@@ -233,9 +233,12 @@ async def root():
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body class="bg-gray-50">
-    <header class="bg-white border-b px-4 py-6">
-        <h1 class="text-3xl font-bold text-blue-600">CodePuppy DAR</h1>
-        <p class="text-sm text-gray-600">Inventory Search</p>
+    <header class="bg-white border-b px-4 py-6 flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-blue-600">CodePuppy DAR</h1>
+            <p class="text-sm text-gray-600">Inventory Search</p>
+        </div>
+        <a href="/admin" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Admin</a>
     </header>
     <main class="w-full px-2 py-4">
         <!-- Search Bar at Top -->
