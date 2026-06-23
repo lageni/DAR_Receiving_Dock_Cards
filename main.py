@@ -423,8 +423,8 @@ def format_results(data: dict, item_id: str) -> str:
     })
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
     
-    # Get read rate trend chart
-    chart_html = get_read_rate_chart(item_id)
+    # Get read rate trend chart - use product_id (merchandiseFamilyID) as key
+    chart_html = get_read_rate_chart(product_id)
 
     # LEFT column: Product image and details
     left_html = f"""<div class="space-y-3">
@@ -459,7 +459,7 @@ def format_results(data: dict, item_id: str) -> str:
 
 
 def extract_item_data(data: dict) -> dict:
-    """Extract product and inventory data from API response."""
+    """Extract product data from MDM API response."""
     item_data = {
         "item_name": "Unknown Item",
         "item_id": "",
@@ -470,24 +470,50 @@ def extract_item_data(data: dict) -> dict:
         "inventory_status": "Unknown"
     }
     
-    if isinstance(data, dict) and "productResponse" in data:
-        product_resp = data["productResponse"]
-        if isinstance(product_resp, dict) and "docs" in product_resp:
-            docs = product_resp["docs"]
-            if isinstance(docs, list) and len(docs) > 0:
-                doc = docs[0]
-                if isinstance(doc, dict):
-                    item_data["item_name"] = doc.get("product.product_name", "Unknown Item")
-                    item_data["image_url"] = doc.get("product.primary_image_url", "")
-                    item_data["gtin"] = doc.get("si.consumableGtin", doc.get("product.gtin", ""))
-                    item_data["product_id"] = doc.get("product.product_id", "")
-                    item_data["supplier_dept"] = str(doc.get("si.supplierDeptNbr", ""))
-    
-    if isinstance(data, dict) and "inventoryResponse" in data:
-        inv_resp = data["inventoryResponse"]
-        if isinstance(inv_resp, dict):
-            status_code = inv_resp.get("statusCode")
-            item_data["inventory_status"] = "In Stock" if status_code == 200 else f"Status: {status_code}"
+    # MDM API response structure
+    if isinstance(data, dict):
+        # Item description/name
+        if "description" in data and isinstance(data["description"], list) and len(data["description"]) > 0:
+            desc = data["description"][0]
+            if isinstance(desc, dict):
+                item_data["item_name"] = desc.get("textValue", "Unknown Item").strip()
+        
+        # Item number
+        if "number" in data:
+            item_data["item_id"] = str(data["number"])
+        
+        # Image URL - use IMAGE_SIZE_450
+        if "productDefinition" in data:
+            prod_def = data["productDefinition"]
+            if isinstance(prod_def, dict) and "imageDimension" in prod_def:
+                img_dim = prod_def["imageDimension"]
+                if isinstance(img_dim, dict):
+                    item_data["image_url"] = img_dim.get("IMAGE_SIZE_450", "")
+        
+        # GTIN - try consumable first, then orderable
+        if "consumableGTIN" in data:
+            item_data["gtin"] = data["consumableGTIN"]
+        elif "orderableGTIN" in data:
+            item_data["gtin"] = data["orderableGTIN"]
+        
+        # Product ID - use merchandiseFamilyID
+        if "merchandiseFamilyID" in data:
+            item_data["product_id"] = str(data["merchandiseFamilyID"])
+        
+        # Supplier Department
+        if "supplierAgreement" in data:
+            supp = data["supplierAgreement"]
+            if isinstance(supp, dict) and "department" in supp:
+                dept = supp["department"]
+                if isinstance(dept, dict) and "number" in dept:
+                    item_data["supplier_dept"] = str(dept["number"])
+        
+        # I status from status code
+        if "status" in data:
+            status = data["status"]
+            if isinstance(status, dict):
+                status_code = status.get("code", "")
+                item_data["inventory_status"] = "Active" if status_code == "A" else f"Status: {status_code}"
     
     return item_data
 
