@@ -79,6 +79,15 @@ Read Rates Database - IMPORTANT DATABASE SCHEMA NOTE:
   - CRITICAL: Despite column being named "mds_fam_id", it ACTUALLY CONTAINS THE ITEM NUMBER
   - DO NOT use merchandiseFamilyID from MDM for DB lookup
   - Correct Lookup Key: item_id (the user's search input, e.g., 659608850)
+  
+  CRITICAL CONSTRAINT ALERT:
+  - Table has UNIQUE constraint: UNIQUE(acl_insert_date, ts_date, mds_fam_id, slot_id)
+  - ALL FOUR columns must be provided in INSERT statements
+  - Missing ANY of these columns will cause INSERT OR IGNORE to silently fail with "duplicate" error
+  - When syncing from BigQuery, MUST SELECT all four constraint columns:
+    SELECT acl_insert_date, ts_date, mds_fam_id, slot_id, ... (other columns)
+  - Failure to include these will result in 0 rows inserted (all marked as duplicates)
+  - This happened during BigQuery sync and took hours to debug
   - Returns: ACL_EVENT_CNT, ACL_NULL_CNT, ACL_INSERT_DATE
   - Used for: Chart display, performance metrics, trend analysis
 
