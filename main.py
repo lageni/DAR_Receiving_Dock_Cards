@@ -127,6 +127,28 @@ def get_color_for_performance(pct: float) -> str:
         return "#16a34a"  # Green
 
 
+def get_recommendation(avg_perf: float, trend_status: str) -> tuple:
+    """Get ACL recommendation based on performance and trend.
+    
+    Returns: (recommendation_text, color_class, bg_color_class)
+    
+    Rules (subject to change):
+    - > 85%: ACL APPROVED (green)
+    - < 85% and Improving: ADEQUATE PERFORMANCE (yellow)
+    - < 85% and Declining: REQUIRES MANUAL INSPECTION (yellow)
+    - < 50%: WORKSTATION RECOMMENDED (red)
+    """
+    if avg_perf >= 85:
+        return "ACL APPROVED", "#16a34a", "from-green-50 via-green-50 to-green-100 border-green-300"
+    elif avg_perf < 50:
+        return "WORKSTATION RECOMMENDED", "#dc2626", "from-red-50 via-red-50 to-red-100 border-red-300"
+    elif avg_perf < 85:
+        if trend_status == "Improving":
+            return "ADEQUATE PERFORMANCE", "#eab308", "from-yellow-50 via-yellow-50 to-yellow-100 border-yellow-300"
+        else:  # Declining or Consistent
+            return "REQUIRES MANUAL INSPECTION", "#eab308", "from-yellow-50 via-yellow-50 to-yellow-100 border-yellow-300"
+    return "UNKNOWN", "#6b7280", "from-gray-50 via-gray-50 to-gray-100 border-gray-300"
+
 def get_read_rate_chart(mds_fam_id: str) -> str:
     """Generate Chart.js HTML for read rate trend from read_rates.db"""
     rates = load_read_rates()
@@ -150,6 +172,9 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     # Create chart ID
     chart_id = f"chart_{mds_fam_id}"
     
+    # Get recommendation based on performance and trend
+    recommendation, rec_color, rec_bg = get_recommendation(avg_perf, trend_status)
+    
     # Safely build the data JSON string
     labels_json = json.dumps(labels)
     values_json = json.dumps(values)
@@ -170,8 +195,17 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
         </div>
     </div>'''
     
+    # Create recommendation card (big and bold)
+    rec_card = f'''<div class="bg-gradient-to-br {rec_bg} p-8 rounded-xl border-2 shadow-lg mb-4">
+        <div class="text-center">
+            <div class="text-5xl font-black" style="color: {rec_color};">{recommendation}</div>
+            <div class="text-xs text-gray-600 mt-2 italic">Directive Action (Subject to Change)</div>
+        </div>
+    </div>'''
+    
     return f'''<div class="mt-4 bg-white p-4 rounded border">
         <h2 class="text-3xl font-black text-center text-blue-600 mb-4">ACL Performance %</h2>
+        {rec_card}
         {perf_card}
         <div style="height: 400px; position: relative;">
             <canvas id="{chart_id}"></canvas>

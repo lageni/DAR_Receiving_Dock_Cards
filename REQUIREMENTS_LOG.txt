@@ -1,3 +1,23 @@
+ACL RECOMMENDATION SYSTEM (Directive Actions):
+===============================================
+IMPORTANT: These are guidelines subject to change over time. The ruleset may be modified as we develop best practices.
+
+Recommendation Rules (Current):
+  - >= 85% performance: "ACL APPROVED" (GREEN font and card)
+  - < 85% and Improving: "ADEQUATE PERFORMANCE" (YELLOW font and card)
+  - < 85% and Declining: "REQUIRES MANUAL INSPECTION" (YELLOW font and card)
+  - < 50% performance: "WORKSTATION RECOMMENDED" (RED font and card)
+
+Color Coding:
+  - GREEN: ACL APPROVED (no action needed, item approved)
+  - YELLOW: ADEQUATE PERFORMANCE or REQUIRES MANUAL INSPECTION (monitor closely)
+  - RED: WORKSTATION RECOMMENDED (requires immediate attention/alternative processing)
+
+Developer Notes:
+  - Recommendation is calculated from: get_recommendation(avg_perf, trend_status)
+  - Displayed prominently on search results and PDF
+  - Rules may be adjusted based on operational feedback
+  - Subject to ongoing refinement and testing
 CODEPUPPYDAR - REQUIREMENTS LOG
 ================================
 Last Updated: 2026-06-19
