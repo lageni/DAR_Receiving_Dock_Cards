@@ -485,7 +485,7 @@ def format_results(data: dict, item_id: str) -> str:
     })
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
     
-    # Get read rate metrics for performance display
+    # Get read rate metrics and chart for performance display
     rates = load_read_rates()
     rate_data = rates.get(str(item_id), [])
     right_html = "<div></div>"
@@ -496,6 +496,9 @@ def format_results(data: dict, item_id: str) -> str:
         color = get_color_for_performance(avg_perf)
         recommendation, rec_color, rec_bg = get_recommendation(avg_perf, trend_status)
         
+        # Get the full chart with Canvas visualization
+        chart_html = get_read_rate_chart(item_id)
+        
         right_html = f'''<div class="bg-white p-4 rounded border">
             <h2 class="text-2xl font-bold text-center text-blue-600 mb-4">ACL Performance %</h2>
             <div class="bg-gradient-to-br {rec_bg} p-6 rounded-lg border-2 shadow mb-4">
@@ -504,7 +507,7 @@ def format_results(data: dict, item_id: str) -> str:
                     <div class="text-xs text-gray-600 mt-1 italic">Directive Action</div>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 gap-3 mb-4">
                 <div class="bg-yellow-50 border-2 border-yellow-300 p-4 rounded text-center">
                     <div class="text-xs text-yellow-700 font-bold uppercase">Avg Performance</div>
                     <div class="text-4xl font-black mt-2" style="color: {color};">{avg_perf:.1f}%</div>
@@ -514,6 +517,7 @@ def format_results(data: dict, item_id: str) -> str:
                     <div class="text-2xl font-black mt-2 text-purple-900">{trend_status}</div>
                 </div>
             </div>
+            {chart_html}
         </div>'''
 
     # LEFT column: Product image and details
