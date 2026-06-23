@@ -557,19 +557,15 @@ def extract_item_data(data: dict) -> dict:
         elif "orderableGTIN" in data:
             item_data["gtin"] = data["orderableGTIN"]
         
-        # CatalogGTIN - check dcProperties first
+        # CatalogGTIN - dcProperties > supplyItem > catalogGTIN
         if "dcProperties" in data and isinstance(data["dcProperties"], dict):
             dc_props = data["dcProperties"]
-            if "catalogGTIN" in dc_props:
-                item_data["catalog_gtin"] = dc_props["catalogGTIN"]
-        # Fallback to root level or attributes
-        if not item_data["catalog_gtin"]:
-            if "catalogGTIN" in data:
-                item_data["catalog_gtin"] = data["catalogGTIN"]
-            elif "attributes" in data and isinstance(data["attributes"], dict):
-                attrs = data["attributes"]
-                if "catalogGTIN" in attrs:
-                    item_data["catalog_gtin"] = attrs["catalogGTIN"]
+            if "supplyItem" in dc_props and isinstance(dc_props["supplyItem"], dict):
+                supply_item = dc_props["supplyItem"]
+                if "catalogGTIN" in supply_item:
+                    item_data["catalog_gtin"] = supply_item["catalogGTIN"]
+        
+        print(f"[EXTRACT] Item {item_data.get('item_id')}: catalog_gtin='{item_data['catalog_gtin']}'")
         
         # Product ID - use merchandiseFamilyID
         if "merchandiseFamilyID" in data:
@@ -901,7 +897,7 @@ def generate_pdf(item_data: dict) -> bytes:
         "#22c55e": {  # Green (ACL APPROVED)
             "fill_bg": (220, 252, 231),     # Very light green background
             "border": (52, 211, 153),        # Medium green border
-            "text": (34, 197, 94)            # Bright green text
+            "text": (22, 163, 74)            # Bright green text (darker for better visibility)
         },
         "#f59e0b": {  # Amber (ADEQUATE/REQUIRES MANUAL)
             "fill_bg": (254, 243, 199),     # Light amber background
@@ -921,6 +917,7 @@ def generate_pdf(item_data: dict) -> bytes:
     }
     
     colors = color_map.get(rec_color_hex, color_map["#6b7280"])
+    print(f"[PDF] rec_color_hex={rec_color_hex}, using colors: {colors}")
     
     # Draw directive action box with colored background - matching web page
     pdf.set_xy(content_x, current_y)
