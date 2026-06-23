@@ -817,6 +817,9 @@ def generate_pdf(item_data: dict) -> bytes:
     item_id_orig = item_data.get("item_id", "")
     item_id = sanitize_for_pdf(item_id_orig)
     
+    # DEBUG: Log what we extracted
+    print(f"[PDF] Item {item_id_orig}: catalog_gtin='{catalog_gtin}', gtin='{gtin}'")
+    
     # LEFT COLUMN: Product Image (larger)
     img_x = 0.4
     img_y = 0.4
@@ -867,7 +870,44 @@ def generate_pdf(item_data: dict) -> bytes:
         details_text += f" | Supplier: {supplier_dept}"
     
     pdf.multi_cell(6.5, 0.2, details_text, align='C')
-    current_y = pdf.get_y() + 0.1
+    current_y = pdf.get_y() + 0.2
+    
+    # Add Directive Action card (in right column, below product details)
+    rates = load_read_rates()
+    rate_data = rates.get(str(item_id_orig), [])
+    recommendation = "N/A"
+    rec_color_rgb = (107, 114, 128)  # gray
+    if rate_data and len(rate_data) > 0:
+        avg_perf = get_avg_performance(rate_data)
+        trend_status = get_trend_status(rate_data)
+        recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+        # Convert hex to RGB
+        if rec_color_hex == "#22c55e":
+            rec_color_rgb = (34, 197, 94)  # green
+        elif rec_color_hex == "#f59e0b":
+            rec_color_rgb = (245, 158, 11)  # amber
+        elif rec_color_hex == "#dc2626":
+            rec_color_rgb = (220, 38, 38)  # red
+    
+    # Draw directive action box
+    pdf.set_xy(content_x, current_y)
+    pdf.set_draw_color(rec_color_rgb[0], rec_color_rgb[1], rec_color_rgb[2])
+    pdf.set_line_width(0.03)
+    pdf.rect(content_x, current_y, 6.5, 0.5, style='D')
+    
+    # Title
+    pdf.set_xy(content_x + 0.1, current_y + 0.08)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(60, 60, 60)
+    pdf.cell(6.3, 0.12, "ACL DIRECTIVE ACTION", align='C')
+    
+    # Recommendation text
+    pdf.set_xy(content_x + 0.1, current_y + 0.22)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(rec_color_rgb[0], rec_color_rgb[1], rec_color_rgb[2])
+    pdf.cell(6.3, 0.22, recommendation, align='C')
+    
+    current_y = pdf.get_y() + 0.2
     
     # Move to bottom-left quadrant for ACL Performance section
     # Use a fixed position in the lower-left area only
