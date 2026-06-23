@@ -316,27 +316,24 @@ async def search_inventory(item_id: str, id_type: str = "ITEM_NUMBER", node: str
 @app.get("/print-card", response_class=HTMLResponse)
 async def print_card(item_id: str, product_id: str = "", gtin: str = "", supplier_dept: str = ""):
     try:
-        jwt = os.getenv("INVENTORY_JWT_TOKEN")
-        user_id = os.getenv("INVENTORY_USER_ID")
-        api_url = os.getenv("INVENTORY_API_URL", "https://inventory-viewer.prod.walmart.net")
-        node = os.getenv("INVENTORY_DEFAULT_NODE", "6068")
-        country_code = os.getenv("INVENTORY_COUNTRY_CODE", "US")
+        api_key = os.getenv("MDM_API_KEY")
+        facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+        facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+        wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
 
-        if not jwt or not user_id:
-            return '<div class="text-red-600">Error: Missing credentials in .env</div>'
+        if not api_key:
+            return '<div class="text-red-600">Error: Missing MDM_API_KEY in .env</div>'
 
-        headers = {"Authorization": jwt, "UserId": user_id}
-        params = {
-            "node": node,
-            "itemId": item_id,
-            "idType": "ITEM_NUMBER",
-            "userName": user_id,
-            "countryCode": country_code,
-            "isOfferIdRollupEnabled": "false",
+        api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
+        headers = {
+            "Api-Key": api_key,
+            "Facilitynum": facility_num,
+            "Facilitycountrycode": facility_country,
+            "Wmt-Userid": wmt_userid
         }
 
         async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-            response = await client.get(f"{api_url}/get-summary", params=params, headers=headers)
+            response = await client.get(api_url, headers=headers)
             response.raise_for_status()
             data = response.json()
 
@@ -344,35 +341,6 @@ async def print_card(item_id: str, product_id: str = "", gtin: str = "", supplie
 
     except Exception as e:
         return f'<div class="text-red-600">Error: {str(e)}</div>'
-
-
-@app.get("/print-card-pdf")
-async def print_card_pdf(item_id: str, product_id: str = "", gtin: str = "", supplier_dept: str = ""):
-    """Generate a clean PDF of the print card for download."""
-    try:
-        jwt = os.getenv("INVENTORY_JWT_TOKEN")
-        user_id = os.getenv("INVENTORY_USER_ID")
-        api_url = os.getenv("INVENTORY_API_URL", "https://inventory-viewer.prod.walmart.net")
-        node = os.getenv("INVENTORY_DEFAULT_NODE", "6068")
-        country_code = os.getenv("INVENTORY_COUNTRY_CODE", "US")
-
-        if not jwt or not user_id:
-            return '<div class="text-red-600">Error: Missing credentials in .env</div>'
-
-        headers = {"Authorization": jwt, "UserId": user_id}
-        params = {
-            "node": node,
-            "itemId": item_id,
-            "idType": "ITEM_NUMBER",
-            "userName": user_id,
-            "countryCode": country_code,
-            "isOfferIdRollupEnabled": "false",
-        }
-
-        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-            response = await client.get(f"{api_url}/get-summary", params=params, headers=headers)
-            response.raise_for_status()
-            data = response.json()
 
         item_data = extract_item_data(data)
         item_data["item_id"] = item_id  # Add the searched item_id
@@ -398,6 +366,7 @@ def format_results(data: dict, item_id: str) -> str:
     item_name = item_data["item_name"]
     image_url = item_data["image_url"]
     gtin = item_data["gtin"]
+    catalog_gtin = item_data.get("catalog_gtin", "")
     product_id = item_data["product_id"]
     supplier_dept = item_data["supplier_dept"]
 
@@ -411,6 +380,8 @@ def format_results(data: dict, item_id: str) -> str:
         item_details += f'<p><strong>Product ID:</strong> {product_id}</p>'
     if gtin:
         item_details += f'<p><strong>GTIN:</strong> {gtin}</p>'
+    if catalog_gtin:
+        item_details += f'<p><strong>Catalog GTIN:</strong> {catalog_gtin}</p>'
     if supplier_dept:
         item_details += f'<p><strong>Supplier:</strong> {supplier_dept}</p>'
     item_details += '</div>'
@@ -465,6 +436,7 @@ def extract_item_data(data: dict) -> dict:
         "item_id": "",
         "image_url": "",
         "gtin": "",
+        "catalog_gtin": "",
         "product_id": "",
         "supplier_dept": "",
         "inventory_status": "Unknown"
@@ -496,6 +468,10 @@ def extract_item_data(data: dict) -> dict:
         elif "orderableGTIN" in data:
             item_data["gtin"] = data["orderableGTIN"]
         
+        # CatalogGTIN - if it exists (NEW!)
+        if "catalogGTIN" in data:
+            item_data["catalog_gtin"] = data["catalogGTIN"]
+        
         # Product ID - use merchandiseFamilyID
         if "merchandiseFamilyID" in data:
             item_data["product_id"] = str(data["merchandiseFamilyID"])
@@ -508,7 +484,7 @@ def extract_item_data(data: dict) -> dict:
                 if isinstance(dept, dict) and "number" in dept:
                     item_data["supplier_dept"] = str(dept["number"])
         
-        # I status from status code
+        # Status from status code
         if "status" in data:
             status = data["status"]
             if isinstance(status, dict):
@@ -732,6 +708,7 @@ def generate_pdf(item_data: dict) -> bytes:
     item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
     image_url = item_data.get("image_url", "")
     gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+    catalog_gtin = sanitize_for_pdf(item_data.get("catalog_gtin", ""))
     product_id = sanitize_for_pdf(item_data.get("product_id", ""))
     supplier_dept = sanitize_for_pdf(item_data.get("supplier_dept", ""))
     inventory_status = sanitize_for_pdf(item_data.get("inventory_status", "Unknown"))
@@ -783,6 +760,8 @@ def generate_pdf(item_data: dict) -> bytes:
         details_text += f" | Product ID: {product_id}"
     if gtin:
         details_text += f" | GTIN: {gtin}"
+    if catalog_gtin:
+        details_text += f" | Catalog GTIN: {catalog_gtin}"
     if supplier_dept:
         details_text += f" | Supplier: {supplier_dept}"
     

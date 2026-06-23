@@ -1,0 +1,88 @@
+CODEPUPPYDAR - REQUIREMENTS LOG
+================================
+Last Updated: 2026-06-19
+
+CRITICAL REQUIREMENTS (DO NOT FORGET):
+======================================
+
+API Configuration:
+  - API Type: MDM API (NOT Inventory Viewer API!)
+  - Endpoint: https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false
+  - Authentication: MDM_API_KEY header (from .env)
+  - Headers: Api-Key, Facilitynum, Facilitycountrycode, Wmt-Userid
+  - REMOVE ALL REFERENCES TO: INVENTORY_JWT_TOKEN, INVENTORY_USER_ID, INVENTORY_API_URL
+
+Data Extraction (from MDM API response):
+  - Item Name/Description: data["description"][0]["textValue"]
+  - Product Image: data["productDefinition"]["imageDimension"]["IMAGE_SIZE_450"]
+  - Product ID (for chart): data["merchandiseFamilyID"]
+  - GTIN (Consumable): data["consumableGTIN"]
+  - CatalogGTIN (if exists): data.get("catalogGTIN", "") - MUST DISPLAY IF PRESENT
+  - Supplier Dept: data["supplierAgreement"]["department"]["number"]
+  - Status: data["status"]["code"]
+
+UI/Display Requirements:
+  - Product image MUST show (IMAGE_SIZE_450 resolution)
+  - ACL Performance chart MUST display with:
+    * Average % metric
+    * Trend indicator
+    * Line chart over time
+  - Display CatalogGTIN prominently if it exists (different from consumable GTIN)
+  - PDF download must include image and all GTINs
+
+Endpoints to UPDATE:
+  - /api/inventory/search (DONE - uses MDM API)
+  - /print-card (NEEDS FIX - still using old API)
+  - /print-card-pdf (NEEDS FIX - still using old API)
+
+Test Item:
+  - Default: 659608850 (Tadin Lemon Ginger Tea)
+  - Expected image: Yellow tea box product photo
+  - Expected name: "TE LEMON & GINGER" or similar
+
+Chart Lookup:
+  - Uses merchandiseFamilyID from MDM response
+  - Matches MDS_FAM_ID in read_rates.csv
+  - MUST display trend and performance metrics
+
+Deprecated - DO NOT USE:
+  - productResponse.docs[]
+  - product.product_name
+  - product.primary_image_url
+  - si.consumableGtin
+  - inventoryResponse
+  - statusCode
+  - Any endpoint starting with inventory-viewer.prod.walmart.net
+
+CODE LOCATIONS TO CHECK:
+========================
+- main.py line 273: search_inventory() - CORRECT (MDM)
+- main.py line 317: print_card() - NEEDS FIX (still old API)
+- main.py line 353: print_card_pdf() - NEEDS FIX (still old API)
+- main.py line 461: extract_item_data() - CORRECT (MDM parsing)
+- main.py line 395: format_results() - CORRECT (uses product_id for chart)
+
+Files Modified:
+- main.py (multiple API calls)
+- .env (has old INVENTORY_* variables - should be removed)
+
+VERIFICATION CHECKLIST:
+=======================
+[ ] Remove ALL INVENTORY_JWT_TOKEN references
+[ ] Remove ALL INVENTORY_USER_ID references
+[ ] Remove ALL INVENTORY_API_URL references
+[ ] Update print_card() to use MDM API
+[ ] Update print_card_pdf() to use MDM API
+[ ] Add CatalogGTIN parsing
+[ ] Add CatalogGTIN display in UI
+[ ] Test with item 659608850
+[ ] Verify chart displays
+[ ] Verify PDF includes image
+[ ] Verify all GTINs show
+
+STATUS: IN PROGRESS
+===================
+- Search endpoint: FIXED
+- Print-card endpoints: BROKEN (need fix)
+- Chart display: BROKEN (no data showing)
+- Image display: NEEDS TEST
