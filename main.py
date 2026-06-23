@@ -424,8 +424,10 @@ def format_results(data: dict, item_id: str) -> str:
     })
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
     
-    # Get read rate trend chart - use product_id (merchandiseFamilyID) as key
-    chart_html = get_read_rate_chart(product_id)
+    # Get read rate trend chart - use item_id for DB lookup
+    # NOTE: Despite column being named "mds_fam_id", it actually contains the ITEM NUMBER (659608850)
+    # NOT the merchandiseFamilyID (364890068) from MDM response
+    chart_html = get_read_rate_chart(item_id)
 
     # LEFT column: Product image and details
     left_html = f"""<div class="space-y-3">
