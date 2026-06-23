@@ -485,8 +485,36 @@ def format_results(data: dict, item_id: str) -> str:
     })
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
     
-    # Note: Chart display on search results disabled due to HTMX/Canvas initialization timing
-    # Chart data is generated and available - see print card for visualization
+    # Get read rate metrics for performance display
+    rates = load_read_rates()
+    rate_data = rates.get(str(item_id), [])
+    perf_html = ""
+    
+    if rate_data and len(rate_data) > 0:
+        avg_perf = get_avg_performance(rate_data)
+        trend_status = get_trend_status(rate_data)
+        color = get_color_for_performance(avg_perf)
+        recommendation, rec_color, rec_bg = get_recommendation(avg_perf, trend_status)
+        
+        perf_html = f'''<div class="bg-white p-4 rounded border">
+            <h2 class="text-2xl font-bold text-center text-blue-600 mb-4">ACL Performance %</h2>
+            <div class="bg-gradient-to-br {rec_bg} p-6 rounded-lg border-2 shadow mb-4">
+                <div class="text-center">
+                    <div class="text-4xl font-black" style="color: {rec_color};">{recommendation}</div>
+                    <div class="text-xs text-gray-600 mt-1 italic">Directive Action</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-yellow-50 border-2 border-yellow-300 p-4 rounded text-center">
+                    <div class="text-xs text-yellow-700 font-bold uppercase">Avg Performance</div>
+                    <div class="text-4xl font-black mt-2" style="color: {color};">{avg_perf:.1f}%</div>
+                </div>
+                <div class="bg-purple-50 border-2 border-purple-300 p-4 rounded text-center">
+                    <div class="text-xs text-purple-700 font-bold uppercase">Trend</div>
+                    <div class="text-2xl font-black mt-2 text-purple-900">{trend_status}</div>
+                </div>
+            </div>
+        </div>'''
 
     # LEFT column: Product image and details
     left_html = f"""<div class="space-y-3">
@@ -503,6 +531,17 @@ def format_results(data: dict, item_id: str) -> str:
             </div>
         </details>
     </div>"""
+    
+    # Combine left and right columns
+    html = left_html
+    if perf_html:
+        # Return both columns wrapped in grid
+        return f'''<div id="results" class="space-y-3">
+            {left_html}
+        </div>
+        <div id="results-chart">
+            {perf_html}
+        </div>'''
     
     return left_html
 
