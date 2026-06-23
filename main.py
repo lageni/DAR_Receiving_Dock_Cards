@@ -892,26 +892,26 @@ def generate_pdf(item_data: dict) -> bytes:
         trend_status = get_trend_status(rate_data)
         recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
     
-    # Color mapping - matching web page exactly
+    # Color mapping - matching what get_recommendation() returns
     color_map = {
-        "#22c55e": {  # Green (ACL APPROVED)
+        "#16a34a": {  # Green (ACL APPROVED) - matches get_recommendation()
             "fill_bg": (220, 252, 231),     # Very light green background
-            "border": (52, 211, 153),        # Medium green border
-            "text": (22, 163, 74)            # Bright green text (darker for better visibility)
+            "border": (34, 197, 94),         # Bright green border
+            "text": (34, 197, 94)            # Bright vibrant green text
         },
-        "#f59e0b": {  # Amber (ADEQUATE/REQUIRES MANUAL)
+        "#eab308": {  # Amber (ADEQUATE/REQUIRES MANUAL)
             "fill_bg": (254, 243, 199),     # Light amber background
-            "border": (251, 191, 36),        # Medium amber border
+            "border": (245, 158, 11),        # Bright amber border
             "text": (245, 158, 11)           # Bright amber text
         },
         "#dc2626": {  # Red (WORKSTATION RECOMMENDED)
             "fill_bg": (254, 226, 226),     # Light red background
-            "border": (239, 68, 68),         # Medium red border
+            "border": (220, 38, 38),         # Bright red border
             "text": (220, 38, 38)            # Bright red text
         },
         "#6b7280": {  # Gray (default)
             "fill_bg": (243, 244, 246),     # Light gray background
-            "border": (156, 163, 175),       # Medium gray border
+            "border": (107, 114, 128),       # Medium gray border
             "text": (107, 114, 128)          # Gray text
         }
     }
