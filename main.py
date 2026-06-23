@@ -278,6 +278,33 @@ async def root():
         <a href="/admin" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Admin</a>
     </header>
     <main class="w-full px-2 py-4">
+        <!-- ACL Directive Actions Ruleset -->
+        <details class="bg-blue-50 border-l-4 border-blue-600 p-4 mb-4 rounded cursor-pointer">
+            <summary class="font-bold text-blue-700 select-none">ACL Directive Actions Ruleset (Click to expand)</summary>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div class="bg-green-50 border border-green-300 p-3 rounded">
+                    <div class="font-bold text-green-700">ACL APPROVED</div>
+                    <div class="text-green-600">Performance >= 85%</div>
+                    <div class="text-xs text-gray-600 mt-1">No action needed</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-300 p-3 rounded">
+                    <div class="font-bold text-yellow-700">ADEQUATE PERFORMANCE</div>
+                    <div class="text-yellow-600">Performance < 85% & Improving</div>
+                    <div class="text-xs text-gray-600 mt-1">Monitor closely</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-300 p-3 rounded">
+                    <div class="font-bold text-yellow-700">REQUIRES MANUAL INSPECTION</div>
+                    <div class="text-yellow-600">Performance < 85% & Declining</div>
+                    <div class="text-xs text-gray-600 mt-1">Review needed</div>
+                </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">WORKSTATION RECOMMENDED</div>
+                    <div class="text-red-600">Performance < 50%</div>
+                    <div class="text-xs text-gray-600 mt-1">Immediate action required</div>
+                </div>
+            </div>
+            <div class="mt-3 text-xs text-gray-600 italic">Note: These rules are directive guidelines subject to change</div>
+        </details>
         <!-- Search Bar at Top -->
         <div class="bg-white p-3 rounded border shadow-sm mb-4">
             <form id="searchForm" hx-get="/api/inventory/search" hx-target="#results" class="flex gap-2">
@@ -568,6 +595,16 @@ def generate_print_card(data: dict, item_id: str) -> str:
     product_id = item_data["product_id"]
     supplier_dept = item_data["supplier_dept"]
     inventory_status = item_data["inventory_status"]
+    
+    # Get ACL recommendation if data available
+    recommendation = "N/A"
+    rec_color = "#6b7280"
+    rates = load_read_rates()
+    rate_data = rates.get(str(item_id), [])
+    if rate_data and len(rate_data) > 0:
+        avg_perf = get_avg_performance(rate_data)
+        trend_status = get_trend_status(rate_data)
+        recommendation, rec_color, _ = get_recommendation(avg_perf, trend_status)
 
     image_section = ""
     if image_url:
@@ -726,6 +763,10 @@ def generate_print_card(data: dict, item_id: str) -> str:
             <div class="info-section">
                 <div class="info-label">Inventory Status</div>
                 <div class="status-badge {'status-in-stock' if 'In Stock' in inventory_status else 'status-unknown'}">{inventory_status}</div>
+            </div>
+            <div class="info-section" style="border: 2px solid {rec_color}; padding: 12px; border-radius: 4px; background: rgba(0,0,0,0.02);">
+                <div style="color: {rec_color}; font-weight: 700; font-size: 14px; text-align: center;">{recommendation}</div>
+                <div style="color: #666; font-size: 9px; text-align: center; margin-top: 4px;">ACL Directive Action</div>
             </div>
             <div class="footer">
                 <p>CodePuppy DAR - Inventory Viewer</p>
