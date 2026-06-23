@@ -1091,27 +1091,46 @@ async def sync_bigquery():
             WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')
             AND acl_insert_date IN ('{dates_list}')"""
         print("[OK] Query ready")
+        print(f"[DEBUG] Query: {query[:200]}...")
         
         print(f"[SYNC] Step 7: Querying BigQuery (may take 10-30 seconds)...")
         query_job = sync.client.query(query)
         results = query_job.result()
-        print("[OK] Results received")
+        print("[OK] Results received from BigQuery")
         
         print(f"[SYNC] Step 8: Inserting rows...")
         inserted = 0
         total = 0
+        first_row_printed = False
         for row in results:
             total += 1
+            # Print first row for debugging
+            if not first_row_printed:
+                print(f"[DEBUG] First row from BigQuery:")
+                print(f"        acl_insert_date={row.acl_insert_date} (type: {type(row.acl_insert_date)})")
+                print(f"        mds_fam_id={row.mds_fam_id}")
+                print(f"        acl_event_cnt={row.acl_event_cnt}")
+                print(f"        acl_null_cnt={row.acl_null_cnt}")
+                first_row_printed = True
+            
             try:
-                cursor.execute('''INSERT OR IGNORE INTO read_rates (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt) VALUES (?, ?, ?, ?)''', (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0, int(row.acl_event_cnt) if row.acl_event_cnt else 0, int(row.acl_null_cnt) if row.acl_null_cnt else 0))
+                insert_sql = '''INSERT OR IGNORE INTO read_rates (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt) VALUES (?, ?, ?, ?)'''
+                insert_values = (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0, int(row.acl_event_cnt) if row.acl_event_cnt else 0, int(row.acl_null_cnt) if row.acl_null_cnt else 0)
+                cursor.execute(insert_sql, insert_values)
                 if cursor.rowcount > 0:
                     inserted += 1
+                elif total == 1:
+                    print(f"[DEBUG] Row 1: cursor.rowcount = {cursor.rowcount} (0 = duplicate/ignored)")
                 if total % 100 == 0:
                     print(f"     {total} processed, {inserted} new")
             except Exception as e:
-                print(f"[WARN] Row {total} failed: {e}")
+                print(f"[ERROR] Row {total} INSERT failed: {str(e)}")
+                if total == 1:
+                    print(f"[DEBUG] Failed insert values: {insert_values}")
+                    print(f"[DEBUG] Failed insert SQL: {insert_sql}")
         
-        print(f"[OK] Processed {total} rows, inserted {inserted}")
+        print(f"[OK] BigQuery returned {total} total rows from {len(missing_dates)} missing dates")
+        print(f"[OK] Inserted {inserted} NEW rows to database")
         
         print("[SYNC] Step 9: Committing...")
         conn.commit()
