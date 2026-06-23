@@ -557,17 +557,19 @@ def extract_item_data(data: dict) -> dict:
         elif "orderableGTIN" in data:
             item_data["gtin"] = data["orderableGTIN"]
         
-        # CatalogGTIN - check root level first, then attributes
-        if "catalogGTIN" in data:
-            item_data["catalog_gtin"] = data["catalogGTIN"]
-        elif "attributes" in data and isinstance(data["attributes"], dict):
-            # Look in attributes for catalogGTIN
-            attrs = data["attributes"]
-            if "catalogGTIN" in attrs:
-                item_data["catalog_gtin"] = attrs["catalogGTIN"]
-            # If not found in attributes, log what keys ARE there for debugging
-            if not item_data["catalog_gtin"]:
-                print(f"[EXTRACT] catalogGTIN not found in attributes. Keys available: {list(attrs.keys())}")
+        # CatalogGTIN - check dcProperties first
+        if "dcProperties" in data and isinstance(data["dcProperties"], dict):
+            dc_props = data["dcProperties"]
+            if "catalogGTIN" in dc_props:
+                item_data["catalog_gtin"] = dc_props["catalogGTIN"]
+        # Fallback to root level or attributes
+        if not item_data["catalog_gtin"]:
+            if "catalogGTIN" in data:
+                item_data["catalog_gtin"] = data["catalogGTIN"]
+            elif "attributes" in data and isinstance(data["attributes"], dict):
+                attrs = data["attributes"]
+                if "catalogGTIN" in attrs:
+                    item_data["catalog_gtin"] = attrs["catalogGTIN"]
         
         # Product ID - use merchandiseFamilyID
         if "merchandiseFamilyID" in data:
@@ -888,58 +890,58 @@ def generate_pdf(item_data: dict) -> bytes:
     rates = load_read_rates()
     rate_data = rates.get(str(item_id_orig), [])
     recommendation = "N/A"
-    rec_color_rgb = (107, 114, 128)  # gray
+    rec_color_hex = "#6b7280"
     if rate_data and len(rate_data) > 0:
         avg_perf = get_avg_performance(rate_data)
         trend_status = get_trend_status(rate_data)
         recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
-        # Convert hex to RGB
-        if rec_color_hex == "#22c55e":
-            rec_color_rgb = (34, 197, 94)  # green
-        elif rec_color_hex == "#f59e0b":
-            rec_color_rgb = (245, 158, 11)  # amber
-        elif rec_color_hex == "#dc2626":
-            rec_color_rgb = (220, 38, 38)  # red
     
-    # Draw directive action box with light background matching the recommendation color
+    # Color mapping - matching web page exactly
+    color_map = {
+        "#22c55e": {  # Green (ACL APPROVED)
+            "fill_bg": (220, 252, 231),     # Very light green background
+            "border": (52, 211, 153),        # Medium green border
+            "text": (34, 197, 94)            # Bright green text
+        },
+        "#f59e0b": {  # Amber (ADEQUATE/REQUIRES MANUAL)
+            "fill_bg": (254, 243, 199),     # Light amber background
+            "border": (251, 191, 36),        # Medium amber border
+            "text": (245, 158, 11)           # Bright amber text
+        },
+        "#dc2626": {  # Red (WORKSTATION RECOMMENDED)
+            "fill_bg": (254, 226, 226),     # Light red background
+            "border": (239, 68, 68),         # Medium red border
+            "text": (220, 38, 38)            # Bright red text
+        },
+        "#6b7280": {  # Gray (default)
+            "fill_bg": (243, 244, 246),     # Light gray background
+            "border": (156, 163, 175),       # Medium gray border
+            "text": (107, 114, 128)          # Gray text
+        }
+    }
+    
+    colors = color_map.get(rec_color_hex, color_map["#6b7280"])
+    
+    # Draw directive action box with colored background - matching web page
     pdf.set_xy(content_x, current_y)
+    pdf.set_fill_color(colors["fill_bg"][0], colors["fill_bg"][1], colors["fill_bg"][2])
+    pdf.set_draw_color(colors["border"][0], colors["border"][1], colors["border"][2])
+    pdf.set_line_width(0.05)  # Thicker border
+    pdf.rect(content_x, current_y, 6.5, 0.7, style='FD')
     
-    # Create light background fill (very light version of the color)
-    if rec_color_rgb == (34, 197, 94):  # green
-        pdf.set_fill_color(220, 252, 231)  # light green background
-        border_color = (34, 197, 94)
-        text_color = (22, 163, 74)  # darker green
-    elif rec_color_rgb == (245, 158, 11):  # amber
-        pdf.set_fill_color(254, 243, 199)  # light amber background
-        border_color = (245, 158, 11)
-        text_color = (180, 83, 9)  # darker amber
-    elif rec_color_rgb == (220, 38, 38):  # red
-        pdf.set_fill_color(254, 226, 226)  # light red background
-        border_color = (220, 38, 38)
-        text_color = (185, 28, 28)  # darker red
-    else:  # gray
-        pdf.set_fill_color(243, 244, 246)  # light gray background
-        border_color = (107, 114, 128)
-        text_color = (75, 85, 99)
-    
-    # Draw box with border and fill
-    pdf.set_draw_color(border_color[0], border_color[1], border_color[2])
-    pdf.set_line_width(0.04)
-    pdf.rect(content_x, current_y, 6.5, 0.65, style='FD')
-    
-    # Title
+    # Title - small, gray
     pdf.set_xy(content_x + 0.1, current_y + 0.08)
-    pdf.set_font("Helvetica", "B", 8)
-    pdf.set_text_color(80, 80, 80)
-    pdf.cell(6.3, 0.12, "ACL DIRECTIVE ACTION", align='C')
+    pdf.set_font("Helvetica", "B", 7.5)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(6.3, 0.1, "ACL DIRECTIVE ACTION (Subject to Change)", align='C')
     
-    # Recommendation text - large and bold
-    pdf.set_xy(content_x + 0.1, current_y + 0.25)
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.set_text_color(text_color[0], text_color[1], text_color[2])
-    pdf.cell(6.3, 0.28, recommendation, align='C')
+    # Recommendation text - LARGE and BOLD matching web page
+    pdf.set_xy(content_x + 0.1, current_y + 0.28)
+    pdf.set_font("Helvetica", "B", 18)  # Bigger!
+    pdf.set_text_color(colors["text"][0], colors["text"][1], colors["text"][2])
+    pdf.cell(6.3, 0.35, recommendation, align='C')
     
-    current_y = pdf.get_y() + 0.2
+    current_y = current_y + 0.85
     
     # Move to bottom-left quadrant for ACL Performance section
     # Use a fixed position in the lower-left area only
