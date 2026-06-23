@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 from io import BytesIO
 from collections import defaultdict
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, JSONResponse
 import httpx
 from fpdf import FPDF
 from dotenv import load_dotenv
@@ -1023,6 +1023,83 @@ def generate_pdf(item_data: dict) -> bytes:
 
 
 
+
+        
+@app.post("/api/admin/sync-bigquery")
+async def sync_bigquery():
+    """Sync missing dates from BigQuery to local database."""
+    try:
+        from gcs_sync import GoogleCloudSync
+        from db import get_database_stats
+        import sqlite3
+        from datetime import datetime, timedelta
+        
+        sync = GoogleCloudSync()
+        if not sync.initialize():
+            return JSONResponse({"status": "error", "message": "Failed to initialize BigQuery"}, status_code=400)
+        
+        stats = get_database_stats()
+        max_date = stats.get('max_date', '2024-01-01')
+        
+        conn = sqlite3.connect("read_rates.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT acl_insert_date FROM read_rates ORDER BY acl_insert_date")
+        existing_dates = {row[0] for row in cursor.fetchall()}
+        
+        if max_date and max_date != 'N/A':
+            last_date = datetime.strptime(max_date, '%Y-%m-%d')
+        else:
+            last_date = datetime(2024, 1, 1)
+        
+        today = datetime.now()
+        missing_dates = []
+        current = last_date + timedelta(days=1)
+        while current <= today:
+            date_str = current.strftime('%Y-%m-%d')
+            if date_str not in existing_dates:
+                missing_dates.append(date_str)
+            current += timedelta(days=1)
+        
+        if not missing_dates:
+            conn.close()
+            return JSONResponse({"status": "success", "message": "No missing dates", "rows_appended": 0, "dates_synced": 0})
+        
+        dates_list = "', '".join(missing_dates)
+        query = f"""
+            SELECT acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt
+            FROM `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
+            WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')
+            AND acl_insert_date IN ('{dates_list}')
+        """
+        
+        query_job = sync.client.query(query)
+        results = query_job.result()
+        
+        inserted = 0
+        for row in results:
+            try:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO read_rates 
+                    (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt)
+                    VALUES (?, ?, ?, ?)
+                ''', (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0,
+                      int(row.acl_event_cnt) if row.acl_event_cnt else 0,
+                      int(row.acl_null_cnt) if row.acl_null_cnt else 0))
+                if cursor.rowcount > 0:
+                    inserted += 1
+            except Exception as e:
+                print(f"[WARN] Insert failed: {e}")
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"status": "success", "message": f"Synced {len(missing_dates)} dates",
+                           "rows_appended": inserted, "dates_synced": len(missing_dates)})
+    
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
     try:
@@ -1059,14 +1136,52 @@ async def admin_page():
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">BigQuery Sync</h2>
+            <p class="text-sm text-gray-600 mb-4">Synchronize missing dates from Google BigQuery ACL_READ_RATE table</p>
+            <button onclick="syncBigQuery()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Sync Missing Dates from BigQuery</button>
+            <div id="sync-status" class="mt-4 text-sm hidden"></div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
             <h2 class="text-xl font-bold mb-4">System Info</h2>
             <p class="text-sm text-gray-600 mb-3">Database: SQLite (read_rates.db)</p>
             <p class="text-sm text-gray-600 mb-3">API: MDM Item API (uwms-item.prod.us.walmart.net)</p>
+            <p class="text-sm text-gray-600 mb-3">BigQuery: wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE</p>
             <p class="text-sm text-gray-600">Auth: MDM_API_KEY in .env</p>
         </div>
         
         <a href="/" class="inline-block px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Back to Search</a>
     </div>
+    
+    <script>
+        async function syncBigQuery() {{
+            const statusDiv = document.getElementById('sync-status');
+            statusDiv.classList.remove('hidden');
+            statusDiv.innerHTML = '<div class="text-blue-600">Syncing... please wait</div>';
+            
+            try {{
+                const response = await fetch('/api/admin/sync-bigquery', {{\n                    method: 'POST',\n                    headers: {{'Content-Type': 'application/json'}}\n                }});
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {{
+                    statusDiv.innerHTML = `
+                        <div class="text-green-600 font-semibold">✓ Sync Complete</div>
+                        <div class="text-sm text-gray-700 mt-2">
+                            Rows appended: ${{result.rows_appended}}<br>
+                            Dates synced: ${{result.dates_synced}}<br>
+                            <a href="/admin" class="text-blue-600 underline mt-2 inline-block">Refresh page</a>
+                        </div>
+                    `;
+                }} else {{
+                    statusDiv.innerHTML = `<div class="text-red-600">✗ Error: ${{result.message}}</div>`;
+                }}
+            }} catch (err) {{
+                statusDiv.innerHTML = `<div class="text-red-600">✗ Error: ${{err.message}}</div>`;
+            }}
+        }}
+    </script>
+    </script>
 </body>
 </html>"""
 
