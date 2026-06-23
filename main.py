@@ -273,27 +273,24 @@ async def root():
 @app.get("/api/inventory/search", response_class=HTMLResponse)
 async def search_inventory(item_id: str, id_type: str = "ITEM_NUMBER", node: str = None):
     try:
-        jwt = os.getenv("INVENTORY_JWT_TOKEN")
-        user_id = os.getenv("INVENTORY_USER_ID")
-        api_url = os.getenv("INVENTORY_API_URL", "https://inventory-viewer.prod.walmart.net")
-        node = node or os.getenv("INVENTORY_DEFAULT_NODE", "6068")
-        country_code = os.getenv("INVENTORY_COUNTRY_CODE", "US")
+        api_key = os.getenv("MDM_API_KEY")
+        facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+        facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+        wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
 
-        if not jwt or not user_id:
-            return '<div class="text-red-600">Error: Missing credentials in .env</div>'
+        if not api_key:
+            return '<div class="text-red-600">Error: Missing MDM_API_KEY in .env</div>'
 
-        headers = {"Authorization": jwt, "UserId": user_id}
-        params = {
-            "node": node,
-            "itemId": item_id,
-            "idType": id_type,
-            "userName": user_id,
-            "countryCode": country_code,
-            "isOfferIdRollupEnabled": "false",
+        api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
+        headers = {
+            "Api-Key": api_key,
+            "Facilitynum": facility_num,
+            "Facilitycountrycode": facility_country,
+            "Wmt-Userid": wmt_userid
         }
 
         async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-            response = await client.get(f"{api_url}/get-summary", params=params, headers=headers)
+            response = await client.get(api_url, headers=headers)
             response.raise_for_status()
             data = response.json()
 
@@ -303,10 +300,11 @@ async def search_inventory(item_id: str, id_type: str = "ITEM_NUMBER", node: str
         error_msg = f"API Error {e.response.status_code}"
         if e.response.status_code == 404:
             error_msg = "Item not found. Please check the Item ID and try again."
+        elif e.response.status_code == 401:
+            error_msg = "Unauthorized: Check your MDM_API_KEY in .env"
         return f'''<div class="bg-red-50 p-4 rounded border-2 border-red-300 text-center">
-            <div class="text-red-700 font-bold text-lg">Item Not Found</div>
+            <div class="text-red-700 font-bold text-lg">API Error</div>
             <p class="text-red-600 text-sm mt-2">{error_msg}</p>
-            <p class="text-gray-500 text-xs mt-3">Try searching with a different Item ID</p>
         </div>'''
     except Exception as e:
         return f'''<div class="bg-red-50 p-4 rounded border-2 border-red-300 text-center">
@@ -919,6 +917,55 @@ def generate_pdf(item_data: dict) -> bytes:
     # Convert to bytes
     result = pdf.output(dest='S')
     return bytes(result) if isinstance(result, bytearray) else result
+
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    try:
+        from db import get_database_stats
+        stats = get_database_stats()
+        total = stats.get('total_rows', 0)
+        items = stats.get('unique_items', 0)
+        min_d = stats.get('min_date', 'N/A')
+        max_d = stats.get('max_date', 'N/A')
+    except Exception as e:
+        total = items = 'Error loading'
+        min_d = max_d = str(e)
+    
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodePuppy DAR - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-2xl mx-auto p-6">
+        <h1 class="text-3xl font-bold text-blue-600 mb-6">CodePuppy DAR - Admin</h1>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">Database Status</h2>
+            <table class="w-full text-sm">
+                <tr class="border-b"><td class="py-2 font-semibold">Total Rows:</td><td class="py-2 text-right text-blue-600 font-bold">{total}</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">Unique Items:</td><td class="py-2 text-right text-blue-600 font-bold">{items}</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">Min Date:</td><td class="py-2 text-right font-mono">{min_d}</td></tr>
+                <tr><td class="py-2 font-semibold">Max Date:</td><td class="py-2 text-right font-mono">{max_d}</td></tr>
+            </table>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">System Info</h2>
+            <p class="text-sm text-gray-600 mb-3">Database: SQLite (read_rates.db)</p>
+            <p class="text-sm text-gray-600 mb-3">API: MDM Item API (uwms-item.prod.us.walmart.net)</p>
+            <p class="text-sm text-gray-600">Auth: MDM_API_KEY in .env</p>
+        </div>
+        
+        <a href="/" class="inline-block px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Back to Search</a>
+    </div>
+</body>
+</html>"""
 
 
 if __name__ == "__main__":
