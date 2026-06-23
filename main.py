@@ -1097,15 +1097,27 @@ async def sync_bigquery():
         print(f"[SYNC] Step 7: Executing BigQuery query (may take 10-30 seconds)...")
         query_job = sync.client.query(query)
         results = query_job.result()
-        print("[OK] Results received from BigQuery")
+        print("[OK] Query executed")
         
-        print(f"[SYNC] Step 8: Processing and inserting rows...")
+        # Convert results to list to check length
+        results_list = list(results)
+        print(f"[IMPORTANT] BigQuery returned {len(results_list)} rows")
+        
+        if len(results_list) == 0:
+            print(f"[WARNING] NO ROWS returned from BigQuery!")
+            print(f"[WARNING] This means the 14 missing dates have NO data matching:")
+            print(f"[WARNING]   WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')")
+            print(f"[WARNING] The dates may only contain DPAL or LBSS pick types.")
+            conn.close()
+            return JSONResponse({"status": "success", "message": "BigQuery returned 0 rows (dates may only have DPAL/LBSS pick types)", "rows_appended": 0, "dates_synced": len(missing_dates)})
+        
+        print(f"[SYNC] Step 8: Processing and inserting {len(results_list)} rows...")
         inserted = 0
         total = 0
         duplicates = 0
         errors = 0
         
-        for row in results:
+        for row in results_list:
             total += 1
             
             # Print details of first row
