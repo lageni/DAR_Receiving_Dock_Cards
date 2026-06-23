@@ -488,7 +488,7 @@ def format_results(data: dict, item_id: str) -> str:
     # Get read rate metrics for performance display
     rates = load_read_rates()
     rate_data = rates.get(str(item_id), [])
-    perf_html = ""
+    right_html = "<div></div>"
     
     if rate_data and len(rate_data) > 0:
         avg_perf = get_avg_performance(rate_data)
@@ -496,7 +496,7 @@ def format_results(data: dict, item_id: str) -> str:
         color = get_color_for_performance(avg_perf)
         recommendation, rec_color, rec_bg = get_recommendation(avg_perf, trend_status)
         
-        perf_html = f'''<div class="bg-white p-4 rounded border">
+        right_html = f'''<div class="bg-white p-4 rounded border">
             <h2 class="text-2xl font-bold text-center text-blue-600 mb-4">ACL Performance %</h2>
             <div class="bg-gradient-to-br {rec_bg} p-6 rounded-lg border-2 shadow mb-4">
                 <div class="text-center">
@@ -532,18 +532,11 @@ def format_results(data: dict, item_id: str) -> str:
         </details>
     </div>"""
     
-    # Combine left and right columns
-    html = left_html
-    if perf_html:
-        # Return both columns wrapped in grid
-        return f'''<div id="results" class="space-y-3">
-            {left_html}
-        </div>
-        <div id="results-chart">
-            {perf_html}
-        </div>'''
-    
-    return left_html
+    # Return grid with both columns
+    return f'''<div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        {left_html}
+        {right_html}
+    </div>'''
 
 
 
