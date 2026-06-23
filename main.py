@@ -1085,52 +1085,62 @@ async def sync_bigquery():
             return JSONResponse({"status": "success", "message": "No missing dates", "rows_appended": 0, "dates_synced": 0})
         
         print(f"[SYNC] Step 6: Building BigQuery query...")
+        print(f"[DEBUG] Missing {len(missing_dates)} dates to sync: {missing_dates}")
         dates_list = "', '".join(missing_dates)
         query = f"""SELECT acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt
             FROM `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
             WHERE PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')
             AND acl_insert_date IN ('{dates_list}')"""
-        print("[OK] Query ready")
-        print(f"[DEBUG] Query: {query[:200]}...")
+        print("[OK] Query built with filter: PICK_TYPE_CODE NOT IN ('DPAL', 'LBSS')")
+        print(f"[DEBUG] Query: {query[:250]}...")
         
-        print(f"[SYNC] Step 7: Querying BigQuery (may take 10-30 seconds)...")
+        print(f"[SYNC] Step 7: Executing BigQuery query (may take 10-30 seconds)...")
         query_job = sync.client.query(query)
         results = query_job.result()
         print("[OK] Results received from BigQuery")
         
-        print(f"[SYNC] Step 8: Inserting rows...")
+        print(f"[SYNC] Step 8: Processing and inserting rows...")
         inserted = 0
         total = 0
-        first_row_printed = False
+        duplicates = 0
+        errors = 0
+        
         for row in results:
             total += 1
-            # Print first row for debugging
-            if not first_row_printed:
+            
+            # Print details of first row
+            if total == 1:
                 print(f"[DEBUG] First row from BigQuery:")
-                print(f"        acl_insert_date={row.acl_insert_date} (type: {type(row.acl_insert_date)})")
-                print(f"        mds_fam_id={row.mds_fam_id}")
-                print(f"        acl_event_cnt={row.acl_event_cnt}")
-                print(f"        acl_null_cnt={row.acl_null_cnt}")
-                first_row_printed = True
+                print(f"        acl_insert_date: {row.acl_insert_date}")
+                print(f"        mds_fam_id: {row.mds_fam_id}")
+                print(f"        acl_event_cnt: {row.acl_event_cnt}")
+                print(f"        acl_null_cnt: {row.acl_null_cnt}")
             
             try:
                 insert_sql = '''INSERT OR IGNORE INTO read_rates (acl_insert_date, mds_fam_id, acl_event_cnt, acl_null_cnt) VALUES (?, ?, ?, ?)'''
                 insert_values = (str(row.acl_insert_date), int(row.mds_fam_id) if row.mds_fam_id else 0, int(row.acl_event_cnt) if row.acl_event_cnt else 0, int(row.acl_null_cnt) if row.acl_null_cnt else 0)
                 cursor.execute(insert_sql, insert_values)
+                
                 if cursor.rowcount > 0:
                     inserted += 1
-                elif total == 1:
-                    print(f"[DEBUG] Row 1: cursor.rowcount = {cursor.rowcount} (0 = duplicate/ignored)")
-                if total % 100 == 0:
-                    print(f"     {total} processed, {inserted} new")
+                else:
+                    duplicates += 1
+                
+                if total % 500 == 0:
+                    print(f"     Processed {total} rows: {inserted} new, {duplicates} duplicates")
+            
             except Exception as e:
-                print(f"[ERROR] Row {total} INSERT failed: {str(e)}")
-                if total == 1:
-                    print(f"[DEBUG] Failed insert values: {insert_values}")
-                    print(f"[DEBUG] Failed insert SQL: {insert_sql}")
+                errors += 1
+                print(f"[ERROR] Row {total} failed: {str(e)}")
+                if errors <= 3:  # Only print first 3 errors
+                    print(f"        Values: {insert_values}")
         
-        print(f"[OK] BigQuery returned {total} total rows from {len(missing_dates)} missing dates")
-        print(f"[OK] Inserted {inserted} NEW rows to database")
+        print(f"\n[RESULTS]")
+        print(f"  BigQuery returned: {total} rows")
+        print(f"  Missing dates queried: {len(missing_dates)} dates ({missing_dates[0]} to {missing_dates[-1]})")
+        print(f"  Inserted: {inserted} NEW rows")
+        print(f"  Duplicates (already exist): {duplicates}")
+        print(f"  Errors: {errors}")
         
         print("[SYNC] Step 9: Committing...")
         conn.commit()
