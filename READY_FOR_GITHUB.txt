@@ -1,0 +1,56 @@
+LATEST UPDATES - READY FOR GITHUB PUSH
+======================================
+
+WHAT WAS JUST ADDED:
+====================
+
+1. ACL Directive Actions Ruleset Header
+   - Collapsible legend on main search page
+   - Shows all 4 directive actions with colors
+   - Clear criteria for each recommendation level
+   - Users can expand/collapse to see rules
+   - Marked as "Subject to Change"
+
+2. Recommendation Display on Print Card
+   - Print card HTML now includes recommendation
+   - Shows directive action with color-coded border
+   - Displayed prominently in the card details
+   - Will print with the physical card
+
+KNOWN ISSUES:
+=============
+
+1. Chart Not Displaying on Search Results
+   - Chart data IS being generated correctly
+   - Recommendation card DOES show (yellow "REQUIRES MANUAL INSPECTION")
+   - Metrics (80.5%, Declining) DO show
+   - But the Canvas/Chart.js visualization isn't rendering
+   - Likely timing issue with HTMX and Canvas initialization
+   - Workaround: Chart displays correctly on print card HTML
+   - TODO: Debug canvas rendering in HTMX response
+
+2. Print Card
+   - NOW includes recommendation display
+   - Image displays correctly
+   - All metrics show correctly
+   - Recommendation appears with color coding
+
+GITHUB PUSH READY:
+==================
+
+Code is clean, committed, and ready for GitHub:
+  https://github.com/dylanhoang11/DAR-Receiving-Frictions
+
+All features working except graph canvas rendering in search results.
+The recommendation system is fully functional and displays correctly.
+
+NEXT STEPS FOR GRAPH FIX:
+=========================
+
+The issue is likely:
+- HTMX injecting HTML after Canvas element creation
+- Chart.js initialization timing
+- Canvas element not in DOM when script runs
+- Possible fix: Move chart generation client-side or adjust HTMX response
+
+For now, push to GitHub - graph will be fixed in next iteration.
