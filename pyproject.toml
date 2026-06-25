@@ -10,11 +10,15 @@ dependencies = [
     "pydantic>=2.0.0",
     "httpx>=0.24.0",
     "fpdf2>=2.7.0",
+    "pyodbc>=5.0.0",
 ]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main", "db", "gcs_sync", "error_logger", "informix_connect"]
 
 [tool.uv]
 index-url = "https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple"
