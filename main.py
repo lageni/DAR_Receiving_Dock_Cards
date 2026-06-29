@@ -225,11 +225,11 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
         </div>
     </div>'''
     
-    return f'''<div class="mt-4 bg-white p-4 rounded border">
-        <h2 class="text-3xl font-black text-center text-blue-600 mb-4">ACL Performance %</h2>
+    return f'''<div class="mt-4 bg-white p-4 rounded border max-w-md mx-auto">
+        <h2 class="text-2xl font-bold text-center text-blue-600 mb-3">ACL Performance %</h2>
         {rec_card}
         {perf_card}
-        <div style="height: 400px; position: relative;">
+        <div style="height: 300px; position: relative; max-width: 400px; margin: 0 auto;">
             <canvas id="{chart_id}"></canvas>
         </div>
         <script>
@@ -491,15 +491,25 @@ def format_results(data: dict, item_id: str) -> str:
         image_html = f'<img src="{image_url}" alt="{item_name}" class="w-full h-auto object-cover rounded border mb-2">'
 
     # Simple item details - minimal styling
+    vnpk_len = item_data.get("vnpk_length", "")
+    vnpk_wid = item_data.get("vnpk_width", "")
+    vnpk_hgt = item_data.get("vnpk_height", "")
+    
     item_details = f'<div class="text-center space-y-1 text-xs text-gray-700"><p><strong>Item:</strong> {item_id}</p>'
-    if product_id:
-        item_details += f'<p><strong>Product ID:</strong> {product_id}</p>'
     if gtin:
         item_details += f'<p><strong>GTIN:</strong> {gtin}</p>'
     if catalog_gtin:
         item_details += f'<p><strong>Catalog GTIN:</strong> {catalog_gtin}</p>'
     if supplier_dept:
-        item_details += f'<p><strong>Supplier:</strong> {supplier_dept}</p>'
+        item_details += f'<p><strong>Dept #:</strong> {supplier_dept}</p>'
+    # Vendor Pack Dimensions
+    if vnpk_len or vnpk_wid or vnpk_hgt:
+        dims = []
+        dims.append(vnpk_len if vnpk_len else "--")
+        dims.append(vnpk_wid if vnpk_wid else "--")
+        dims.append(vnpk_hgt if vnpk_hgt else "--")
+        dims_str = " x ".join(dims)
+        item_details += f'<p><strong>Pack Dims (L x W x H):</strong> {dims_str}"</p>'
     item_details += '</div>'
 
     print_params = urlencode({
@@ -913,9 +923,14 @@ def generate_pdf(item_data: dict) -> bytes:
     img_width = 3.2  # Wider
     img_height = 3.8  # Taller
     
-    # Draw image border
+    # Draw image border with shadow effect
+    # Light shadow
+    pdf.set_draw_color(220, 220, 220)
+    pdf.set_line_width(0.01)
+    pdf.rect(img_x + 0.05, img_y + 0.05, img_width, img_height)
+    # Main border (Walmart Blue)
     pdf.set_draw_color(0, 83, 226)
-    pdf.set_line_width(0.02)
+    pdf.set_line_width(0.03)
     pdf.rect(img_x, img_y, img_width, img_height)
     
     if image_url:
@@ -947,14 +962,12 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.set_xy(content_x, current_y)
     
     details_text = f"Item: {item_id}"
-    if product_id:
-        details_text += f" | Product ID: {product_id}"
     if gtin:
         details_text += f" | GTIN: {gtin}"
     if catalog_gtin:
         details_text += f" | Catalog GTIN: {catalog_gtin}"
     if supplier_dept:
-        details_text += f" | Supplier: {supplier_dept}"
+        details_text += f" | Dept #: {supplier_dept}"
     
     # Add vendorpack dimensions if available
     dimensions_text = ""
@@ -1020,19 +1033,15 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.set_line_width(0.05)  # Thicker border
     pdf.rect(content_x, current_y, 6.5, 0.7, style='FD')
     
-    # Title - small, gray
-    pdf.set_xy(content_x + 0.1, current_y + 0.08)
-    pdf.set_font("Helvetica", "B", 7.5)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(6.3, 0.1, "ACL DIRECTIVE ACTION (Subject to Change)", align='C')
+    # No title - just the action
     
-    # Recommendation text - LARGE and BOLD matching web page
-    pdf.set_xy(content_x + 0.1, current_y + 0.28)
-    pdf.set_font("Helvetica", "B", 18)  # Bigger!
+    # Recommendation text - LARGE and BOLD, centered in box
+    pdf.set_xy(content_x + 0.1, current_y + 0.15)
+    pdf.set_font("Helvetica", "B", 16)  # Large bold text
     pdf.set_text_color(colors["text"][0], colors["text"][1], colors["text"][2])
     pdf.cell(6.3, 0.35, recommendation, align='C')
     
-    current_y = current_y + 0.85
+    current_y = current_y + 0.8
     
     # Move to bottom-left quadrant for ACL Performance section
     # Use a fixed position in the lower-left area only
@@ -1392,7 +1401,19 @@ async def admin_page():
             <p class="text-sm text-gray-600">Auth: MDM_API_KEY in .env</p>
         </div>
         
-        <a href="/" class="inline-block px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Back to Search</a>
+        <div class="bg-blue-50 border-l-4 border-blue-600 p-4 mb-6 rounded">
+            <h3 class="font-bold text-blue-900 mb-2">Developer Tips</h3>
+            <ul class="text-sm text-blue-800 space-y-1">
+                <li>Press F12 to open Browser Console → Check [EXTRACT] logs</li>
+                <li>Network tab → See MDM API responses in real-time</li>
+                <li>See <strong>BROWSER_CONSOLE_DEBUGGING.md</strong> in the repo for detailed guide</li>
+            </ul>
+        </div>
+        
+        <div class="flex gap-3">
+            <a href="/diagnostics/informix" class="inline-block px-4 py-2 bg-orange-600 text-white rounded font-semibold hover:bg-orange-700">Informix Connection Test</a>
+            <a href="/" class="inline-block px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Back to Search</a>
+        </div>
     </div>
     
     <script>
