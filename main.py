@@ -568,6 +568,13 @@ def extract_item_data(data: dict) -> dict:
     # Debug: Show what's in the response
     if isinstance(data, dict):
         print(f"[EXTRACT] MDM response keys: {list(data.keys())}")
+        # Log dcProperties structure if present
+        if "dcProperties" in data and isinstance(data["dcProperties"], dict):
+            dc_keys = list(data["dcProperties"].keys())
+            print(f"[EXTRACT] dcProperties keys: {dc_keys}")
+            if "supplyItem" in data["dcProperties"]:
+                si_keys = list(data["dcProperties"]["supplyItem"].keys())
+                print(f"[EXTRACT] supplyItem keys: {si_keys}")
     
     # MDM API response structure
     if isinstance(data, dict):
