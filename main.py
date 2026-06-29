@@ -18,9 +18,22 @@ app = FastAPI(title="CodePuppy DAR")
 
 # Get database path from .env or default to local
 def get_database_path():
-    db_path = os.getenv("DATABASE_PATH", "read_rates.db")
-    if not os.path.isabs(db_path):
+    """Get read_rates.db path from .env (DATABASE_PATH) or use default.
+    
+    Priority:
+    1. DATABASE_PATH from .env (absolute or relative)
+    2. Default: read_rates.db in same directory as app
+    """
+    db_path = os.getenv("DATABASE_PATH", "").strip()
+    
+    if not db_path:
+        # Default to local directory
+        db_path = str(Path(__file__).parent / "read_rates.db")
+    elif not os.path.isabs(db_path):
+        # Relative path - make it absolute from app directory
         db_path = str(Path(__file__).parent / db_path)
+    # else: absolute path, use as-is
+    
     return db_path
 
 # Cache for read rates data
@@ -467,6 +480,9 @@ def format_results(data: dict, item_id: str) -> str:
     gtin = item_data["gtin"]
     catalog_gtin = item_data.get("catalog_gtin", "")
     print(f"[PRINT-CARD] Item {item_id}: catalog_gtin='{catalog_gtin}'")
+    
+    # Load read rates for dropdown table
+    rates = load_read_rates()
     product_id = item_data["product_id"]
     supplier_dept = item_data["supplier_dept"]
 
@@ -1385,6 +1401,86 @@ async def admin_page():
     </script>
 </body>
 </html>"""
+
+
+@app.get("/diagnostics/informix", response_class=HTMLResponse)
+async def informix_diagnostics():
+    """Informix connection diagnostics page - NOT YET INTEGRATED"""
+    from informix_connect import InformixConnection
+    import os
+    
+    # Get credentials from .env
+    host = os.getenv("INFORMIX_HOST", "NOT SET")
+    server = os.getenv("INFORMIX_SERVER", "NOT SET")
+    port = os.getenv("INFORMIX_PORT", "NOT SET")
+    database = os.getenv("INFORMIX_DATABASE", "NOT SET")
+    user = os.getenv("INFORMIX_USER", "NOT SET")
+    
+    # Test connection
+    connection_status = "Not Tested"
+    status_color = "gray"
+    error_msg = ""
+    
+    try:
+        conn = InformixConnection()
+        conn.connect()
+        connection_status = "Connected"
+        status_color = "green"
+        conn.disconnect()
+    except Exception as e:
+        connection_status = "Failed"
+        status_color = "red"
+        error_msg = str(e)[:200]  # First 200 chars
+    
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informix Diagnostics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-3xl mx-auto p-6">
+        <h1 class="text-3xl font-bold text-blue-600 mb-6">Informix Connection Diagnostics</h1>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">Connection Status</h2>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-4 h-4 rounded-full bg-{status_color}-500"></div>
+                <span class="text-lg font-semibold text-{status_color}-600">{connection_status}</span>
+            </div>
+            {f'<div class="bg-red-50 border border-red-300 rounded p-4 mt-4"><p class="text-red-800 text-sm font-mono">{error_msg}</p></div>' if error_msg else ''}
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">Configuration</h2>
+            <table class="w-full text-sm">
+                <tr class="border-b"><td class="py-2 font-semibold">Host:</td><td class="py-2 font-mono text-gray-700">{host}</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">Server:</td><td class="py-2 font-mono text-gray-700">{server}</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">Port:</td><td class="py-2 font-mono text-gray-700">{port}</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">Database:</td><td class="py-2 font-mono text-gray-700">{database}</td></tr>
+                <tr><td class="py-2 font-semibold">User:</td><td class="py-2 font-mono text-gray-700">{user}</td></tr>
+            </table>
+        </div>
+        
+        <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-6 mb-6">
+            <h3 class="font-bold text-yellow-900 mb-2">Status: NOT YET INTEGRATED</h3>
+            <p class="text-sm text-yellow-800">This page is for testing Informix connections only. Integration with the search results is not yet active.</p>
+            <p class="text-sm text-yellow-800 mt-2">Requires system sqlhosts configuration to connect.</p>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">Test Query (When Connected)</h2>
+            <p class="text-sm text-gray-600 mb-3">Query: <span class="font-mono bg-gray-100 px-2 py-1">SELECT * FROM rdc_db:informix.po_line LIMIT 10</span></p>
+            <p class="text-sm text-gray-600">Status: Pending</p>
+        </div>
+        
+        <a href="/admin" class="inline-block px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Back to Admin</a>
+    </div>
+</body>
+</html>
+    """
 
 
 if __name__ == "__main__":
