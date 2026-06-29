@@ -553,14 +553,17 @@ def format_results(data: dict, item_id: str) -> str:
             read_rate_table_html += f'<tr><td class="border p-1">{rec["date"]}</td><td class="border p-1 text-right">{rec["event_cnt"]}</td><td class="border p-1 text-right">{rec["null_cnt"]}</td><td class="border p-1 text-right">{rec["null_pct"]:.1f}%</td></tr>'
         read_rate_table_html += '</tbody></table>'
     
-    # Build casepack type card if available
+    # Build casepack type card if available (moved to right section with graph)
     casepack_card = ""
     if casepack_type:
         casepack_color = "#0ea5e9" if "CASEPACK" in casepack_type.upper() else "#ec4899"
         casepack_card = f'''<div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-300 shadow-lg text-center">
-            <div class="text-sm text-blue-700 font-bold uppercase tracking-widest">Pack Type</div>
-            <div class="text-4xl font-black mt-3" style="color: {casepack_color};">{casepack_type}</div>
+            <div class="text-4xl font-black" style="color: {casepack_color};">{casepack_type}</div>
         </div>'''
+    
+    # Add casepack card to right_html if available
+    if casepack_card:
+        right_html = right_html.replace('</div></div></div>', f'{casepack_card}</div></div></div>', 1)
     
     left_html = f"""<div class="space-y-3">
         <div class="bg-white p-3 rounded border">
@@ -569,7 +572,6 @@ def format_results(data: dict, item_id: str) -> str:
             {item_details}
             <div class="text-center mt-2">{print_card_html}</div>
         </div>
-        {casepack_card}
         {'<details class="bg-white p-3 rounded border cursor-pointer group"><summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">ACL Read Rate Data (Last 30 Days)</summary><div class="mt-2 pt-2 border-t overflow-auto max-h-48 text-xs">' + read_rate_table_html + '</div></details>' if read_rate_table_html else ''}
         <details class="bg-white p-3 rounded border cursor-pointer group">
             <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">Developer Info</summary>
@@ -1602,6 +1604,173 @@ async def informix_diagnostics():
 </body>
 </html>
     """
+
+
+# TESTING ENDPOINTS - Multi-item batch reporting (NOT PRODUCTION)
+@app.get("/batch/random", response_class=HTMLResponse)
+async def batch_random():
+    """Testing: Show 3 random items with consolidated info."""
+    from batch_report import get_random_items, get_item_read_rate_data
+    
+    # Get 3 random MDS_FAM_IDs
+    item_ids = get_random_items(count=3)
+    
+    if not item_ids:
+        return '<div class="p-6 text-red-600">Error: No items found in read_rates.db</div>'
+    
+    # Fetch MDM data and read rate data for each
+    items_data = []
+    
+    for item_id in item_ids:
+        try:
+            # Fetch from MDM API
+            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
+            api_key = os.getenv("MDM_API_KEY", "")
+            facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+            facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+            wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+            
+            headers = {
+                "Api-Key": api_key,
+                "Facilitynum": facility_num,
+                "Facilitycountrycode": facility_country,
+                "Wmt-Userid": wmt_userid
+            }
+            
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                response = await client.get(api_url, headers=headers)
+                response.raise_for_status()
+                mdm_data = response.json()
+                item_data = extract_item_data(mdm_data)
+                
+                # Get read rate data
+                rate_data_db = get_item_read_rate_data(item_id)
+                
+                items_data.append({
+                    "item_id": item_id,
+                    "mdm": mdm_data,
+                    "item_data": item_data,
+                    "read_rates": rate_data_db
+                })
+        except Exception as e:
+            print(f"[BATCH] Error fetching {item_id}: {str(e)}")
+            items_data.append({
+                "item_id": item_id,
+                "error": str(e)
+            })
+    
+    # Build HTML with 3 consolidated cards
+    cards_html = ""
+    for idx, item in enumerate(items_data, 1):
+        if "error" in item:
+            cards_html += f'<div class="bg-red-50 p-4 rounded border-2 border-red-300 mb-4"><p class="text-red-700">Item {item["item_id"]}: {item["error"]}</p></div>'
+            continue
+        
+        item_id = item["item_id"]
+        item_info = item["item_data"]
+        rate_db = item["read_rates"]
+        
+        image_html = f'<img src="{item_info["image_url"]}" class="w-full rounded border mb-2">' if item_info["image_url"] else ''
+        
+        cards_html += f'''<div class="bg-white p-4 rounded border shadow mb-6">
+            <h3 class="text-xl font-bold text-blue-600 mb-2">Item {idx}: {item_info["item_name"]}</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    {image_html}
+                    <p class="text-sm"><strong>Item #:</strong> {item_id}</p>
+                    <p class="text-sm"><strong>GTIN:</strong> {item_info["gtin"]}</p>
+                    <p class="text-sm"><strong>Pack Type:</strong> {item_info.get("casepack_type", "N/A")}</p>
+                    <p class="text-sm"><strong>Dims:</strong> {item_info.get("vnpk_length", "--")} x {item_info.get("vnpk_width", "--")} x {item_info.get("vnpk_height", "--")}"</p>
+                </div>
+                <div>
+                    <p class="text-sm"><strong>Read Rate Records:</strong> {rate_db["record_count"]}</p>
+                    <p class="text-sm"><strong>Department:</strong> {item_info["supplier_dept"]}</p>
+                    <p class="text-sm"><strong>Pack Ratio:</strong> {item_info.get("vendor_pack_qty", "--")}/{item_info.get("warehouse_pack_qty", "--")}</p>
+                </div>
+            </div>
+        </div>'''
+    
+    return f'''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Report - Testing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-6xl mx-auto p-6">
+        <h1 class="text-4xl font-bold text-blue-600 mb-2">Batch Report - Testing</h1>
+        <p class="text-sm text-gray-600 mb-6">Randomly selected 3 items from read_rates.db</p>
+        
+        <div class="mb-6 flex gap-3">
+            <a href="/batch/random" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Refresh (New 3 Items)</a>
+            <a href="/batch/pdf" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Download Multi-Page PDF</a>
+            <a href="/" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back to Search</a>
+        </div>
+        
+        <div class="yellow-box bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
+            <p class="text-yellow-800 text-sm"><strong>TESTING FEATURE:</strong> This batch report is under development. Data shown is from 3 random items. Use "Refresh" to get new items.</p>
+        </div>
+        
+        {cards_html}
+    </div>
+</body>
+</html>'''
+
+
+@app.get("/batch/pdf")
+async def batch_pdf():
+    """Download multi-page PDF with 3 random items."""
+    from batch_report import get_random_items
+    
+    item_ids = get_random_items(count=3)
+    if not item_ids:
+        return JSONResponse({"error": "No items found"}, status_code=500)
+    
+    pdf = FPDF(orientation='L', unit='in', format='Letter')
+    
+    for idx, item_id in enumerate(item_ids):
+        try:
+            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
+            api_key = os.getenv("MDM_API_KEY", "")
+            facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+            facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+            wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+            
+            headers = {
+                "Api-Key": api_key,
+                "Facilitynum": facility_num,
+                "Facilitycountrycode": facility_country,
+                "Wmt-Userid": wmt_userid
+            }
+            
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                response = await client.get(api_url, headers=headers)
+                response.raise_for_status()
+                mdm_data = response.json()
+                item_data = extract_item_data(mdm_data)
+                
+                # Generate PDF page for this item
+                pdf_bytes = generate_pdf(item_data)
+                # For multi-page: we'd need to merge PDFs here
+                # For now, just add as separate file note
+                
+                # Add page separator
+                if idx > 0:
+                    pdf.add_page()
+                    pdf.set_font("Helvetica", "", 12)
+                    pdf.cell(0, 0.5, f"--- Item {idx + 1}: {item_data.get('item_name', 'Unknown')} ---", align='C')
+        except Exception as e:
+            print(f"[BATCH-PDF] Error: {str(e)}")
+    
+    pdf_bytes = pdf.output()
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="batch_report.pdf"'}
+    )
 
 
 if __name__ == "__main__":
