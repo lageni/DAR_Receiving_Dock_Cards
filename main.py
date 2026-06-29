@@ -625,15 +625,33 @@ def extract_item_data(data: dict) -> dict:
                     item_data["supplier_dept"] = str(dept["number"])
         
         # Vendorpack dimensions (Length, Width, Height)
-        if "vendorPackageDimension" in data:
+        # Try multiple possible paths: vendorPackageDimension, dcProperties.supplyItem.tradeItems[0].dimensions, or productDefinition
+        if "vendorPackageDimension" in data and isinstance(data["vendorPackageDimension"], dict):
             vpk_dim = data["vendorPackageDimension"]
-            if isinstance(vpk_dim, dict):
-                if "VNPK_LENGTH" in vpk_dim:
-                    item_data["vnpk_length"] = str(vpk_dim["VNPK_LENGTH"])
-                if "VNPK_WIDTH" in vpk_dim:
-                    item_data["vnpk_width"] = str(vpk_dim["VNPK_WIDTH"])
-                if "VNPK_HEIGHT" in vpk_dim:
-                    item_data["vnpk_height"] = str(vpk_dim["VNPK_HEIGHT"])
+            if "VNPK_LENGTH" in vpk_dim:
+                item_data["vnpk_length"] = str(vpk_dim["VNPK_LENGTH"])
+            if "VNPK_WIDTH" in vpk_dim:
+                item_data["vnpk_width"] = str(vpk_dim["VNPK_WIDTH"])
+            if "VNPK_HEIGHT" in vpk_dim:
+                item_data["vnpk_height"] = str(vpk_dim["VNPK_HEIGHT"])
+        # Fallback: Try dcProperties > supplyItem > tradeItems[0] > dimensions
+        elif "dcProperties" in data and isinstance(data["dcProperties"], dict):
+            dc = data["dcProperties"]
+            if "supplyItem" in dc and isinstance(dc["supplyItem"], dict):
+                si = dc["supplyItem"]
+                if "tradeItems" in si and isinstance(si["tradeItems"], list) and len(si["tradeItems"]) > 0:
+                    ti = si["tradeItems"][0]
+                    if "dimensions" in ti and isinstance(ti["dimensions"], dict):
+                        dims = ti["dimensions"]
+                        # Map length, width, depth to our fields
+                        if "length" in dims:
+                            item_data["vnpk_length"] = str(dims["length"])
+                        if "width" in dims:
+                            item_data["vnpk_width"] = str(dims["width"])
+                        if "depth" in dims:
+                            item_data["vnpk_height"] = str(dims["depth"])
+                        elif "height" in dims:
+                            item_data["vnpk_height"] = str(dims["height"])
         
         # Status from status code
         if "status" in data:
