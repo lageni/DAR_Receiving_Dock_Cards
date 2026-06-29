@@ -1,6 +1,7 @@
 import os
 import json
 import csv
+import sqlite3
 from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
@@ -15,6 +16,13 @@ load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 app = FastAPI(title="CodePuppy DAR")
 
+# Get database path from .env or default to local
+def get_database_path():
+    db_path = os.getenv("DATABASE_PATH", "read_rates.db")
+    if not os.path.isabs(db_path):
+        db_path = str(Path(__file__).parent / db_path)
+    return db_path
+
 # Cache for read rates data
 _read_rates_cache = None
 
@@ -25,7 +33,6 @@ def load_read_rates():
     if _read_rates_cache is not None:
         return _read_rates_cache
     
-    import sqlite3
     db_path = get_database_path()
     
     if not Path(db_path).exists():
