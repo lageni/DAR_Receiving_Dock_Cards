@@ -507,6 +507,9 @@ def format_results(data: dict, item_id: str) -> str:
     vnpk_len = item_data.get("vnpk_length", "")
     vnpk_wid = item_data.get("vnpk_width", "")
     vnpk_hgt = item_data.get("vnpk_height", "")
+    casepack_type = item_data.get("casepack_type", "")
+    vendor_qty = item_data.get("vendor_pack_qty", "")
+    warehouse_qty = item_data.get("warehouse_pack_qty", "")
     
     item_details = f'<div class="text-center space-y-1 text-xs text-gray-700"><p><strong>Item:</strong> {item_id}</p>'
     if gtin:
@@ -515,6 +518,9 @@ def format_results(data: dict, item_id: str) -> str:
         item_details += f'<p><strong>Catalog GTIN:</strong> {catalog_gtin}</p>'
     if supplier_dept:
         item_details += f'<p><strong>Dept #:</strong> {supplier_dept}</p>'
+    # Vendor/Warehouse Pack Ratio
+    if vendor_qty and warehouse_qty:
+        item_details += f'<p><strong>Pack Ratio:</strong> {vendor_qty}/{warehouse_qty}</p>'
     # Vendor Pack Dimensions
     if vnpk_len or vnpk_wid or vnpk_hgt:
         dims = []
@@ -547,6 +553,15 @@ def format_results(data: dict, item_id: str) -> str:
             read_rate_table_html += f'<tr><td class="border p-1">{rec["date"]}</td><td class="border p-1 text-right">{rec["event_cnt"]}</td><td class="border p-1 text-right">{rec["null_cnt"]}</td><td class="border p-1 text-right">{rec["null_pct"]:.1f}%</td></tr>'
         read_rate_table_html += '</tbody></table>'
     
+    # Build casepack type card if available
+    casepack_card = ""
+    if casepack_type:
+        casepack_color = "#0ea5e9" if "CASEPACK" in casepack_type.upper() else "#ec4899"
+        casepack_card = f'''<div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-300 shadow-lg text-center">
+            <div class="text-sm text-blue-700 font-bold uppercase tracking-widest">Pack Type</div>
+            <div class="text-4xl font-black mt-3" style="color: {casepack_color};">{casepack_type}</div>
+        </div>'''
+    
     left_html = f"""<div class="space-y-3">
         <div class="bg-white p-3 rounded border">
             {image_html}
@@ -554,6 +569,7 @@ def format_results(data: dict, item_id: str) -> str:
             {item_details}
             <div class="text-center mt-2">{print_card_html}</div>
         </div>
+        {casepack_card}
         {'<details class="bg-white p-3 rounded border cursor-pointer group"><summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">ACL Read Rate Data (Last 30 Days)</summary><div class="mt-2 pt-2 border-t overflow-auto max-h-48 text-xs">' + read_rate_table_html + '</div></details>' if read_rate_table_html else ''}
         <details class="bg-white p-3 rounded border cursor-pointer group">
             <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">Developer Info</summary>
@@ -585,7 +601,10 @@ def extract_item_data(data: dict) -> dict:
         "inventory_status": "Unknown",
         "vnpk_length": "",
         "vnpk_width": "",
-        "vnpk_height": ""
+        "vnpk_height": "",
+        "casepack_type": "",
+        "vendor_pack_qty": "",
+        "warehouse_pack_qty": ""
     }
     
     # Debug: Show what's in the response
@@ -662,19 +681,29 @@ def extract_item_data(data: dict) -> dict:
             dc = data["dcProperties"]
             if "supplyItem" in dc and isinstance(dc["supplyItem"], dict):
                 si = dc["supplyItem"]
+                # Extract vendor/warehouse pack quantities
+                if "orderableQuantity" in si and isinstance(si["orderableQuantity"], dict):
+                    item_data["vendor_pack_qty"] = str(si["orderableQuantity"].get("amount", ""))
+                if "warehousePackQuantity" in si and isinstance(si["warehousePackQuantity"], dict):
+                    item_data["warehouse_pack_qty"] = str(si["warehousePackQuantity"].get("amount", ""))
+                
+                # Extract dimensions from tradeItems
                 if "tradeItems" in si and isinstance(si["tradeItems"], list) and len(si["tradeItems"]) > 0:
                     ti = si["tradeItems"][0]
                     if "dimensions" in ti and isinstance(ti["dimensions"], dict):
                         dims = ti["dimensions"]
-                        # Map length, width, depth to our fields
-                        if "length" in dims:
-                            item_data["vnpk_length"] = str(dims["length"])
+                        # CORRECT mapping: depth=length, width=width, height=height
+                        if "depth" in dims:
+                            item_data["vnpk_length"] = str(dims["depth"])
                         if "width" in dims:
                             item_data["vnpk_width"] = str(dims["width"])
-                        if "depth" in dims:
-                            item_data["vnpk_height"] = str(dims["depth"])
-                        elif "height" in dims:
+                        if "height" in dims:
                             item_data["vnpk_height"] = str(dims["height"])
+        
+        # Casepack type - from root level
+        if "supplierCasePackType" in data and isinstance(data["supplierCasePackType"], dict):
+            casepack = data["supplierCasePackType"]
+            item_data["casepack_type"] = casepack.get("description", "").strip()
         
         # Status from status code
         if "status" in data:
@@ -923,12 +952,15 @@ def generate_pdf(item_data: dict) -> bytes:
     vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
     vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
     vnpk_height = sanitize_for_pdf(item_data.get("vnpk_height", ""))
+    casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
+    vendor_qty = sanitize_for_pdf(item_data.get("vendor_pack_qty", ""))
+    warehouse_qty = sanitize_for_pdf(item_data.get("warehouse_pack_qty", ""))
     # Keep original item_id for dictionary lookup, use sanitized version for PDF display
     item_id_orig = item_data.get("item_id", "")
     item_id = sanitize_for_pdf(item_id_orig)
     
     # DEBUG: Log what we extracted
-    print(f"[PDF] Item {item_id_orig}: catalog_gtin='{catalog_gtin}', gtin='{gtin}'")
+    print(f"[PDF] Item {item_id_orig}: catalog_gtin='{catalog_gtin}', gtin='{gtin}', casepack='{casepack_type}'")
     
     # LEFT COLUMN: Product Image (larger)
     img_x = 0.4
@@ -982,6 +1014,15 @@ def generate_pdf(item_data: dict) -> bytes:
     if supplier_dept:
         details_text += f" | Dept #: {supplier_dept}"
     
+    # Add casepack type and pack ratio
+    pack_info_text = ""
+    if casepack_type:
+        pack_info_text = f"Pack Type: {casepack_type}"
+        if vendor_qty and warehouse_qty:
+            pack_info_text += f" | Pack Ratio: {vendor_qty}/{warehouse_qty}"
+    elif vendor_qty and warehouse_qty:
+        pack_info_text = f"Pack Ratio: {vendor_qty}/{warehouse_qty}"
+    
     # Add vendorpack dimensions if available
     dimensions_text = ""
     if vnpk_length or vnpk_width or vnpk_height:
@@ -994,7 +1035,15 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.multi_cell(6.5, 0.2, details_text, align='C')
     current_y = pdf.get_y() + 0.1
     
-    # Add vendorpack dimensions below details
+    # Add pack info below details
+    if pack_info_text:
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.multi_cell(6.5, 0.15, pack_info_text, align='C')
+        current_y = pdf.get_y() + 0.05
+    
+    # Add vendorpack dimensions below pack info
     if dimensions_text:
         pdf.set_xy(content_x, current_y)
         pdf.set_font("Helvetica", "", 8)
