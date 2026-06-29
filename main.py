@@ -20,44 +20,46 @@ _read_rates_cache = None
 
 
 def load_read_rates():
-    """Load read_rates.csv and cache it. Returns dict[mds_fam_id] -> list of records."""
+    """Load read rates from read_rates.db (SQLite). Returns dict[mds_fam_id] -> list of records."""
     global _read_rates_cache
     if _read_rates_cache is not None:
         return _read_rates_cache
     
-    csv_path = Path(__file__).parent / "read_rates.csv"
-    if not csv_path.exists():
+    import sqlite3
+    db_path = get_database_path()
+    
+    if not Path(db_path).exists():
+        print(f"[WARNING] Database not found at {db_path}")
         return {}
     
     rates_by_family = defaultdict(list)
     try:
-        with open(csv_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    mds_fam_id = row.get("MDS_FAM_ID", "").strip()
-                    ts_date = row.get("TS_DATE", "").strip()
-                    event_cnt = int(row.get("ACL_EVENT_CNT", 0))
-                    null_cnt = int(row.get("ACL_NULL_CNT", 0))
-                    
-                    if mds_fam_id and event_cnt > 0:
-                        null_pct = (null_cnt / event_cnt) * 100
-                        rates_by_family[mds_fam_id].append({
-                            "date": ts_date,
-                            "null_pct": null_pct,
-                            "event_cnt": event_cnt,
-                            "null_cnt": null_cnt
-                        })
-                except (ValueError, KeyError):
-                    pass
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
         
-        # Sort each family's records by date
-        for fam_id in rates_by_family:
-            rates_by_family[fam_id].sort(key=lambda x: x["date"])
+        # Query: get all rows grouped by mds_fam_id, sorted by date
+        cursor.execute("""
+            SELECT mds_fam_id, acl_insert_date, acl_event_cnt, acl_null_cnt
+            FROM read_rates
+            ORDER BY mds_fam_id, acl_insert_date
+        """)
         
+        for row in cursor.fetchall():
+            mds_fam_id, insert_date, event_cnt, null_cnt = row
+            if mds_fam_id and event_cnt and event_cnt > 0:
+                null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
+                rates_by_family[str(mds_fam_id)].append({
+                    "date": str(insert_date),
+                    "null_pct": null_pct,
+                    "event_cnt": event_cnt,
+                    "null_cnt": null_cnt
+                })
+        
+        conn.close()
         _read_rates_cache = rates_by_family
+        print(f"[INFO] Loaded {len(rates_by_family)} items from {db_path}")
     except Exception as e:
-        print(f"Error loading read_rates.csv: {e}")
+        print(f"[ERROR] Loading read_rates.db: {e}")
         _read_rates_cache = {}
     
     return _read_rates_cache
@@ -490,6 +492,15 @@ def format_results(data: dict, item_id: str) -> str:
     right_html = get_read_rate_chart(item_id)
 
     # LEFT column: Product image and details
+    # Build read rate table HTML
+    read_rate_table_html = ""
+    rate_data = rates.get(str(item_id), [])
+    if rate_data:
+        read_rate_table_html = '<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-100"><th class="border p-1 text-left">Date</th><th class="border p-1 text-right">Event Cnt</th><th class="border p-1 text-right">Null Cnt</th><th class="border p-1 text-right">Null %</th></tr></thead><tbody>'
+        for rec in rate_data[-30:]:  # Last 30 days
+            read_rate_table_html += f'<tr><td class="border p-1">{rec["date"]}</td><td class="border p-1 text-right">{rec["event_cnt"]}</td><td class="border p-1 text-right">{rec["null_cnt"]}</td><td class="border p-1 text-right">{rec["null_pct"]:.1f}%</td></tr>'
+        read_rate_table_html += '</tbody></table>'
+    
     left_html = f"""<div class="space-y-3">
         <div class="bg-white p-3 rounded border">
             {image_html}
@@ -497,6 +508,7 @@ def format_results(data: dict, item_id: str) -> str:
             {item_details}
             <div class="text-center mt-2">{print_card_html}</div>
         </div>
+        {'<details class="bg-white p-3 rounded border cursor-pointer group"><summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">ACL Read Rate Data (Last 30 Days)</summary><div class="mt-2 pt-2 border-t overflow-auto max-h-48 text-xs">' + read_rate_table_html + '</div></details>' if read_rate_table_html else ''}
         <details class="bg-white p-3 rounded border cursor-pointer group">
             <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">Developer Info</summary>
             <div class="mt-2 pt-2 border-t">
@@ -524,7 +536,10 @@ def extract_item_data(data: dict) -> dict:
         "catalog_gtin": "",
         "product_id": "",
         "supplier_dept": "",
-        "inventory_status": "Unknown"
+        "inventory_status": "Unknown",
+        "vnpk_length": "",
+        "vnpk_width": "",
+        "vnpk_height": ""
     }
     
     # Debug: Show what's in the response
@@ -551,11 +566,11 @@ def extract_item_data(data: dict) -> dict:
                 if isinstance(img_dim, dict):
                     item_data["image_url"] = img_dim.get("IMAGE_SIZE_450", "")
         
-        # GTIN - try consumable first, then orderable
-        if "consumableGTIN" in data:
-            item_data["gtin"] = data["consumableGTIN"]
-        elif "orderableGTIN" in data:
+        # GTIN - use orderableGTIN (not consumableGTIN which is UPC)
+        if "orderableGTIN" in data:
             item_data["gtin"] = data["orderableGTIN"]
+        elif "consumableGTIN" in data:
+            item_data["gtin"] = data["consumableGTIN"]
         
         # CatalogGTIN - dcProperties > supplyItem > catalogGTIN
         if "dcProperties" in data and isinstance(data["dcProperties"], dict):
@@ -578,6 +593,17 @@ def extract_item_data(data: dict) -> dict:
                 dept = supp["department"]
                 if isinstance(dept, dict) and "number" in dept:
                     item_data["supplier_dept"] = str(dept["number"])
+        
+        # Vendorpack dimensions (Length, Width, Height)
+        if "vendorPackageDimension" in data:
+            vpk_dim = data["vendorPackageDimension"]
+            if isinstance(vpk_dim, dict):
+                if "VNPK_LENGTH" in vpk_dim:
+                    item_data["vnpk_length"] = str(vpk_dim["VNPK_LENGTH"])
+                if "VNPK_WIDTH" in vpk_dim:
+                    item_data["vnpk_width"] = str(vpk_dim["VNPK_WIDTH"])
+                if "VNPK_HEIGHT" in vpk_dim:
+                    item_data["vnpk_height"] = str(vpk_dim["VNPK_HEIGHT"])
         
         # Status from status code
         if "status" in data:
@@ -823,6 +849,9 @@ def generate_pdf(item_data: dict) -> bytes:
     product_id = sanitize_for_pdf(item_data.get("product_id", ""))
     supplier_dept = sanitize_for_pdf(item_data.get("supplier_dept", ""))
     inventory_status = sanitize_for_pdf(item_data.get("inventory_status", "Unknown"))
+    vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
+    vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
+    vnpk_height = sanitize_for_pdf(item_data.get("vnpk_height", ""))
     # Keep original item_id for dictionary lookup, use sanitized version for PDF display
     item_id_orig = item_data.get("item_id", "")
     item_id = sanitize_for_pdf(item_id_orig)
@@ -879,8 +908,25 @@ def generate_pdf(item_data: dict) -> bytes:
     if supplier_dept:
         details_text += f" | Supplier: {supplier_dept}"
     
+    # Add vendorpack dimensions if available
+    dimensions_text = ""
+    if vnpk_length or vnpk_width or vnpk_height:
+        dims_list = []
+        dims_list.append(vnpk_length if vnpk_length else "--")
+        dims_list.append(vnpk_width if vnpk_width else "--")
+        dims_list.append(vnpk_height if vnpk_height else "--")
+        dimensions_text = "Vendor Pack Dims (L x W x H): " + " x ".join(dims_list)
+    
     pdf.multi_cell(6.5, 0.2, details_text, align='C')
-    current_y = current_y + 0.8
+    current_y = pdf.get_y() + 0.1
+    
+    # Add vendorpack dimensions below details
+    if dimensions_text:
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.multi_cell(6.5, 0.15, dimensions_text, align='C')
+        current_y = pdf.get_y() + 0.1
     
     # Add Directive Action card (in right column, below product details)
     rates = load_read_rates()
