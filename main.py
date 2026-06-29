@@ -337,6 +337,11 @@ async def root():
                     <div class="text-red-600">Performance < 50%</div>
                     <div class="text-xs text-gray-600 mt-1">Immediate action required</div>
                 </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">WORKSTATION: NON-CONVEYABLE</div>
+                    <div class="text-red-600">Length < 7" OR Width < 5" OR Height < 2"</div>
+                    <div class="text-xs text-gray-600 mt-1">Size-based constraint</div>
+                </div>
             </div>
             <div class="mt-3 text-xs text-gray-600 italic">Note: These rules are directive guidelines subject to change</div>
         </details>
@@ -544,14 +549,42 @@ def format_results(data: dict, item_id: str) -> str:
     right_html = get_read_rate_chart(item_id, vnpk_len, vnpk_wid, vnpk_hgt)
 
     # LEFT column: Product image and details
-    # Build read rate table HTML
+    # Build read rate table HTML with ALL schema columns
     read_rate_table_html = ""
-    rate_data = rates.get(str(item_id), [])
-    if rate_data:
-        read_rate_table_html = '<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-100"><th class="border p-1 text-left">Date</th><th class="border p-1 text-right">Event Cnt</th><th class="border p-1 text-right">Null Cnt</th><th class="border p-1 text-right">Null %</th></tr></thead><tbody>'
-        for rec in rate_data[-30:]:  # Last 30 days
-            read_rate_table_html += f'<tr><td class="border p-1">{rec["date"]}</td><td class="border p-1 text-right">{rec["event_cnt"]}</td><td class="border p-1 text-right">{rec["null_cnt"]}</td><td class="border p-1 text-right">{rec["null_pct"]:.1f}%</td></tr>'
-        read_rate_table_html += '</tbody></table>'
+    try:
+        db_path = get_database_path()
+        conn_db = sqlite3.connect(db_path)
+        cursor_db = conn_db.cursor()
+        cursor_db.execute("""
+            SELECT id, acl_insert_date, ts_date, mds_fam_id, item1_desc,
+                   pick_type_code, slot_id, vnpk_gtin_t,
+                   acl_event_cnt, acl_null_cnt, acl_bypass_cnt,
+                   good_read_cnt_null, good_read_cnt_bypass,
+                   item_num_read_cnt_null, item_num_read_cnt_bypass, created_at
+            FROM read_rates
+            WHERE mds_fam_id = ?
+            ORDER BY ts_date DESC
+            LIMIT 30
+        """, (str(item_id),))
+        rows = cursor_db.fetchall()
+        conn_db.close()
+        
+        if rows:
+            # Build header
+            cols = ['ID', 'Insert Date', 'TS Date', 'MDS Family', 'Item Desc', 'Pick Type', 'Slot', 'VNPK GTIN', 'Events', 'Nulls', 'Bypass', 'Good Read Null', 'Good Read Bypass', 'Item# Null', 'Item# Bypass', 'Created']
+            read_rate_table_html = '<div class="overflow-x-auto"><table class="terder-collapse bg-white"><thead><tr class="bg-gray-200">'
+            for col in cols:
+                read_rate_table_html += f'<th class="border p-1 text-left">{col}</th>'
+            read_rate_table_html += '</tr></thead><tbody>'
+            # Add rows
+            for row in rows:
+                read_rate_table_html += '<tr class="hover:bg-gray-50">'
+                for val in row:
+                    read_rate_table_html += f'<td class="border p-1 text-xs">{val if val is not None else "-"}</td>'
+                read_rate_table_html += '</tr>'
+            read_rate_table_html += '</tbody></table></div>'
+    except Exception as e:
+        read_rate_table_html = f'<p class="text-red-600 text-xs">Error loading data: {str(e)[:100]}</p>'
     
     # Build casepack type card if available (moved to right section with graph)
     casepack_card = ""
@@ -572,7 +605,7 @@ def format_results(data: dict, item_id: str) -> str:
             {item_details}
             <div class="text-center mt-2">{print_card_html}</div>
         </div>
-        {'<details class="bg-white p-3 rounded border cursor-pointer group"><summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">ACL Read Rate Data (Last 30 Days)</summary><div class="mt-2 pt-2 border-t overflow-auto max-h-48 text-xs">' + read_rate_table_html + '</div></details>' if read_rate_table_html else ''}
+        {'<details class="bg-white p-3 rounded border cursor-pointer group"><summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">ACL Read Rate Data (Last 30 Days - All Columns)</summary><div class="mt-2 pt-2 border-t w-full">' + read_rate_table_html + '</div></details>' if read_rate_table_html else ''}
         <details class="bg-white p-3 rounded border cursor-pointer group">
             <summary class="font-semibold text-xs text-gray-600 hover:text-gray-900 select-none">Developer Info</summary>
             <div class="mt-2 pt-2 border-t">
@@ -1539,6 +1572,19 @@ async def informix_diagnostics():
     status_color = "gray"
     error_msg = ""
     
+    # Check pyodbc first
+    try:
+        import pyodbc
+        pyodbc_available = True
+        pyodbc_version = pyodbc.__version__
+        odbc_drivers = pyodbc.drivers()
+        odbc_driver_found = "IBM INFORMIX" in str(odbc_drivers) or "Informix" in str(odbc_drivers)
+    except ImportError:
+        pyodbc_available = False
+        pyodbc_version = "NOT INSTALLED"
+        odbc_drivers = []
+        odbc_driver_found = False
+    
     try:
         from informix_connect import InformixConnection
         conn = InformixConnection()
@@ -1574,6 +1620,15 @@ async def informix_diagnostics():
                 <span class="text-lg font-semibold text-{status_color}-600">{connection_status}</span>
             </div>
             {f'<div class="bg-red-50 border border-red-300 rounded p-4 mt-4"><p class="text-red-800 text-sm font-mono">{error_msg}</p></div>' if error_msg else ''}
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">PyODBC & Driver Status</h2>
+            <table class="w-full text-sm">
+                <tr class="border-b"><td class="py-2 font-semibold">PyODBC Installed:</td><td class="py-2"><span class="{'text-green-600 font-semibold' if pyodbc_available else 'text-red-600 font-semibold'}">{pyodbc_version}</span></td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">ODBC Driver Found:</td><td class="py-2"><span class="{'text-green-600 font-semibold' if odbc_driver_found else 'text-red-600 font-semibold'}">{"YES - IBM INFORMIX" if odbc_driver_found else "NO - Need to install ODBC driver"}</span></td></tr>
+                <tr><td class="py-2 font-semibold">Available Drivers:</td><td class="py-2 font-mono text-xs">{str(odbc_drivers)[:200] if odbc_drivers else "None detected"}</td></tr>
+            </table>
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
