@@ -149,17 +149,21 @@ def get_color_for_performance(pct: float) -> str:
         return "#16a34a"  # Green
 
 
+def check_non_conveyable(length: str, width: str, height: str) -> tuple:
+    """Check if item is non-conveyable based on dimensions."""
+    try:
+        length_val = float(length) if length else 999
+        width_val = float(width) if width else 999
+        height_val = float(height) if height else 999
+        
+        if length_val < 7 or width_val < 5 or height_val < 2:
+            return True, "WORKSTATION: NON-CONVEYABLE", "#dc2626"
+    except (ValueError, TypeError):
+        pass
+    return False, "", ""
+
 def get_recommendation(avg_perf: float, trend_status: str) -> tuple:
-    """Get ACL recommendation based on performance and trend.
-    
-    Returns: (recommendation_text, color_class, bg_color_class)
-    
-    Rules (subject to change):
-    - > 85%: ACL APPROVED (green)
-    - < 85% and Improving: ADEQUATE PERFORMANCE (yellow)
-    - < 85% and Declining: REQUIRES MANUAL INSPECTION (yellow)
-    - < 50%: WORKSTATION RECOMMENDED (red)
-    """
+    """Get ACL recommendation based on performance and trend."""
     if avg_perf >= 85:
         return "ACL APPROVED", "#16a34a", "from-green-50 via-green-50 to-green-100 border-green-300"
     elif avg_perf < 50:
@@ -167,12 +171,22 @@ def get_recommendation(avg_perf: float, trend_status: str) -> tuple:
     elif avg_perf < 85:
         if trend_status == "Improving":
             return "ADEQUATE PERFORMANCE", "#eab308", "from-yellow-50 via-yellow-50 to-yellow-100 border-yellow-300"
-        else:  # Declining or Consistent
+        else:
             return "REQUIRES MANUAL INSPECTION", "#eab308", "from-yellow-50 via-yellow-50 to-yellow-100 border-yellow-300"
     return "UNKNOWN", "#6b7280", "from-gray-50 via-gray-50 to-gray-100 border-gray-300"
 
-def get_read_rate_chart(mds_fam_id: str) -> str:
-    """Generate Chart.js HTML for read rate trend from read_rates.db"""
+def get_read_rate_chart(mds_fam_id: str, length: str = "", width: str = "", height: str = "") -> str:
+    """Generate Chart.js HTML for read rate trend from read_rates.db."""
+    is_non_convey, non_convey_text, _ = check_non_conveyable(length, width, height)
+    if is_non_convey:
+        print(f"[RECOMMENDATION] Item {mds_fam_id}: {non_convey_text}")
+        return f'''<div class="mt-4 bg-white p-4 rounded border max-w-md mx-auto">
+            <h2 class="text-2xl font-bold text-center text-blue-600 mb-3">ACL Performance %</h2>
+            <div class="bg-red-50 border-2 border-red-300 p-6 rounded-xl text-center shadow-lg">
+                <div class="text-3xl font-black text-red-600">{non_convey_text}</div>
+            </div>
+        </div>'''
+    
     rates = load_read_rates()
     data = rates.get(str(mds_fam_id), [])
     
@@ -221,7 +235,6 @@ def get_read_rate_chart(mds_fam_id: str) -> str:
     rec_card = f'''<div class="bg-gradient-to-br {rec_bg} p-8 rounded-xl border-2 shadow-lg mb-4">
         <div class="text-center">
             <div class="text-5xl font-black" style="color: {rec_color};">{recommendation}</div>
-            <div class="text-xs text-gray-600 mt-2 italic">Directive Action (Subject to Change)</div>
         </div>
     </div>'''
     
@@ -522,7 +535,7 @@ def format_results(data: dict, item_id: str) -> str:
     print_card_html = f'<a href="/print-card-pdf?{print_params}" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white text-sm rounded font-semibold hover:bg-green-700">Download PDF</a>'
     
     # Get the full chart/metrics/recommendation display
-    right_html = get_read_rate_chart(item_id)
+    right_html = get_read_rate_chart(item_id, vnpk_len, vnpk_wid, vnpk_hgt)
 
     # LEFT column: Product image and details
     # Build read rate table HTML
@@ -1353,6 +1366,9 @@ async def sync_bigquery():
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page():
+    # Get database path from configuration
+    db_path = get_database_path()
+    
     try:
         from db import get_database_stats
         stats = get_database_stats()
@@ -1395,10 +1411,16 @@ async def admin_page():
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
             <h2 class="text-xl font-bold mb-4">System Info</h2>
-            <p class="text-sm text-gray-600 mb-3">Database: SQLite (read_rates.db)</p>
-            <p class="text-sm text-gray-600 mb-3">API: MDM Item API (uwms-item.prod.us.walmart.net)</p>
-            <p class="text-sm text-gray-600 mb-3">BigQuery: wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE</p>
-            <p class="text-sm text-gray-600">Auth: MDM_API_KEY in .env</p>
+            <table class="w-full text-sm">
+                <tr class="border-b"><td class="py-2 font-semibold">Database Path:</td><td class="py-2 text-right font-mono text-blue-600">{db_path}</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">Database Type:</td><td class="py-2 text-right">SQLite (read_rates.db)</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">API:</td><td class="py-2 text-right">MDM Item API</td></tr>
+                <tr class="border-b"><td class="py-2 font-semibold">BigQuery:</td><td class="py-2 text-right font-mono text-sm">ACL_READ_RATE</td></tr>
+                <tr><td class="py-2 font-semibold">Auth Method:</td><td class="py-2 text-right">MDM_API_KEY (.env)</td></tr>
+            </table>
+            <div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+                <p class="text-xs text-blue-700"><strong>To change database path:</strong> Set <code>DATABASE_PATH</code> in .env (relative or absolute path)</p>
+            </div>
         </div>
         
         <div class="bg-blue-50 border-l-4 border-blue-600 p-4 mb-6 rounded">
@@ -1452,7 +1474,6 @@ async def admin_page():
 @app.get("/diagnostics/informix", response_class=HTMLResponse)
 async def informix_diagnostics():
     """Informix connection diagnostics page - NOT YET INTEGRATED"""
-    from informix_connect import InformixConnection
     import os
     
     # Get credentials from .env
@@ -1468,11 +1489,16 @@ async def informix_diagnostics():
     error_msg = ""
     
     try:
+        from informix_connect import InformixConnection
         conn = InformixConnection()
         conn.connect()
         connection_status = "Connected"
         status_color = "green"
         conn.disconnect()
+    except ImportError as ie:
+        connection_status = "Import Error"
+        status_color = "yellow"
+        error_msg = f"Module error: {str(ie)[:150]}"
     except Exception as e:
         connection_status = "Failed"
         status_color = "red"
