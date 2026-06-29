@@ -21,27 +21,52 @@ class InformixConnection:
         self.conn = None
     
     def connect(self):
-        """Establish connection to Informix"""
+        """Establish connection to Informix using ODBC.
+        
+        Connection string format based on VBA script:
+        Driver={IBM INFORMIX ODBC DRIVER};Host=dsinfmx.s06068.us.wal-mart.com;Server=dsinfmx;
+        Service=sqlexec;Protocol=onsoctcp;Database=ep2;UID=user;PWD=pass;
+        """
         try:
-            # Informix connection string for pyodbc
-            # Format: DRIVER={driver};SERVER=server;HOST=host;PORT=port;DATABASE=db;USER=user;PASSWORD=pwd;
+            # Detect 64-bit Python for driver selection
+            import struct
+            is_64bit = struct.calcsize("P") == 8
+            driver_name = "IBM INFORMIX ODBC DRIVER (64-bit)" if is_64bit else "IBM INFORMIX ODBC DRIVER"
+            
+            # Build connection string matching VBA format
+            # CRITICAL: Service=sqlexec is required!
             conn_str = (
-                f"DRIVER={{IBM INFORMIX ODBC DRIVER}};"
-                f"SERVER={self.server};"
-                f"HOST={self.host};"
-                f"PORT={self.port};"
-                f"DATABASE={self.database};"
-                f"USER={self.user};"
-                f"PASSWORD={self.password};"
+                f"DRIVER={{{driver_name}}};"
+                f"Host={self.host};"
+                f"Server={self.server};"
+                f"Service=sqlexec;"
+                f"Protocol=onsoctcp;"
+                f"Database={self.database};"
+                f"UID={self.user};"
+                f"PWD={self.password};"
             )
             
-            print(f"[INFO] Connecting to Informix: {self.host}:{self.port}/{self.database}")
+            print(f"[INFO] Informix Connection Details:")
+            print(f"      Driver: {driver_name}")
+            print(f"      Host: {self.host}")
+            print(f"      Server: {self.server}")
+            print(f"      Database: {self.database}")
+            print(f"      Attempting connection...")
+            
             self.conn = pyodbc.connect(conn_str, autocommit=True)
-            print("[SUCCESS] Connected to Informix!")
+            print(f"[SUCCESS] Connected to Informix {self.database}!")
             return self.conn
         
+        except ImportError as ie:
+            print(f"[ERROR] pyodbc not installed: {str(ie)}")
+            print(f"[HELP] Run: pip install pyodbc")
+            raise
+        except pyodbc.Error as oe:
+            print(f"[ERROR] ODBC/Informix error: {str(oe)}")
+            print(f"[DEBUG] Connection string: DRIVER={{{driver_name}}};Host={self.host};Server={self.server}")
+            raise
         except Exception as e:
-            print(f"[ERROR] Informix connection failed: {str(e)}")
+            print(f"[ERROR] Connection failed: {str(e)}")
             raise
     
     def disconnect(self):

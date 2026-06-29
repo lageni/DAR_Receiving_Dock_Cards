@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
 from collections import defaultdict
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response, JSONResponse
 import httpx
 from fpdf import FPDF
@@ -353,6 +353,7 @@ async def root():
                 <input type="hidden" name="node" value="6068">
                 <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded font-semibold text-sm hover:bg-blue-700">Search</button>
                 <button type="button" onclick="loadExample()" class="bg-gray-300 text-gray-800 px-4 py-2 rounded font-semibold text-sm hover:bg-gray-400">Example</button>
+                <a href="/batch/random" class="inline-block bg-orange-500 text-white px-4 py-2 rounded font-semibold text-sm hover:bg-orange-600">🧪 Batch Test (3 Random)</a>
             </form>
         </div>
         
@@ -586,17 +587,13 @@ def format_results(data: dict, item_id: str) -> str:
     except Exception as e:
         read_rate_table_html = f'<p class="text-red-600 text-xs">Error loading data: {str(e)[:100]}</p>'
     
-    # Build casepack type card if available (moved to right section with graph)
-    casepack_card = ""
+    # Build casepack type card if available (will add to right section)
+    casepack_card_html = ""
     if casepack_type:
         casepack_color = "#0ea5e9" if "CASEPACK" in casepack_type.upper() else "#ec4899"
-        casepack_card = f'''<div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-300 shadow-lg text-center">
+        casepack_card_html = f'''<div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-300 shadow-lg text-center mt-3">
             <div class="text-4xl font-black" style="color: {casepack_color};">{casepack_type}</div>
         </div>'''
-    
-    # Add casepack card to right_html if available
-    if casepack_card:
-        right_html = right_html.replace('</div></div></div>', f'{casepack_card}</div></div></div>', 1)
     
     left_html = f"""<div class="space-y-3">
         <div class="bg-white p-3 rounded border">
@@ -617,7 +614,10 @@ def format_results(data: dict, item_id: str) -> str:
     # Return grid with both columns
     return f'''<div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
         {left_html}
-        {right_html}
+        <div class="space-y-3">
+            {right_html}
+            {casepack_card_html}
+        </div>
     </div>'''
 
 
@@ -1298,6 +1298,47 @@ def generate_pdf(item_data: dict) -> bytes:
 
 
 
+@app.post("/api/admin/set-database-path")
+async def set_database_path(request: Request):
+    """Update the DATABASE_PATH in .env file."""
+    try:
+        # Get path from JSON body
+        body = await request.json()
+        new_path = body.get("path")
+        
+        if not new_path:
+            return JSONResponse({"status": "error", "message": "No path provided"}, status_code=400)
+        
+        # Update .env file
+        env_path = Path(".env")
+        env_content = ""
+        
+        # Read existing .env
+        if env_path.exists():
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    if not line.startswith("DATABASE_PATH="):
+                        env_content += line
+        
+        # Add/update DATABASE_PATH
+        env_content += f"DATABASE_PATH={new_path}\n"
+        
+        # Write back
+        with open(env_path, "w") as f:
+            f.write(env_content)
+        
+        # Update .env in current process
+        os.environ["DATABASE_PATH"] = new_path
+        
+        print(f"[ADMIN] Database path updated to: {new_path}")
+        return JSONResponse({"status": "success", "message": f"Database path set to {new_path}", "path": new_path})
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to update database path: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
 @app.post("/api/admin/sync-bigquery")
 async def sync_bigquery():
     print("\n" + "="*70)
@@ -1487,6 +1528,17 @@ async def admin_page():
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">Database Path Settings</h2>
+            <p class="text-sm text-gray-600 mb-3">Current path: <span class="font-mono bg-gray-100 px-2 py-1 text-blue-600">{db_path}</span></p>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="newDbPath" placeholder="Enter new database path (relative or absolute)" class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500" />
+                <button onclick="updateDatabasePath()" class="px-4 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Update Path</button>
+            </div>
+            <div id="path-status" class="text-sm hidden"></div>
+            <p class="text-xs text-gray-500 mt-2">Examples: <code>read_rates.db</code> or <code>/path/to/db/read_rates.db</code></p>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg border shadow mb-6">
             <h2 class="text-xl font-bold mb-4">BigQuery Sync</h2>
             <p class="text-sm text-gray-600 mb-4">Synchronize missing dates from Google BigQuery ACL_READ_RATE table</p>
             <button onclick="syncBigQuery()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Sync Missing Dates from BigQuery</button>
@@ -1523,6 +1575,40 @@ async def admin_page():
     </div>
     
     <script>
+        async function updateDatabasePath() {{
+            const pathInput = document.getElementById('newDbPath');
+            const newPath = pathInput.value.trim();
+            const statusDiv = document.getElementById('path-status');
+            
+            if (!newPath) {{
+                statusDiv.classList.remove('hidden');
+                statusDiv.innerHTML = '<div class="text-red-600">Please enter a path</div>';
+                return;
+            }}
+            
+            statusDiv.classList.remove('hidden');
+            statusDiv.innerHTML = '<div class="text-blue-600">Updating...</div>';
+            
+            try {{
+                const response = await fetch('/api/admin/set-database-path', {{\n                    method: 'POST',\n                    headers: {{'Content-Type': 'application/json'}},\n                    body: JSON.stringify({{path: newPath}})\n                }});
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {{
+                    statusDiv.innerHTML = `<div class="text-green-600 font-semibold">✓ Database path updated to: <code class="bg-gray-100 px-2">${{newPath}}</code></div>
+                        <p class="text-sm text-gray-600 mt-2">Refresh the page to see the updated path.</p>`;
+                    pathInput.value = '';
+                    setTimeout(() => {{
+                        location.reload();
+                    }}, 2000);
+                }} else {{
+                    statusDiv.innerHTML = `<div class="text-red-600">✗ Error: ${{result.message}}</div>`;
+                }}
+            }} catch (err) {{
+                statusDiv.innerHTML = `<div class="text-red-600">✗ Error: ${{err.message}}</div>`;
+            }}
+        }}
+        
         async function syncBigQuery() {{
             const statusDiv = document.getElementById('sync-status');
             statusDiv.classList.remove('hidden');
