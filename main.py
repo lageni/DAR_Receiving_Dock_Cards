@@ -1923,56 +1923,171 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a multi-page PDF with all items using their FULL formatting.
+    """Generate a multi-page PDF with all 3 items using FPDF directly.
     
-    Generates each item using generate_pdf() and merges them properly.
+    Creates ONE FPDF document with 3 separate pages, each with full item formatting.
+    NO external PDF merging libraries needed - all done in FPDF2.
     """
     if not items_data:
         raise ValueError("No items provided")
     
-    # Try to merge PDFs properly using PyPDF2
-    try:
-        from PyPDF2 import PdfMerger
-        from io import BytesIO
-        
-        merger = PdfMerger()
-        pdf_ios = []  # Keep references so they don't get garbage collected
-        
-        for idx, item_data in enumerate(items_data):
-            # Generate full PDF for this item
-            pdf_bytes = generate_pdf(item_data)
-            print(f"[BATCH-PDF] Generated {len(pdf_bytes)} bytes for item {idx + 1}")
-            
-            # Create BytesIO and SEEK TO BEGINNING before appending
-            pdf_io = BytesIO(pdf_bytes)
-            pdf_io.seek(0)  # CRITICAL: Reset position to start
-            pdf_ios.append(pdf_io)  # Keep reference
-            
-            merger.append(pdf_io)
-            print(f"[BATCH-PDF] Appended item {idx + 1} to merger")
-        
-        # Output merged PDF
-        output = BytesIO()
-        merger.write(output)
-        merger.close()
-        
-        final_bytes = output.getvalue()
-        print(f"[BATCH-PDF] Final PDF size: {len(final_bytes)} bytes with {len(pdf_ios)} items")
-        return final_bytes
+    # Create ONE master PDF that will have all 3 items
+    master_pdf = FPDF(orientation='L', unit='in', format='Letter')
     
-    except Exception as e:
-        print(f"[BATCH-PDF] PyPDF2 merge failed: {str(e)}")
-        # Fallback: If merge not available, just return all 3 PDFs concatenated
-        # This might not display perfectly but at least the data is there
-        print("[BATCH-PDF] Using fallback concatenation")
+    for idx, item_data in enumerate(items_data):
+        print(f"[BATCH-PDF] Building page {idx + 1} for item {item_data.get('item_id')}")
         
-        all_bytes = b""
-        for idx, item_data in enumerate(items_data):
-            pdf_bytes = generate_pdf(item_data)
-            all_bytes += pdf_bytes
-            print(f"[BATCH-PDF] Added item {idx + 1}")
+        # Add new page to master PDF
+        master_pdf.add_page()
+        master_pdf.set_margins(0.4, 0.4, 0.4)
         
-        return all_bytes
+        # Extract all data
+        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
+        image_url = item_data.get("image_url", "")
+        gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+        supplier_dept = sanitize_for_pdf(item_data.get("supplier_dept", ""))
+        vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
+        vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
+        vnpk_height = sanitize_for_pdf(item_data.get("vnpk_height", ""))
+        casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
+        vendor_qty = sanitize_for_pdf(item_data.get("vendor_pack_qty", ""))
+        warehouse_qty = sanitize_for_pdf(item_data.get("warehouse_pack_qty", ""))
+        item_id_orig = item_data.get("item_id", "")
+        item_id = sanitize_for_pdf(item_id_orig)
+        
+        # LEFT COLUMN: Product Image
+        img_x = 0.4
+        img_y = 0.4
+        img_width = 3.2
+        img_height = 3.8
+        
+        # Draw image border
+        master_pdf.set_draw_color(220, 220, 220)
+        master_pdf.set_line_width(0.01)
+        master_pdf.rect(img_x + 0.05, img_y + 0.05, img_width, img_height)
+        master_pdf.set_draw_color(0, 83, 226)
+        master_pdf.set_line_width(0.03)
+        master_pdf.rect(img_x, img_y, img_width, img_height)
+        
+        # Download and embed image
+        if image_url:
+            try:
+                img_response = httpx.get(image_url, timeout=5)
+                temp_img = f"/tmp/product_{uuid.uuid4().hex[:8]}.jpg"
+                with open(temp_img, 'wb') as f:
+                    f.write(img_response.content)
+                master_pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
+            except Exception as e:
+                print(f"[BATCH-PDF] Image failed: {str(e)}")
+        
+        # RIGHT COLUMN: Details
+        content_x = 3.8
+        current_y = 0.4
+        
+        # Title
+        master_pdf.set_xy(content_x, current_y)
+        master_pdf.set_font("Helvetica", "B", 18)
+        master_pdf.set_text_color(0, 83, 226)
+        master_pdf.multi_cell(6.5, 0.3, item_name, align='C')
+        current_y = master_pdf.get_y() + 0.1
+        
+        # Item details
+        master_pdf.set_xy(content_x, current_y)
+        master_pdf.set_font("Helvetica", "", 9)
+        master_pdf.set_text_color(100, 100, 100)
+        details_text = f"Item: {item_id}"
+        if gtin:
+            details_text += f" | GTIN: {gtin}"
+        if supplier_dept:
+            details_text += f" | Dept #: {supplier_dept}"
+        master_pdf.multi_cell(6.5, 0.15, details_text, align='C')
+        current_y = master_pdf.get_y() + 0.1
+        
+        # Casepack card
+        if casepack_type:
+            master_pdf.set_xy(content_x, current_y)
+            if "CASEPACK" in casepack_type.upper():
+                master_pdf.set_fill_color(224, 242, 254)
+                master_pdf.set_text_color(0, 83, 226)
+                master_pdf.set_draw_color(0, 83, 226)
+            else:
+                master_pdf.set_fill_color(252, 231, 243)
+                master_pdf.set_text_color(236, 72, 153)
+                master_pdf.set_draw_color(236, 72, 153)
+            
+            master_pdf.set_line_width(0.02)
+            box_height = 0.4
+            master_pdf.rect(content_x, current_y, 6.5, box_height, 'FD')
+            
+            master_pdf.set_font("Helvetica", "B", 12)
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.08)
+            master_pdf.cell(6.3, 0.25, casepack_type, align='C')
+            current_y += box_height + 0.05
+        
+        # Pack ratio
+        if vendor_qty and warehouse_qty:
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_font("Helvetica", "", 8)
+            master_pdf.set_text_color(100, 100, 100)
+            ratio_text = f"Pack Ratio: {vendor_qty}/{warehouse_qty}"
+            master_pdf.multi_cell(6.5, 0.15, ratio_text, align='C')
+            current_y = master_pdf.get_y() + 0.05
+        
+        # Dimensions
+        if vnpk_length or vnpk_width or vnpk_height:
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_font("Helvetica", "", 8)
+            master_pdf.set_text_color(100, 100, 100)
+            dims_text = f"Vendor Pack Dims (L × W × H): {vnpk_length if vnpk_length else '--'} × {vnpk_width if vnpk_width else '--'} × {vnpk_height if vnpk_height else '--'}"
+            master_pdf.multi_cell(6.5, 0.15, dims_text, align='C')
+            current_y = master_pdf.get_y() + 0.1
+        
+        # Load ACL data for recommendation card
+        rates = load_read_rates()
+        rate_data = rates.get(str(item_id_orig), [])
+        recommendation = "N/A"
+        rec_color_hex = "#6b7280"
+        if rate_data and len(rate_data) > 0:
+            try:
+                avg_perf = get_avg_performance(rate_data)
+                trend_status = get_trend_status(rate_data)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+            except:
+                pass
+        
+        # ACL Performance label
+        master_pdf.set_xy(content_x, current_y)
+        master_pdf.set_font("Helvetica", "B", 11)
+        master_pdf.set_text_color(0, 0, 0)
+        master_pdf.cell(6.5, 0.25, "ACL Performance %", align='C')
+        current_y += 0.3
+        
+        # Recommendation card
+        color_map = {
+            "#16a34a": (34, 197, 94),
+            "#eab308": (245, 158, 11),
+            "#dc2626": (220, 38, 38),
+            "#6b7280": (107, 114, 128)
+        }
+        rgb = color_map.get(rec_color_hex, (100, 100, 100))
+        
+        master_pdf.set_xy(content_x, current_y)
+        master_pdf.set_fill_color(*rgb)
+        master_pdf.set_text_color(*rgb)
+        master_pdf.set_draw_color(*rgb)
+        master_pdf.set_line_width(0.02)
+        master_pdf.rect(content_x, current_y, 6.5, 0.4, 'FD')
+        master_pdf.set_font("Helvetica", "B", 11)
+        master_pdf.set_xy(content_x + 0.1, current_y + 0.05)
+        master_pdf.cell(6.3, 0.3, recommendation, align='C')
+        
+        print(f"[BATCH-PDF] Page {idx + 1} complete")
+    
+    # Output final PDF - all 3 pages in one document
+    pdf_output = master_pdf.output()
+    pdf_bytes = bytes(pdf_output) if isinstance(pdf_output, bytearray) else pdf_output
+    print(f"[BATCH-PDF] Final PDF: {len(pdf_bytes)} bytes, {master_pdf.page} pages total")
+    return pdf_bytes
 
 
 def generate_batch_pdf_OLD(items_data: list) -> bytes:
