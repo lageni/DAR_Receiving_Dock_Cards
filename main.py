@@ -2073,7 +2073,10 @@ async def batch_pdf(items: str = ""):
             return JSONResponse({"error": "Failed to fetch any items"}, status_code=500)
         
         # Generate single PDF with all items
-        pdf_bytes = generate_batch_pdf(items_data)
+        pdf_output = generate_batch_pdf(items_data)
+        
+        # Convert bytearray to bytes
+        pdf_bytes = bytes(pdf_output) if isinstance(pdf_output, bytearray) else pdf_output
         
         print(f"[BATCH-PDF] Successfully generated PDF with {len(items_data)} items")
         
