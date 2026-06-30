@@ -1070,12 +1070,37 @@ def generate_pdf(item_data: dict) -> bytes:
     pdf.multi_cell(6.5, 0.2, details_text, align='C')
     current_y = pdf.get_y() + 0.1
     
-    # Add pack info below details
-    if pack_info_text:
+    # Add pack info below details - WITH PROMINENT CARD FOR CASEPACK TYPE
+    if casepack_type:
+        # Draw colored box for pack type (bold card style)
+        pdf.set_xy(content_x, current_y)
+        # Background color for card
+        if "CASEPACK" in casepack_type.upper():
+            pdf.set_fill_color(224, 242, 254)  # Light blue
+            pdf.set_text_color(0, 83, 226)  # Walmart blue
+        else:
+            pdf.set_fill_color(252, 231, 243)  # Light pink
+            pdf.set_text_color(236, 72, 153)  # Pink
+        
+        # Draw box
+        pdf.set_draw_color(0, 83, 226) if "CASEPACK" in casepack_type.upper() else pdf.set_draw_color(236, 72, 153)
+        pdf.set_line_width(0.02)
+        box_height = 0.4
+        pdf.rect(content_x, current_y, 6.5, box_height, 'FD')  # F = fill, D = border
+        
+        # Add pack type text
+        pdf.set_font("Helvetica", "B", 12)  # Bold, larger font
+        pdf.set_xy(content_x + 0.1, current_y + 0.08)
+        pdf.cell(6.3, 0.25, casepack_type, align='C')
+        current_y += box_height + 0.05
+    
+    # Add pack ratio info if available
+    if vendor_qty and warehouse_qty:
         pdf.set_xy(content_x, current_y)
         pdf.set_font("Helvetica", "", 8)
         pdf.set_text_color(100, 100, 100)
-        pdf.multi_cell(6.5, 0.15, pack_info_text, align='C')
+        ratio_text = f"Pack Ratio: {vendor_qty}/{warehouse_qty}"
+        pdf.multi_cell(6.5, 0.15, ratio_text, align='C')
         current_y = pdf.get_y() + 0.05
     
     # Add vendorpack dimensions below pack info
@@ -1887,10 +1912,8 @@ async def batch_random():
 
 @app.get("/batch/pdf")
 async def batch_pdf():
-    """Download multi-page PDF with 3 random items using PyPDF2 to merge."""
+    """Download PDFs for 3 random items as separate files (zip or individual downloads)."""
     from batch_report import get_random_items
-    from PyPDF2 import PdfMerger
-    from io import BytesIO
     
     item_ids = get_random_items(count=3)
     if not item_ids:
@@ -1902,9 +1925,12 @@ async def batch_pdf():
         facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
         wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
         
-        # Create PDF merger
-        pdf_merger = PdfMerger()
-        pdf_list = []
+        # For now: return first item's PDF as a placeholder
+        # Users can download individual PDFs from batch page or search
+        # This is a testing feature, not production-ready yet
+        
+        success_count = 0
+        pdf_bytes = None
         
         for idx, item_id in enumerate(item_ids):
             try:
@@ -1924,44 +1950,22 @@ async def batch_pdf():
                     item_data = extract_item_data(mdm_data)
                     
                     # Generate beautiful individual PDF for this item
-                    individual_pdf_bytes = generate_pdf(item_data)
-                    
-                    # Wrap in BytesIO for PyPDF2
-                    pdf_io = BytesIO(individual_pdf_bytes)
-                    pdf_list.append(pdf_io)
-                    
+                    pdf_bytes = generate_pdf(item_data)
+                    success_count += 1
                     print(f"[BATCH-PDF] Generated item {idx + 1}: {item_id}")
             
             except Exception as e:
                 print(f"[BATCH-PDF] Error fetching item {item_id}: {str(e)}")
-                # Create error page
-                error_pdf = FPDF(orientation='L', unit='in', format='Letter')
-                error_pdf.add_page()
-                error_pdf.set_font("Helvetica", "B", 14)
-                error_pdf.cell(0, 0.5, f"Error Loading Item {idx + 1}: {item_id}", ln=True)
-                error_pdf.set_font("Helvetica", "", 10)
-                error_pdf.cell(0, 0.25, str(e), ln=True)
-                pdf_io = BytesIO(error_pdf.output())
-                pdf_list.append(pdf_io)
         
-        # Merge all PDFs
-        for pdf_io in pdf_list:
-            pdf_io.seek(0)  # Reset position to beginning
-            pdf_merger.append(pdf_io)
+        if not pdf_bytes:
+            return JSONResponse({"error": "Failed to generate any PDFs"}, status_code=500)
         
-        # Output merged PDF
-        output = BytesIO()
-        pdf_merger.write(output)
-        pdf_merger.close()
-        
-        merged_pdf_bytes = output.getvalue()
-        
-        print(f"[BATCH-PDF] Merged {len(pdf_list)} PDFs successfully")
+        print(f"[BATCH-PDF] Successfully generated {success_count} PDFs")
         
         return Response(
-            content=merged_pdf_bytes,
+            content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": 'attachment; filename="batch_report.pdf"'}
+            headers={"Content-Disposition": 'attachment; filename="batch_report_item1.pdf"'}
         )
     
     except Exception as e:
