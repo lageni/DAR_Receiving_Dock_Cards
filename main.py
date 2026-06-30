@@ -1531,11 +1531,11 @@ async def admin_page():
             <h2 class="text-xl font-bold mb-4">Database Path Settings</h2>
             <p class="text-sm text-gray-600 mb-3">Current path: <span class="font-mono bg-gray-100 px-2 py-1 text-blue-600">{db_path}</span></p>
             <div class="flex gap-2 mb-4">
-                <input type="text" id="newDbPath" placeholder="Enter new database path (relative or absolute)" class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500" />
-                <button onclick="updateDatabasePath()" class="px-4 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Update Path</button>
+                <input type="file" id="dbFileInput" accept=".db,.sqlite,.sqlite3" class="flex-1 px-3 py-2 border rounded text-sm" />
+                <button onclick="updateDatabasePathFromFile()" class="px-4 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Set From File</button>
             </div>
             <div id="path-status" class="text-sm hidden"></div>
-            <p class="text-xs text-gray-500 mt-2">Examples: <code>read_rates.db</code> or <code>/path/to/db/read_rates.db</code></p>
+            <p class="text-xs text-gray-500 mt-2">Click "Set From File" to browse and select your database file (.db, .sqlite, .sqlite3)</p>
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
@@ -1575,29 +1575,32 @@ async def admin_page():
     </div>
     
     <script>
-        async function updateDatabasePath() {{
-            const pathInput = document.getElementById('newDbPath');
-            const newPath = pathInput.value.trim();
+        async function updateDatabasePathFromFile() {{
+            const fileInput = document.getElementById('dbFileInput');
+            const file = fileInput.files[0];
             const statusDiv = document.getElementById('path-status');
             
-            if (!newPath) {{
+            if (!file) {{
                 statusDiv.classList.remove('hidden');
-                statusDiv.innerHTML = '<div class="text-red-600">Please enter a path</div>';
+                statusDiv.innerHTML = '<div class="text-red-600">Please select a database file</div>';
                 return;
             }}
+            
+            // Get full path from file
+            const newPath = file.webkitRelativePath || file.name;
             
             statusDiv.classList.remove('hidden');
             statusDiv.innerHTML = '<div class="text-blue-600">Updating...</div>';
             
             try {{
-                const response = await fetch('/api/admin/set-database-path', {{\n                    method: 'POST',\n                    headers: {{'Content-Type': 'application/json'}},\n                    body: JSON.stringify({{path: newPath}})\n                }});
+                const response = await fetch('/api/admin/set-database-path', {{\n                    method: 'POST',\n                    headers: {{'Content-Type': 'application/json'}},\n                    body: JSON.stringify({{path: file.name, full_path: newPath}})\n                }});
                 
                 const result = await response.json();
                 
                 if (result.status === 'success') {{
-                    statusDiv.innerHTML = `<div class="text-green-600 font-semibold">✓ Database path updated to: <code class="bg-gray-100 px-2">${{newPath}}</code></div>
-                        <p class="text-sm text-gray-600 mt-2">Refresh the page to see the updated path.</p>`;
-                    pathInput.value = '';
+                    statusDiv.innerHTML = `<div class="text-green-600 font-semibold">✓ Database path updated!</div>
+                        <p class="text-sm text-gray-600 mt-2">New path: <code class="bg-gray-100 px-2">${{result.path}}</code></p>
+                        <p class="text-sm text-gray-600">Refresh the page to apply changes.</p>`;
                     setTimeout(() => {{
                         location.reload();
                     }}, 2000);
@@ -1884,21 +1887,24 @@ async def batch_random():
 
 @app.get("/batch/pdf")
 async def batch_pdf():
-    """Download multi-page PDF with 3 random items."""
+    """Download multi-page PDF with 3 random items using PyPDF2 to merge."""
     from batch_report import get_random_items
+    from PyPDF2 import PdfMerger
+    from io import BytesIO
     
     item_ids = get_random_items(count=3)
     if not item_ids:
         return JSONResponse({"error": "No items found"}, status_code=500)
-    
-    # Create master PDF that will contain all 3 items
-    master_pdf = FPDF(orientation='L', unit='in', format='Letter')
     
     try:
         api_key = os.getenv("MDM_API_KEY", "")
         facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
         facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
         wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+        
+        # Create PDF merger
+        pdf_merger = PdfMerger()
+        pdf_list = []
         
         for idx, item_id in enumerate(item_ids):
             try:
@@ -1917,47 +1923,43 @@ async def batch_pdf():
                     mdm_data = response.json()
                     item_data = extract_item_data(mdm_data)
                     
-                    # Generate individual PDF for this item
-                    individual_pdf = generate_pdf(item_data)
+                    # Generate beautiful individual PDF for this item
+                    individual_pdf_bytes = generate_pdf(item_data)
                     
-                    # individual_pdf is bytes, we need to merge it into master_pdf
-                    # Since FPDF doesn't have native PDF merging, we'll create pages in master PDF
-                    # For now: add a cover page for each item
-                    if idx > 0:
-                        master_pdf.add_page()
-                    else:
-                        master_pdf.add_page()
+                    # Wrap in BytesIO for PyPDF2
+                    pdf_io = BytesIO(individual_pdf_bytes)
+                    pdf_list.append(pdf_io)
                     
-                    # Add item info as cover page
-                    master_pdf.set_font("Helvetica", "B", 20)
-                    master_pdf.cell(0, 0.5, f"Item {idx + 1}: {item_data.get('item_name', 'Unknown Item')}", ln=True)
-                    
-                    master_pdf.set_font("Helvetica", "", 10)
-                    master_pdf.ln(0.3)
-                    master_pdf.cell(0, 0.25, f"Item ID: {item_id}", ln=True)
-                    master_pdf.cell(0, 0.25, f"GTIN: {item_data.get('gtin', 'N/A')}", ln=True)
-                    master_pdf.cell(0, 0.25, f"Pack Type: {item_data.get('casepack_type', 'N/A')}", ln=True)
-                    dims_str = f"{item_data.get('vnpk_length', '--')} x {item_data.get('vnpk_width', '--')} x {item_data.get('vnpk_height', '--')}"
-                    master_pdf.cell(0, 0.25, f'Dims: {dims_str}"', ln=True)
-                    
-                    print(f"[BATCH-PDF] Added item {idx + 1}: {item_id}")
+                    print(f"[BATCH-PDF] Generated item {idx + 1}: {item_id}")
             
             except Exception as e:
                 print(f"[BATCH-PDF] Error fetching item {item_id}: {str(e)}")
-                # Still add error page
-                if idx > 0:
-                    master_pdf.add_page()
-                master_pdf.set_font("Helvetica", "B", 14)
-                master_pdf.cell(0, 0.5, f"Error Loading Item {idx + 1}: {item_id}", ln=True)
-                master_pdf.set_font("Helvetica", "", 10)
-                master_pdf.cell(0, 0.25, str(e), ln=True)
+                # Create error page
+                error_pdf = FPDF(orientation='L', unit='in', format='Letter')
+                error_pdf.add_page()
+                error_pdf.set_font("Helvetica", "B", 14)
+                error_pdf.cell(0, 0.5, f"Error Loading Item {idx + 1}: {item_id}", ln=True)
+                error_pdf.set_font("Helvetica", "", 10)
+                error_pdf.cell(0, 0.25, str(e), ln=True)
+                pdf_io = BytesIO(error_pdf.output())
+                pdf_list.append(pdf_io)
         
-        # Output PDF as bytes
-        pdf_bytes = master_pdf.output()
+        # Merge all PDFs
+        for pdf_io in pdf_list:
+            pdf_io.seek(0)  # Reset position to beginning
+            pdf_merger.append(pdf_io)
         
-        # Return as bytes - use bytes() to ensure it's the right type
+        # Output merged PDF
+        output = BytesIO()
+        pdf_merger.write(output)
+        pdf_merger.close()
+        
+        merged_pdf_bytes = output.getvalue()
+        
+        print(f"[BATCH-PDF] Merged {len(pdf_list)} PDFs successfully")
+        
         return Response(
-            content=bytes(pdf_bytes) if isinstance(pdf_bytes, bytearray) else pdf_bytes,
+            content=merged_pdf_bytes,
             media_type="application/pdf",
             headers={"Content-Disposition": 'attachment; filename="batch_report.pdf"'}
         )

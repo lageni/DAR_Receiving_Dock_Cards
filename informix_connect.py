@@ -1,8 +1,15 @@
 """Informix database connection module using pyodbc"""
 import os
-import pyodbc
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Try to import pyodbc
+try:
+    import pyodbc
+    PYODBC_AVAILABLE = True
+except ImportError:
+    PYODBC_AVAILABLE = False
+    pyodbc = None
 
 # Load environment variables
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
@@ -27,6 +34,12 @@ class InformixConnection:
         Driver={IBM INFORMIX ODBC DRIVER};Host=dsinfmx.s06068.us.wal-mart.com;Server=dsinfmx;
         Service=sqlexec;Protocol=onsoctcp;Database=ep2;UID=user;PWD=pass;
         """
+        # Check if pyodbc is available
+        if not PYODBC_AVAILABLE:
+            print(f"[ERROR] pyodbc is not installed!")
+            print(f"[HELP] Install with: pip install pyodbc")
+            raise ImportError("pyodbc module not found. Install it with: pip install pyodbc")
+        
         try:
             # Detect 64-bit Python for driver selection
             import struct
@@ -57,13 +70,12 @@ class InformixConnection:
             print(f"[SUCCESS] Connected to Informix {self.database}!")
             return self.conn
         
-        except ImportError as ie:
-            print(f"[ERROR] pyodbc not installed: {str(ie)}")
-            print(f"[HELP] Run: pip install pyodbc")
+        except AttributeError as ae:
+            print(f"[ERROR] ODBC Driver not found on system: {str(ae)}")
+            print(f"[HELP] Install IBM INFORMIX ODBC driver from IBM")
             raise
         except pyodbc.Error as oe:
             print(f"[ERROR] ODBC/Informix error: {str(oe)}")
-            print(f"[DEBUG] Connection string: DRIVER={{{driver_name}}};Host={self.host};Server={self.server}")
             raise
         except Exception as e:
             print(f"[ERROR] Connection failed: {str(e)}")
