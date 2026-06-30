@@ -1936,21 +1936,31 @@ def generate_batch_pdf(items_data: list) -> bytes:
         from io import BytesIO
         
         merger = PdfMerger()
+        pdf_ios = []  # Keep references so they don't get garbage collected
         
         for idx, item_data in enumerate(items_data):
             # Generate full PDF for this item
             pdf_bytes = generate_pdf(item_data)
-            # Add to merger
+            print(f"[BATCH-PDF] Generated {len(pdf_bytes)} bytes for item {idx + 1}")
+            
+            # Create BytesIO and SEEK TO BEGINNING before appending
             pdf_io = BytesIO(pdf_bytes)
+            pdf_io.seek(0)  # CRITICAL: Reset position to start
+            pdf_ios.append(pdf_io)  # Keep reference
+            
             merger.append(pdf_io)
-            print(f"[BATCH-PDF] Added item {idx + 1}")
+            print(f"[BATCH-PDF] Appended item {idx + 1} to merger")
+        
+        print(f"[BATCH-PDF] Merger has {len(merger.pages)} pages total")
         
         # Output merged PDF
         output = BytesIO()
         merger.write(output)
         merger.close()
         
-        return output.getvalue()
+        final_bytes = output.getvalue()
+        print(f"[BATCH-PDF] Final PDF size: {len(final_bytes)} bytes")
+        return final_bytes
     
     except ImportError:
         # Fallback: If pypdf not available, just return all 3 PDFs concatenated
