@@ -2078,10 +2078,12 @@ def generate_batch_pdf_OLD(items_data: list) -> bytes:
         
         print(f"[BATCH-PDF] Added page {page_idx + 1} for item {item_id}")
     
-    # If we're building a multi-page PDF, return the object; otherwise return bytes
+    # If we're building a multi-page PDF, DON'T output yet - just return the object
+    # The final output() will be called on the master_pdf after all items are added
     if return_pdf_object or master_pdf:
-        return pdf
+        return pdf  # Return the FPDF object without calling output()
     else:
+        # Single-item PDF - output and return bytes
         pdf_bytes = pdf.output()
         return bytes(pdf_bytes) if isinstance(pdf_bytes, bytearray) else pdf_bytes
 
