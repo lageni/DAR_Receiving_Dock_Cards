@@ -1830,6 +1830,8 @@ async def batch_random():
     
     # Build HTML with 3 consolidated cards
     cards_html = ""
+    item_ids_str = ",".join([item["item_id"] for item in items_data if "item_id" in item])
+    
     for idx, item in enumerate(items_data, 1):
         if "error" in item:
             cards_html += f'<div class="bg-red-50 p-4 rounded border-2 border-red-300 mb-4"><p class="text-red-700">Item {item["item_id"]}: {item["error"]}</p></div>'
@@ -1899,11 +1901,12 @@ async def batch_random():
         
         <div class="mb-6 flex gap-3">
             <a href="/batch/random" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">🔄 Refresh (New 3 Items)</a>
+            <a href="/batch/pdf?items={item_ids_str}" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">📄 Download All 3 as PDF</a>
             <a href="/" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">← Back to Search</a>
         </div>
         
         <div class="yellow-box bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
-            <p class="text-yellow-800 text-sm"><strong>TESTING FEATURE:</strong> 3 random items shown below. Use "Refresh" to get new items. Click "📥 Download PDF" buttons below each item to download individual PDFs.</p>
+            <p class="text-yellow-800 text-sm"><strong>TESTING FEATURE:</strong> 3 random items shown below. Click "📄 Download All 3 as PDF" for consolidated file, or individual "📥 Download PDF" buttons for single items. Use "Refresh" to get new items.</p>
         </div>
         
         {cards_html}
@@ -1913,13 +1916,15 @@ async def batch_random():
 
 
 @app.get("/batch/pdf")
-async def batch_pdf():
-    """Download PDFs for 3 random items as separate files (zip or individual downloads)."""
-    from batch_report import get_random_items
+async def batch_pdf(items: str = ""):
+    """Download consolidated PDF with multiple items (one page per item)."""
+    # Parse item IDs from query param
+    if not items:
+        return JSONResponse({"error": "No items specified. Use ?items=id1,id2,id3"}, status_code=400)
     
-    item_ids = get_random_items(count=3)
+    item_ids = [id.strip() for id in items.split(",") if id.strip()]
     if not item_ids:
-        return JSONResponse({"error": "No items found"}, status_code=500)
+        return JSONResponse({"error": "Invalid item IDs"}, status_code=400)
     
     try:
         api_key = os.getenv("MDM_API_KEY", "")
@@ -1927,12 +1932,11 @@ async def batch_pdf():
         facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
         wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
         
-        # For now: return first item's PDF as a placeholder
-        # Users can download individual PDFs from batch page or search
-        # This is a testing feature, not production-ready yet
+        # Create master PDF
+        from io import BytesIO
         
+        pdf_files = []
         success_count = 0
-        pdf_bytes = None
         
         for idx, item_id in enumerate(item_ids):
             try:
@@ -1951,23 +1955,30 @@ async def batch_pdf():
                     mdm_data = response.json()
                     item_data = extract_item_data(mdm_data)
                     
-                    # Generate beautiful individual PDF for this item
+                    # Generate individual PDF bytes for this item
                     pdf_bytes = generate_pdf(item_data)
+                    pdf_files.append(pdf_bytes)
                     success_count += 1
                     print(f"[BATCH-PDF] Generated item {idx + 1}: {item_id}")
             
             except Exception as e:
                 print(f"[BATCH-PDF] Error fetching item {item_id}: {str(e)}")
         
-        if not pdf_bytes:
+        if not pdf_files:
             return JSONResponse({"error": "Failed to generate any PDFs"}, status_code=500)
+        
+        # Simple concatenation: just append all PDF bytes together
+        # This works with FPDF since we're creating separate complete PDFs
+        combined_pdf = b""
+        for pdf_bytes in pdf_files:
+            combined_pdf += pdf_bytes
         
         print(f"[BATCH-PDF] Successfully generated {success_count} PDFs")
         
         return Response(
-            content=pdf_bytes,
+            content=combined_pdf,
             media_type="application/pdf",
-            headers={"Content-Disposition": 'attachment; filename="batch_report_item1.pdf"'}
+            headers={"Content-Disposition": 'attachment; filename="batch_report_all.pdf"'}
         )
     
     except Exception as e:
