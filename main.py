@@ -972,9 +972,14 @@ def sanitize_for_pdf(text: str) -> str:
     return result.encode('ascii', errors='ignore').decode('ascii')
 
 
-def generate_pdf(item_data: dict) -> bytes:
-    """Generate a clean landscape PDF card with product information."""
-    pdf = FPDF(orientation='L', unit='in', format='Letter')  # 11" x 8.5" landscape
+def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bool = False) -> bytes:
+    """Generate a clean landscape PDF card with product information.
+    
+    If master_pdf is provided, add to that object instead of creating new.
+    If return_pdf_object is True, return the FPDF object instead of bytes.
+    """
+    # Use provided PDF or create new one
+    pdf = master_pdf if master_pdf else FPDF(orientation='L', unit='in', format='Letter')
     pdf.add_page()
     pdf.set_margins(0.4, 0.4, 0.4)
     
@@ -1918,10 +1923,30 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a single multi-page PDF with all items on separate pages.
+    """Generate a single multi-page PDF with all items using the same formatting as generate_pdf().
     
-    Creates one master FPDF and adds each item as a new page with full formatting.
+    Creates one master FPDF and calls generate_pdf() for each item to add them as pages.
     """
+    if not items_data:
+        raise ValueError("No items provided")
+    
+    # Create single master PDF that will contain all items
+    master_pdf = FPDF(orientation='L', unit='in', format='Letter')
+    
+    for idx, item_data in enumerate(items_data):
+        # Call generate_pdf() but pass in the master_pdf so it adds a page to it
+        # Return the PDF object instead of bytes
+        generate_pdf(item_data, master_pdf=master_pdf, return_pdf_object=True)
+        print(f"[BATCH-PDF] Added item {idx + 1}")
+    
+    # Convert final PDF to bytes
+    pdf_output = master_pdf.output()
+    pdf_bytes = bytes(pdf_output) if isinstance(pdf_output, bytearray) else pdf_output
+    return pdf_bytes
+
+
+def generate_batch_pdf_OLD(items_data: list) -> bytes:
+    """OLD VERSION - DEPRECATED"""
     if not items_data:
         raise ValueError("No items provided")
     
@@ -2053,7 +2078,12 @@ def generate_batch_pdf(items_data: list) -> bytes:
         
         print(f"[BATCH-PDF] Added page {page_idx + 1} for item {item_id}")
     
-    return pdf.output()
+    # If we're building a multi-page PDF, return the object; otherwise return bytes
+    if return_pdf_object or master_pdf:
+        return pdf
+    else:
+        pdf_bytes = pdf.output()
+        return bytes(pdf_bytes) if isinstance(pdf_bytes, bytearray) else pdf_bytes
 
 
 @app.get("/batch/pdf")
