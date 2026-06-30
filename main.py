@@ -1945,6 +1945,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
         item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
         image_url = item_data.get("image_url", "")
         gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+        catalog_gtin = sanitize_for_pdf(item_data.get("catalog_gtin", ""))
         supplier_dept = sanitize_for_pdf(item_data.get("supplier_dept", ""))
         vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
         vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
@@ -1991,13 +1992,15 @@ def generate_batch_pdf(items_data: list) -> bytes:
         master_pdf.multi_cell(6.5, 0.3, item_name, align='C')
         current_y = master_pdf.get_y() + 0.1
         
-        # Item details
+        # Item details (include catalog GTIN like individual PDF)
         master_pdf.set_xy(content_x, current_y)
         master_pdf.set_font("Helvetica", "", 9)
         master_pdf.set_text_color(100, 100, 100)
         details_text = f"Item: {item_id}"
         if gtin:
             details_text += f" | GTIN: {gtin}"
+        if catalog_gtin:
+            details_text += f" | Catalog GTIN: {catalog_gtin}"
         if supplier_dept:
             details_text += f" | Dept #: {supplier_dept}"
         master_pdf.multi_cell(6.5, 0.15, details_text, align='C')
@@ -2045,6 +2048,42 @@ def generate_batch_pdf(items_data: list) -> bytes:
         # Load ACL data - EXACT SAME as generate_pdf()
         rates = load_read_rates()
         item_rates = rates.get(str(item_id_orig), [])
+        
+        # Draw red dashed border around ACL Performance section
+        acl_box_x = content_x - 0.1
+        acl_box_y = current_y
+        acl_box_width = 6.7
+        acl_box_height = 2.0  # Estimate, will adjust
+        
+        # Draw dashed rectangle (red)
+        master_pdf.set_draw_color(255, 0, 0)  # Red
+        master_pdf.set_line_width(0.02)
+        dash_length = 0.15
+        gap_length = 0.1
+        
+        # Top line
+        x = acl_box_x
+        while x < acl_box_x + acl_box_width:
+            master_pdf.line(x, acl_box_y, min(x + dash_length, acl_box_x + acl_box_width), acl_box_y)
+            x += dash_length + gap_length
+        
+        # Bottom line (approximate)
+        x = acl_box_x
+        while x < acl_box_x + acl_box_width:
+            master_pdf.line(x, acl_box_y + acl_box_height, min(x + dash_length, acl_box_x + acl_box_width), acl_box_y + acl_box_height)
+            x += dash_length + gap_length
+        
+        # Left line
+        y = acl_box_y
+        while y < acl_box_y + acl_box_height:
+            master_pdf.line(acl_box_x, y, acl_box_x, min(y + dash_length, acl_box_y + acl_box_height))
+            y += dash_length + gap_length
+        
+        # Right line
+        y = acl_box_y
+        while y < acl_box_y + acl_box_height:
+            master_pdf.line(acl_box_x + acl_box_width, y, acl_box_x + acl_box_width, min(y + dash_length, acl_box_y + acl_box_height))
+            y += dash_length + gap_length
         
         # ACL Performance label
         master_pdf.set_xy(content_x, current_y)
