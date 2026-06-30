@@ -1925,26 +1925,32 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a multi-page PDF with all 3 items using FPDF directly.
+    """Generate multi-page PDF with all items - REFACTORED LAYOUT.
     
-    Creates ONE FPDF document with 3 separate pages, each with full item formatting.
-    NO external PDF merging libraries needed - all done in FPDF2.
+    NEW LAYOUT ORDER (right column):
+    1. Item Name (large blue header)
+    2. Item Details (Item # | GTIN | Catalog GTIN | Dept #)
+    3. DIRECTIVE ACTION CARD (TOP - emphasized, colored, large font)
+    4. Casepack Card
+    5. Pack Ratio
+    6. Vendor Pack Dimensions
+    7. ACL Performance Section (light background, NOT dashed border):
+       - AVG PERFORMANCE + TREND boxes
+       - Trend chart with AXIS LABELS (0%, 50%, 100%)
     """
     if not items_data:
         raise ValueError("No items provided")
     
-    # Create ONE master PDF that will have all 3 items
     master_pdf = FPDF(orientation='L', unit='in', format='Letter')
     
     for idx, item_data in enumerate(items_data):
-        print(f"[BATCH-PDF] Building page {idx + 1} for item {item_data.get('item_id')}")
+        print(f"[BATCH-PDF] Building page {idx + 1}")
         
-        # Add new page to master PDF
         master_pdf.add_page()
         master_pdf.set_margins(0.4, 0.4, 0.4)
         
         # Extract all data
-        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
+        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown"))
         image_url = item_data.get("image_url", "")
         gtin = sanitize_for_pdf(item_data.get("gtin", ""))
         catalog_gtin = sanitize_for_pdf(item_data.get("catalog_gtin", ""))
@@ -1959,12 +1965,9 @@ def generate_batch_pdf(items_data: list) -> bytes:
         item_id = sanitize_for_pdf(item_id_orig)
         
         # LEFT COLUMN: Product Image
-        img_x = 0.4
-        img_y = 0.4
-        img_width = 3.2
-        img_height = 3.8
+        img_x, img_y, img_width, img_height = 0.4, 0.4, 3.2, 3.8
         
-        # Draw image border
+        # Image border
         master_pdf.set_draw_color(220, 220, 220)
         master_pdf.set_line_width(0.01)
         master_pdf.rect(img_x + 0.05, img_y + 0.05, img_width, img_height)
@@ -1972,7 +1975,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
         master_pdf.set_line_width(0.03)
         master_pdf.rect(img_x, img_y, img_width, img_height)
         
-        # Download and embed image
+        # Embed image
         if image_url:
             try:
                 img_response = httpx.get(image_url, timeout=5)
@@ -1980,35 +1983,70 @@ def generate_batch_pdf(items_data: list) -> bytes:
                 with open(temp_img, 'wb') as f:
                     f.write(img_response.content)
                 master_pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
-            except Exception as e:
-                print(f"[BATCH-PDF] Image failed: {str(e)}")
+            except:
+                pass
         
         # RIGHT COLUMN: Details
         content_x = 3.8
         current_y = 0.4
         
-        # Title
+        # 1. Item Name (header)
         master_pdf.set_xy(content_x, current_y)
         master_pdf.set_font("Helvetica", "B", 18)
         master_pdf.set_text_color(0, 83, 226)
         master_pdf.multi_cell(6.5, 0.3, item_name, align='C')
         current_y = master_pdf.get_y() + 0.1
         
-        # Item details (include catalog GTIN like individual PDF)
+        # 2. Item Details
         master_pdf.set_xy(content_x, current_y)
         master_pdf.set_font("Helvetica", "", 9)
         master_pdf.set_text_color(100, 100, 100)
-        details_text = f"Item: {item_id}"
+        details = f"Item: {item_id}"
         if gtin:
-            details_text += f" | GTIN: {gtin}"
+            details += f" | GTIN: {gtin}"
         if catalog_gtin:
-            details_text += f" | Catalog GTIN: {catalog_gtin}"
+            details += f" | Catalog GTIN: {catalog_gtin}"
         if supplier_dept:
-            details_text += f" | Dept #: {supplier_dept}"
-        master_pdf.multi_cell(6.5, 0.15, details_text, align='C')
+            details += f" | Dept #: {supplier_dept}"
+        master_pdf.multi_cell(6.5, 0.15, details, align='C')
         current_y = master_pdf.get_y() + 0.1
         
-        # Casepack card
+        # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
+        rates = load_read_rates()
+        item_rates = rates.get(str(item_id_orig), [])
+        
+        recommendation = "N/A"
+        rec_color_hex = "#6b7280"
+        if item_rates:
+            try:
+                avg_perf = get_avg_performance(item_rates)
+                trend_status = get_trend_status(item_rates)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+            except:
+                pass
+        
+        color_map = {
+            "#16a34a": {"fill_bg": (220, 252, 231), "border": (34, 197, 94), "text": (34, 197, 94)},
+            "#eab308": {"fill_bg": (254, 243, 199), "border": (245, 158, 11), "text": (245, 158, 11)},
+            "#dc2626": {"fill_bg": (254, 226, 226), "border": (220, 38, 38), "text": (220, 38, 38)},
+            "#6b7280": {"fill_bg": (243, 244, 246), "border": (107, 114, 128), "text": (107, 114, 128)}
+        }
+        
+        colors = color_map.get(rec_color_hex, color_map["#6b7280"])
+        
+        # DIRECTIVE ACTION CARD - LARGE AND PROMINENT
+        master_pdf.set_xy(content_x, current_y)
+        master_pdf.set_fill_color(*colors["fill_bg"])
+        master_pdf.set_draw_color(*colors["border"])
+        master_pdf.set_line_width(0.03)
+        master_pdf.rect(content_x, current_y, 6.5, 0.55, 'FD')
+        master_pdf.set_font("Helvetica", "B", 13)  # LARGER FONT
+        master_pdf.set_text_color(*colors["text"])
+        master_pdf.set_xy(content_x + 0.2, current_y + 0.12)
+        master_pdf.cell(6.1, 0.3, recommendation, align='C')
+        current_y += 0.65
+        
+        # 4. Casepack Card
         if casepack_type:
             master_pdf.set_xy(content_x, current_y)
             if "CASEPACK" in casepack_type.upper():
@@ -2021,154 +2059,118 @@ def generate_batch_pdf(items_data: list) -> bytes:
                 master_pdf.set_draw_color(236, 72, 153)
             
             master_pdf.set_line_width(0.02)
-            box_height = 0.4
-            master_pdf.rect(content_x, current_y, 6.5, box_height, 'FD')
-            
+            master_pdf.rect(content_x, current_y, 6.5, 0.4, 'FD')
             master_pdf.set_font("Helvetica", "B", 12)
             master_pdf.set_xy(content_x + 0.1, current_y + 0.08)
             master_pdf.cell(6.3, 0.25, casepack_type, align='C')
-            current_y += box_height + 0.05
+            current_y += 0.45
         
-        # Pack ratio
+        # 5. Pack Ratio
         if vendor_qty and warehouse_qty:
             master_pdf.set_xy(content_x, current_y)
             master_pdf.set_font("Helvetica", "", 8)
             master_pdf.set_text_color(100, 100, 100)
-            ratio_text = f"Pack Ratio: {vendor_qty}/{warehouse_qty}"
-            master_pdf.multi_cell(6.5, 0.15, ratio_text, align='C')
+            master_pdf.multi_cell(6.5, 0.15, f"Pack Ratio: {vendor_qty}/{warehouse_qty}", align='C')
             current_y = master_pdf.get_y() + 0.05
         
-        # Dimensions
+        # 6. Dimensions
         if vnpk_length or vnpk_width or vnpk_height:
             master_pdf.set_xy(content_x, current_y)
             master_pdf.set_font("Helvetica", "", 8)
             master_pdf.set_text_color(100, 100, 100)
-            dims_text = f"Vendor Pack Dims (L × W × H): {vnpk_length if vnpk_length else '--'} × {vnpk_width if vnpk_width else '--'} × {vnpk_height if vnpk_height else '--'}"
-            master_pdf.multi_cell(6.5, 0.15, dims_text, align='C')
-            current_y = master_pdf.get_y() + 0.1
+            dims = f"Vendor Pack Dims (L × W × H): {vnpk_length or '--'} × {vnpk_width or '--'} × {vnpk_height or '--'}"
+            master_pdf.multi_cell(6.5, 0.15, dims, align='C')
+            current_y = master_pdf.get_y() + 0.15
         
-        # Load ACL data - EXACT SAME as generate_pdf()
-        rates = load_read_rates()
-        item_rates = rates.get(str(item_id_orig), [])
+        # 7. ACL PERFORMANCE SECTION with LIGHT BACKGROUND (NOT dashed border)
+        acl_bg_y = current_y
         
-        # Add spacing before ACL Performance section
-        current_y += 0.2
+        # Light background fill for ACL section
+        master_pdf.set_xy(content_x - 0.05, acl_bg_y)
+        master_pdf.set_fill_color(240, 248, 255)  # Alice blue (light background)
+        master_pdf.set_draw_color(200, 220, 240)  # Light blue border
+        master_pdf.set_line_width(0.01)
+        master_pdf.rect(content_x - 0.05, acl_bg_y, 6.6, 1.65, 'FD')
         
-        # Draw red dashed border around ACL Performance section
-        acl_box_x = content_x - 0.1
-        acl_box_y = current_y
-        acl_box_width = 6.7
-        acl_box_height = 2.3  # Taller to include Directive Action card
-        
-        # Draw dashed rectangle (red)
-        master_pdf.set_draw_color(255, 0, 0)  # Red
-        master_pdf.set_line_width(0.02)
-        dash_length = 0.15
-        gap_length = 0.1
-        
-        # Top line
-        x = acl_box_x
-        while x < acl_box_x + acl_box_width:
-            master_pdf.line(x, acl_box_y, min(x + dash_length, acl_box_x + acl_box_width), acl_box_y)
-            x += dash_length + gap_length
-        
-        # Bottom line (approximate)
-        x = acl_box_x
-        while x < acl_box_x + acl_box_width:
-            master_pdf.line(x, acl_box_y + acl_box_height, min(x + dash_length, acl_box_x + acl_box_width), acl_box_y + acl_box_height)
-            x += dash_length + gap_length
-        
-        # Left line
-        y = acl_box_y
-        while y < acl_box_y + acl_box_height:
-            master_pdf.line(acl_box_x, y, acl_box_x, min(y + dash_length, acl_box_y + acl_box_height))
-            y += dash_length + gap_length
-        
-        # Right line
-        y = acl_box_y
-        while y < acl_box_y + acl_box_height:
-            master_pdf.line(acl_box_x + acl_box_width, y, acl_box_x + acl_box_width, min(y + dash_length, acl_box_y + acl_box_height))
-            y += dash_length + gap_length
-        
-        # ACL Performance label
+        # ACL Label
         master_pdf.set_xy(content_x, current_y)
-        master_pdf.set_font("Helvetica", "B", 13)
-        master_pdf.set_text_color(0, 83, 226)  # Walmart Blue
-        master_pdf.cell(6.5, 0.3, "ACL Performance %", align='C')
-        current_y += 0.35
+        master_pdf.set_font("Helvetica", "B", 12)
+        master_pdf.set_text_color(0, 83, 226)
+        master_pdf.cell(6.5, 0.25, "ACL Performance %", align='C')
+        current_y += 0.3
         
         if item_rates:
-            # Calculate metrics EXACTLY like generate_pdf()
             avg_perf = get_avg_performance(item_rates)
             trend_status = get_trend_status(item_rates)
             color = get_color_for_performance(avg_perf)
             
-            # AVG PERFORMANCE box (light yellow)
+            # AVG PERFORMANCE box
             master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(255, 250, 220)  # Light yellow
-            master_pdf.set_draw_color(218, 165, 32)  # Goldenrod border
+            master_pdf.set_fill_color(255, 250, 220)
+            master_pdf.set_draw_color(218, 165, 32)
             master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 3.2, 0.7, style='FD')
+            master_pdf.rect(content_x, current_y, 3.2, 0.65, style='FD')
             
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.05)
-            master_pdf.set_font("Helvetica", "B", 7)
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.03)
+            master_pdf.set_font("Helvetica", "B", 6)
             master_pdf.set_text_color(180, 140, 0)
-            master_pdf.cell(3.0, 0.15, "AVG PERFORMANCE", align='C')
+            master_pdf.cell(3.0, 0.12, "AVG PERFORMANCE", align='C')
             
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.25)
-            master_pdf.set_font("Helvetica", "B", 16)
-            # Set color based on performance
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.2)
+            master_pdf.set_font("Helvetica", "B", 15)
             if color == "#dc2626":
                 master_pdf.set_text_color(220, 38, 38)
-            elif color == "#f59e0b":
-                master_pdf.set_text_color(245, 158, 11)
             elif color == "#eab308":
                 master_pdf.set_text_color(234, 179, 8)
-            else:  # green
+            else:
                 master_pdf.set_text_color(22, 163, 74)
-            master_pdf.cell(3.0, 0.3, f"{avg_perf:.1f}%", align='C')
+            master_pdf.cell(3.0, 0.25, f"{avg_perf:.1f}%", align='C')
             
-            # TREND box (light purple)
+            # TREND box
             master_pdf.set_xy(content_x + 3.3, current_y)
-            master_pdf.set_fill_color(240, 230, 255)  # Light purple
-            master_pdf.set_draw_color(147, 112, 219)  # Purple border
+            master_pdf.set_fill_color(240, 230, 255)
+            master_pdf.set_draw_color(147, 112, 219)
             master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x + 3.3, current_y, 3.2, 0.7, style='FD')
+            master_pdf.rect(content_x + 3.3, current_y, 3.2, 0.65, style='FD')
             
-            master_pdf.set_xy(content_x + 3.4, current_y + 0.05)
-            master_pdf.set_font("Helvetica", "B", 7)
+            master_pdf.set_xy(content_x + 3.4, current_y + 0.03)
+            master_pdf.set_font("Helvetica", "B", 6)
             master_pdf.set_text_color(140, 100, 180)
-            master_pdf.cell(3.0, 0.15, "TREND", align='C')
+            master_pdf.cell(3.0, 0.12, "TREND", align='C')
             
-            master_pdf.set_xy(content_x + 3.4, current_y + 0.25)
-            master_pdf.set_font("Helvetica", "B", 13)
+            master_pdf.set_xy(content_x + 3.4, current_y + 0.2)
+            master_pdf.set_font("Helvetica", "B", 12)
             master_pdf.set_text_color(60, 20, 140)
-            master_pdf.cell(3.0, 0.3, trend_status, align='C')
+            master_pdf.cell(3.0, 0.25, trend_status, align='C')
             
-            current_y += 0.75
+            current_y += 0.7
             
-            # Draw trend chart if multiple data points
+            # Chart with AXIS LABELS
             if len(item_rates) > 1:
-                chart_width = 6.3
-                chart_height = 0.5
-                chart_x = content_x + 0.1
-                chart_y = current_y
+                chart_x, chart_y = content_x + 0.2, current_y
+                chart_width, chart_height = 6.1, 0.45
                 
                 # Draw axes
                 master_pdf.set_draw_color(100, 100, 100)
                 master_pdf.set_line_width(0.015)
-                master_pdf.line(chart_x, chart_y + chart_height, chart_x, chart_y)  # Y-axis
-                master_pdf.line(chart_x, chart_y + chart_height, chart_x + chart_width, chart_y + chart_height)  # X-axis
+                master_pdf.line(chart_x, chart_y + chart_height, chart_x, chart_y)
+                master_pdf.line(chart_x, chart_y + chart_height, chart_x + chart_width, chart_y + chart_height)
                 
-                # Draw grid lines
+                # Grid lines with labels
                 master_pdf.set_draw_color(200, 200, 200)
                 master_pdf.set_line_width(0.008)
+                master_pdf.set_font("Helvetica", "", 6)
+                master_pdf.set_text_color(100, 100, 100)
+                
                 for pct in [0, 50, 100]:
                     y_pos = chart_y + chart_height - (pct / 100.0) * chart_height
                     master_pdf.line(chart_x - 0.05, y_pos, chart_x + chart_width, y_pos)
+                    # Add axis label
+                    master_pdf.set_xy(chart_x - 0.35, y_pos - 0.08)
+                    master_pdf.cell(0.25, 0.1, f"{pct}%", align='R')
                 
-                # Plot data points and connect with line
-                master_pdf.set_draw_color(0, 83, 226)  # Walmart Blue
+                # Plot data
+                master_pdf.set_draw_color(0, 83, 226)
                 master_pdf.set_line_width(0.02)
                 
                 points = []
@@ -2177,76 +2179,21 @@ def generate_batch_pdf(items_data: list) -> bytes:
                     y = chart_y + chart_height - (rate['null_pct'] / 100.0) * chart_height
                     points.append((x, y))
                 
-                # Draw line connecting points
                 for i in range(len(points) - 1):
                     x1, y1 = points[i]
                     x2, y2 = points[i + 1]
                     master_pdf.line(x1, y1, x2, y2)
                 
-                # Draw points
                 master_pdf.set_fill_color(0, 83, 226)
                 for x, y in points:
-                    master_pdf.circle(x, y, 0.03, style='F')
-                
-                current_y += 0.65
-        else:
-            current_y += 0.2
-        
-        # DIRECTIVE ACTION CARD (colored box with recommendation)
-        # Get recommendation
-        recommendation = "N/A"
-        rec_color_hex = "#6b7280"
-        if item_rates:
-            try:
-                avg_perf = get_avg_performance(item_rates)
-                trend_status = get_trend_status(item_rates)
-                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
-            except:
-                pass
-        
-        # Color mapping for Directive Action card
-        color_map = {
-            "#16a34a": {
-                "fill_bg": (220, 252, 231),
-                "border": (34, 197, 94),
-                "text": (34, 197, 94)
-            },
-            "#eab308": {
-                "fill_bg": (254, 243, 199),
-                "border": (245, 158, 11),
-                "text": (245, 158, 11)
-            },
-            "#dc2626": {
-                "fill_bg": (254, 226, 226),
-                "border": (220, 38, 38),
-                "text": (220, 38, 38)
-            },
-            "#6b7280": {
-                "fill_bg": (243, 244, 246),
-                "border": (107, 114, 128),
-                "text": (107, 114, 128)
-            }
-        }
-        
-        colors = color_map.get(rec_color_hex, color_map["#6b7280"])
-        
-        # Draw Directive Action card
-        master_pdf.set_xy(content_x, current_y)
-        master_pdf.set_fill_color(*colors["fill_bg"])
-        master_pdf.set_draw_color(*colors["border"])
-        master_pdf.set_line_width(0.02)
-        master_pdf.rect(content_x, current_y, 6.5, 0.45, 'FD')
-        master_pdf.set_font("Helvetica", "B", 11)
-        master_pdf.set_text_color(*colors["text"])
-        master_pdf.set_xy(content_x + 0.2, current_y + 0.08)
-        master_pdf.cell(6.1, 0.3, recommendation, align='C')
+                    master_pdf.circle(x, y, 0.025, style='F')
         
         print(f"[BATCH-PDF] Page {idx + 1} complete")
     
-    # Output final PDF - all 3 pages in one document
+    # Output
     pdf_output = master_pdf.output()
     pdf_bytes = bytes(pdf_output) if isinstance(pdf_output, bytearray) else pdf_output
-    print(f"[BATCH-PDF] Final PDF: {len(pdf_bytes)} bytes, {master_pdf.page} pages total")
+    print(f"[BATCH-PDF] Final: {len(pdf_bytes)} bytes, {master_pdf.page} pages")
     return pdf_bytes
 
 
