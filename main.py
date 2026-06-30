@@ -2042,44 +2042,107 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.multi_cell(6.5, 0.15, dims_text, align='C')
             current_y = master_pdf.get_y() + 0.1
         
-        # Load ACL data for recommendation card
+        # Load ACL data - EXACT SAME as generate_pdf()
         rates = load_read_rates()
-        rate_data = rates.get(str(item_id_orig), [])
-        recommendation = "N/A"
-        rec_color_hex = "#6b7280"
-        if rate_data and len(rate_data) > 0:
-            try:
-                avg_perf = get_avg_performance(rate_data)
-                trend_status = get_trend_status(rate_data)
-                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
-            except:
-                pass
+        item_rates = rates.get(str(item_id_orig), [])
         
         # ACL Performance label
         master_pdf.set_xy(content_x, current_y)
-        master_pdf.set_font("Helvetica", "B", 11)
-        master_pdf.set_text_color(0, 0, 0)
-        master_pdf.cell(6.5, 0.25, "ACL Performance %", align='C')
-        current_y += 0.3
+        master_pdf.set_font("Helvetica", "B", 13)
+        master_pdf.set_text_color(0, 83, 226)  # Walmart Blue
+        master_pdf.cell(6.5, 0.3, "ACL Performance %", align='C')
+        current_y += 0.35
         
-        # Recommendation card
-        color_map = {
-            "#16a34a": (34, 197, 94),
-            "#eab308": (245, 158, 11),
-            "#dc2626": (220, 38, 38),
-            "#6b7280": (107, 114, 128)
-        }
-        rgb = color_map.get(rec_color_hex, (100, 100, 100))
-        
-        master_pdf.set_xy(content_x, current_y)
-        master_pdf.set_fill_color(*rgb)
-        master_pdf.set_text_color(*rgb)
-        master_pdf.set_draw_color(*rgb)
-        master_pdf.set_line_width(0.02)
-        master_pdf.rect(content_x, current_y, 6.5, 0.4, 'FD')
-        master_pdf.set_font("Helvetica", "B", 11)
-        master_pdf.set_xy(content_x + 0.1, current_y + 0.05)
-        master_pdf.cell(6.3, 0.3, recommendation, align='C')
+        if item_rates:
+            # Calculate metrics EXACTLY like generate_pdf()
+            avg_perf = get_avg_performance(item_rates)
+            trend_status = get_trend_status(item_rates)
+            color = get_color_for_performance(avg_perf)
+            
+            # AVG PERFORMANCE box (light yellow)
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_fill_color(255, 250, 220)  # Light yellow
+            master_pdf.set_draw_color(218, 165, 32)  # Goldenrod border
+            master_pdf.set_line_width(0.02)
+            master_pdf.rect(content_x, current_y, 3.2, 0.7, style='FD')
+            
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.05)
+            master_pdf.set_font("Helvetica", "B", 7)
+            master_pdf.set_text_color(180, 140, 0)
+            master_pdf.cell(3.0, 0.15, "AVG PERFORMANCE", align='C')
+            
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.25)
+            master_pdf.set_font("Helvetica", "B", 16)
+            # Set color based on performance
+            if color == "#dc2626":
+                master_pdf.set_text_color(220, 38, 38)
+            elif color == "#f59e0b":
+                master_pdf.set_text_color(245, 158, 11)
+            elif color == "#eab308":
+                master_pdf.set_text_color(234, 179, 8)
+            else:  # green
+                master_pdf.set_text_color(22, 163, 74)
+            master_pdf.cell(3.0, 0.3, f"{avg_perf:.1f}%", align='C')
+            
+            # TREND box (light purple)
+            master_pdf.set_xy(content_x + 3.3, current_y)
+            master_pdf.set_fill_color(240, 230, 255)  # Light purple
+            master_pdf.set_draw_color(147, 112, 219)  # Purple border
+            master_pdf.set_line_width(0.02)
+            master_pdf.rect(content_x + 3.3, current_y, 3.2, 0.7, style='FD')
+            
+            master_pdf.set_xy(content_x + 3.4, current_y + 0.05)
+            master_pdf.set_font("Helvetica", "B", 7)
+            master_pdf.set_text_color(140, 100, 180)
+            master_pdf.cell(3.0, 0.15, "TREND", align='C')
+            
+            master_pdf.set_xy(content_x + 3.4, current_y + 0.25)
+            master_pdf.set_font("Helvetica", "B", 13)
+            master_pdf.set_text_color(60, 20, 140)
+            master_pdf.cell(3.0, 0.3, trend_status, align='C')
+            
+            current_y += 0.75
+            
+            # Draw trend chart if multiple data points
+            if len(item_rates) > 1:
+                chart_width = 6.3
+                chart_height = 0.5
+                chart_x = content_x + 0.1
+                chart_y = current_y
+                
+                # Draw axes
+                master_pdf.set_draw_color(100, 100, 100)
+                master_pdf.set_line_width(0.015)
+                master_pdf.line(chart_x, chart_y + chart_height, chart_x, chart_y)  # Y-axis
+                master_pdf.line(chart_x, chart_y + chart_height, chart_x + chart_width, chart_y + chart_height)  # X-axis
+                
+                # Draw grid lines
+                master_pdf.set_draw_color(200, 200, 200)
+                master_pdf.set_line_width(0.008)
+                for pct in [0, 50, 100]:
+                    y_pos = chart_y + chart_height - (pct / 100.0) * chart_height
+                    master_pdf.line(chart_x - 0.05, y_pos, chart_x + chart_width, y_pos)
+                
+                # Plot data points and connect with line
+                master_pdf.set_draw_color(0, 83, 226)  # Walmart Blue
+                master_pdf.set_line_width(0.02)
+                
+                points = []
+                for rate in item_rates:
+                    x = chart_x + (len(points) / max(len(item_rates) - 1, 1)) * chart_width
+                    y = chart_y + chart_height - (rate['null_pct'] / 100.0) * chart_height
+                    points.append((x, y))
+                
+                # Draw line connecting points
+                for i in range(len(points) - 1):
+                    x1, y1 = points[i]
+                    x2, y2 = points[i + 1]
+                    master_pdf.line(x1, y1, x2, y2)
+                
+                # Draw points
+                master_pdf.set_fill_color(0, 83, 226)
+                for x, y in points:
+                    master_pdf.circle(x, y, 0.03, style='F')
         
         print(f"[BATCH-PDF] Page {idx + 1} complete")
     
