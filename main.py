@@ -2049,11 +2049,14 @@ def generate_batch_pdf(items_data: list) -> bytes:
         rates = load_read_rates()
         item_rates = rates.get(str(item_id_orig), [])
         
+        # Add spacing before ACL Performance section
+        current_y += 0.2
+        
         # Draw red dashed border around ACL Performance section
         acl_box_x = content_x - 0.1
         acl_box_y = current_y
         acl_box_width = 6.7
-        acl_box_height = 2.0  # Estimate, will adjust
+        acl_box_height = 2.3  # Taller to include Directive Action card
         
         # Draw dashed rectangle (red)
         master_pdf.set_draw_color(255, 0, 0)  # Red
@@ -2182,6 +2185,59 @@ def generate_batch_pdf(items_data: list) -> bytes:
                 master_pdf.set_fill_color(0, 83, 226)
                 for x, y in points:
                     master_pdf.circle(x, y, 0.03, style='F')
+                
+                current_y += 0.65
+        else:
+            current_y += 0.2
+        
+        # DIRECTIVE ACTION CARD (colored box with recommendation)
+        # Get recommendation
+        recommendation = "N/A"
+        rec_color_hex = "#6b7280"
+        if item_rates:
+            try:
+                avg_perf = get_avg_performance(item_rates)
+                trend_status = get_trend_status(item_rates)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+            except:
+                pass
+        
+        # Color mapping for Directive Action card
+        color_map = {
+            "#16a34a": {
+                "fill_bg": (220, 252, 231),
+                "border": (34, 197, 94),
+                "text": (34, 197, 94)
+            },
+            "#eab308": {
+                "fill_bg": (254, 243, 199),
+                "border": (245, 158, 11),
+                "text": (245, 158, 11)
+            },
+            "#dc2626": {
+                "fill_bg": (254, 226, 226),
+                "border": (220, 38, 38),
+                "text": (220, 38, 38)
+            },
+            "#6b7280": {
+                "fill_bg": (243, 244, 246),
+                "border": (107, 114, 128),
+                "text": (107, 114, 128)
+            }
+        }
+        
+        colors = color_map.get(rec_color_hex, color_map["#6b7280"])
+        
+        # Draw Directive Action card
+        master_pdf.set_xy(content_x, current_y)
+        master_pdf.set_fill_color(*colors["fill_bg"])
+        master_pdf.set_draw_color(*colors["border"])
+        master_pdf.set_line_width(0.02)
+        master_pdf.rect(content_x, current_y, 6.5, 0.45, 'FD')
+        master_pdf.set_font("Helvetica", "B", 11)
+        master_pdf.set_text_color(*colors["text"])
+        master_pdf.set_xy(content_x + 0.2, current_y + 0.08)
+        master_pdf.cell(6.1, 0.3, recommendation, align='C')
         
         print(f"[BATCH-PDF] Page {idx + 1} complete")
     
