@@ -1930,9 +1930,9 @@ def generate_batch_pdf(items_data: list) -> bytes:
     if not items_data:
         raise ValueError("No items provided")
     
-    # Try to merge PDFs properly using pypdf if available
+    # Try to merge PDFs properly using PyPDF2
     try:
-        from pypdf import PdfMerger
+        from PyPDF2 import PdfMerger
         from io import BytesIO
         
         merger = PdfMerger()
@@ -1951,21 +1951,20 @@ def generate_batch_pdf(items_data: list) -> bytes:
             merger.append(pdf_io)
             print(f"[BATCH-PDF] Appended item {idx + 1} to merger")
         
-        print(f"[BATCH-PDF] Merger has {len(merger.pages)} pages total")
-        
         # Output merged PDF
         output = BytesIO()
         merger.write(output)
         merger.close()
         
         final_bytes = output.getvalue()
-        print(f"[BATCH-PDF] Final PDF size: {len(final_bytes)} bytes")
+        print(f"[BATCH-PDF] Final PDF size: {len(final_bytes)} bytes with {len(pdf_ios)} items")
         return final_bytes
     
-    except ImportError:
-        # Fallback: If pypdf not available, just return all 3 PDFs concatenated
+    except Exception as e:
+        print(f"[BATCH-PDF] PyPDF2 merge failed: {str(e)}")
+        # Fallback: If merge not available, just return all 3 PDFs concatenated
         # This might not display perfectly but at least the data is there
-        print("[BATCH-PDF] pypdf not available, using fallback concatenation")
+        print("[BATCH-PDF] Using fallback concatenation")
         
         all_bytes = b""
         for idx, item_data in enumerate(items_data):
