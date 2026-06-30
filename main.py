@@ -1915,6 +1915,118 @@ async def batch_random():
 </html>'''
 
 
+def generate_batch_pdf(items_data: list) -> bytes:
+    """Generate a single PDF with multiple items (one landscape page per item)."""
+    pdf = FPDF(orientation='L', unit='in', format='Letter')  # Landscape
+    
+    for page_idx, item_data in enumerate(items_data):
+        # Add new page for each item
+        pdf.add_page()
+        pdf.set_margins(0.4, 0.4, 0.4)
+        
+        # Extract item data
+        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
+        image_url = item_data.get("image_url", "")
+        gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+        catalog_gtin = sanitize_for_pdf(item_data.get("catalog_gtin", ""))
+        vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
+        vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
+        vnpk_height = sanitize_for_pdf(item_data.get("vnpk_height", ""))
+        casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
+        vendor_qty = sanitize_for_pdf(item_data.get("vendor_pack_qty", ""))
+        warehouse_qty = sanitize_for_pdf(item_data.get("warehouse_pack_qty", ""))
+        item_id_orig = item_data.get("item_id", "")
+        item_id = sanitize_for_pdf(item_id_orig)
+        
+        # LEFT COLUMN: Product Image
+        img_x = 0.4
+        img_y = 0.4
+        img_width = 3.2
+        img_height = 3.8
+        
+        # Draw image border
+        pdf.set_draw_color(220, 220, 220)
+        pdf.set_line_width(0.01)
+        pdf.rect(img_x + 0.05, img_y + 0.05, img_width, img_height)
+        pdf.set_draw_color(0, 83, 226)
+        pdf.set_line_width(0.03)
+        pdf.rect(img_x, img_y, img_width, img_height)
+        
+        if image_url:
+            try:
+                img_response = httpx.get(image_url, timeout=5)
+                img_bytes = BytesIO(img_response.content)
+                temp_img = "/tmp/product.jpg"
+                with open(temp_img, 'wb') as f:
+                    f.write(img_bytes.getvalue())
+                pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
+            except:
+                pass
+        
+        # RIGHT COLUMN: Details
+        content_x = 3.8
+        current_y = 0.4
+        
+        # Title
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_text_color(0, 83, 226)
+        pdf.multi_cell(6.5, 0.3, item_name, align='C')
+        current_y = pdf.get_y() + 0.1
+        
+        # Item details
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(100, 100, 100)
+        
+        details_text = f"Item: {item_id}"
+        if gtin:
+            details_text += f" | GTIN: {gtin}"
+        
+        pdf.multi_cell(6.5, 0.15, details_text, align='C')
+        current_y = pdf.get_y() + 0.05
+        
+        # Pack Type Card (if available)
+        if casepack_type:
+            pdf.set_xy(content_x, current_y)
+            if "CASEPACK" in casepack_type.upper():
+                pdf.set_fill_color(224, 242, 254)
+                pdf.set_text_color(0, 83, 226)
+                pdf.set_draw_color(0, 83, 226)
+            else:
+                pdf.set_fill_color(252, 231, 243)
+                pdf.set_text_color(236, 72, 153)
+                pdf.set_draw_color(236, 72, 153)
+            
+            pdf.set_line_width(0.02)
+            box_height = 0.4
+            pdf.rect(content_x, current_y, 6.5, box_height, 'FD')
+            
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_xy(content_x + 0.1, current_y + 0.08)
+            pdf.cell(6.3, 0.25, casepack_type, align='C')
+            current_y += box_height + 0.05
+        
+        # Pack ratio
+        if vendor_qty and warehouse_qty:
+            pdf.set_xy(content_x, current_y)
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(100, 100, 100)
+            ratio_text = f"Pack Ratio: {vendor_qty}/{warehouse_qty}"
+            pdf.multi_cell(6.5, 0.15, ratio_text, align='C')
+            current_y = pdf.get_y() + 0.05
+        
+        # Dimensions
+        if vnpk_length or vnpk_width or vnpk_height:
+            pdf.set_xy(content_x, current_y)
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(100, 100, 100)
+            dims_text = f"Vendor Pack Dims (L × W × H): {vnpk_length if vnpk_length else '--'} × {vnpk_width if vnpk_width else '--'} × {vnpk_height if vnpk_height else '--'}"
+            pdf.multi_cell(6.5, 0.15, dims_text, align='C')
+    
+    return pdf.output()
+
+
 @app.get("/batch/pdf")
 async def batch_pdf(items: str = ""):
     """Download consolidated PDF with multiple items (one page per item)."""
@@ -1932,13 +2044,10 @@ async def batch_pdf(items: str = ""):
         facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
         wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
         
-        # Create master PDF
-        from io import BytesIO
+        # Fetch all items' data
+        items_data = []
         
-        pdf_files = []
-        success_count = 0
-        
-        for idx, item_id in enumerate(item_ids):
+        for item_id in item_ids:
             try:
                 # Fetch MDM data
                 api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
@@ -1954,29 +2063,22 @@ async def batch_pdf(items: str = ""):
                     response.raise_for_status()
                     mdm_data = response.json()
                     item_data = extract_item_data(mdm_data)
-                    
-                    # Generate individual PDF bytes for this item
-                    pdf_bytes = generate_pdf(item_data)
-                    pdf_files.append(pdf_bytes)
-                    success_count += 1
-                    print(f"[BATCH-PDF] Generated item {idx + 1}: {item_id}")
+                    items_data.append(item_data)
+                    print(f"[BATCH-PDF] Fetched item: {item_id}")
             
             except Exception as e:
                 print(f"[BATCH-PDF] Error fetching item {item_id}: {str(e)}")
         
-        if not pdf_files:
-            return JSONResponse({"error": "Failed to generate any PDFs"}, status_code=500)
+        if not items_data:
+            return JSONResponse({"error": "Failed to fetch any items"}, status_code=500)
         
-        # Simple concatenation: just append all PDF bytes together
-        # This works with FPDF since we're creating separate complete PDFs
-        combined_pdf = b""
-        for pdf_bytes in pdf_files:
-            combined_pdf += pdf_bytes
+        # Generate single PDF with all items
+        pdf_bytes = generate_batch_pdf(items_data)
         
-        print(f"[BATCH-PDF] Successfully generated {success_count} PDFs")
+        print(f"[BATCH-PDF] Successfully generated PDF with {len(items_data)} items")
         
         return Response(
-            content=combined_pdf,
+            content=pdf_bytes,
             media_type="application/pdf",
             headers={"Content-Disposition": 'attachment; filename="batch_report_all.pdf"'}
         )
