@@ -1811,24 +1811,45 @@ async def batch_random():
         item_info = item["item_data"]
         rate_db = item["read_rates"]
         
-        image_html = f'<img src="{item_info["image_url"]}" class="w-full rounded border mb-2">' if item_info["image_url"] else ''
+        image_html = f'<img src="{item_info["image_url"]}" class="w-full h-64 object-cover rounded border mb-2">' if item_info["image_url"] else '<div class="w-full h-64 bg-gray-200 rounded border mb-2 flex items-center justify-center"><p class="text-gray-500">No Image</p></div>'
+        
+        # Get ACL performance chart
+        chart_html = get_read_rate_chart(item_id, 
+                                        item_info.get("vnpk_length", ""),
+                                        item_info.get("vnpk_width", ""),
+                                        item_info.get("vnpk_height", ""))
+        
+        # Build casepack card
+        casepack_type = item_info.get("casepack_type", "")
+        casepack_card_html = ""
+        if casepack_type:
+            casepack_color = "#0ea5e9" if "CASEPACK" in casepack_type.upper() else "#ec4899"
+            casepack_card_html = f'''<div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-300 shadow-lg text-center">
+                <div class="text-4xl font-black" style="color: {casepack_color};">{casepack_type}</div>
+            </div>'''
         
         cards_html += f'''<div class="bg-white p-4 rounded border shadow mb-6">
-            <h3 class="text-xl font-bold text-blue-600 mb-2">Item {idx}: {item_info["item_name"]}</h3>
-            <div class="grid grid-cols-2 gap-4">
+            <h3 class="text-2xl font-bold text-blue-600 mb-4">Item {idx}: {item_info["item_name"]}</h3>
+            
+            <!-- Two-column layout: Left=Product, Right=Graph -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 <div>
                     {image_html}
-                    <p class="text-sm"><strong>Item #:</strong> {item_id}</p>
-                    <p class="text-sm"><strong>GTIN:</strong> {item_info["gtin"]}</p>
-                    <p class="text-sm"><strong>Pack Type:</strong> {item_info.get("casepack_type", "N/A")}</p>
-                    <p class="text-sm"><strong>Dims:</strong> {item_info.get("vnpk_length", "--")} x {item_info.get("vnpk_width", "--")} x {item_info.get("vnpk_height", "--")}"</p>
+                    <div class="space-y-2 text-sm">
+                        <p><strong>Item #:</strong> {item_id}</p>
+                        <p><strong>GTIN:</strong> {item_info["gtin"]}</p>
+                        <p><strong>Pack Type:</strong> {casepack_type if casepack_type else "N/A"}</p>
+                        <p><strong>Dims (L×W×H):</strong> {item_info.get("vnpk_length", "--")} × {item_info.get("vnpk_width", "--")} × {item_info.get("vnpk_height", "--")}"</p>
+                        <p><strong>Pack Ratio:</strong> {item_info.get("vendor_pack_qty", "--")}/{item_info.get("warehouse_pack_qty", "--")}</p>
+                        <p><strong>Department:</strong> {item_info["supplier_dept"]}</p>
+                        <p><strong>Records:</strong> {rate_db["record_count"]}</p>
+                    </div>
                 </div>
                 <div>
-                    <p class="text-sm"><strong>Read Rate Records:</strong> {rate_db["record_count"]}</p>
-                    <p class="text-sm"><strong>Department:</strong> {item_info["supplier_dept"]}</p>
-                    <p class="text-sm"><strong>Pack Ratio:</strong> {item_info.get("vendor_pack_qty", "--")}/{item_info.get("warehouse_pack_qty", "--")}</p>
+                    {chart_html}
                 </div>
             </div>
+            {casepack_card_html}
         </div>'''
     
     return f'''<!DOCTYPE html>
@@ -1838,6 +1859,7 @@ async def batch_random():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Batch Report - Testing</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-100">
     <div class="max-w-6xl mx-auto p-6">
@@ -1869,49 +1891,80 @@ async def batch_pdf():
     if not item_ids:
         return JSONResponse({"error": "No items found"}, status_code=500)
     
-    pdf = FPDF(orientation='L', unit='in', format='Letter')
+    # Create master PDF that will contain all 3 items
+    master_pdf = FPDF(orientation='L', unit='in', format='Letter')
     
-    for idx, item_id in enumerate(item_ids):
-        try:
-            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
-            api_key = os.getenv("MDM_API_KEY", "")
-            facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
-            facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
-            wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
-            
-            headers = {
-                "Api-Key": api_key,
-                "Facilitynum": facility_num,
-                "Facilitycountrycode": facility_country,
-                "Wmt-Userid": wmt_userid
-            }
-            
-            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-                response = await client.get(api_url, headers=headers)
-                response.raise_for_status()
-                mdm_data = response.json()
-                item_data = extract_item_data(mdm_data)
+    try:
+        api_key = os.getenv("MDM_API_KEY", "")
+        facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+        facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+        wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+        
+        for idx, item_id in enumerate(item_ids):
+            try:
+                # Fetch MDM data
+                api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{item_id}/?xrefItemInfo=false"
+                headers = {
+                    "Api-Key": api_key,
+                    "Facilitynum": facility_num,
+                    "Facilitycountrycode": facility_country,
+                    "Wmt-Userid": wmt_userid
+                }
                 
-                # Generate PDF page for this item
-                pdf_bytes = generate_pdf(item_data)
-                # For multi-page: we'd need to merge PDFs here
-                # For now, just add as separate file note
-                
-                # Add page separator
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                    response = await client.get(api_url, headers=headers)
+                    response.raise_for_status()
+                    mdm_data = response.json()
+                    item_data = extract_item_data(mdm_data)
+                    
+                    # Generate individual PDF for this item
+                    individual_pdf = generate_pdf(item_data)
+                    
+                    # individual_pdf is bytes, we need to merge it into master_pdf
+                    # Since FPDF doesn't have native PDF merging, we'll create pages in master PDF
+                    # For now: add a cover page for each item
+                    if idx > 0:
+                        master_pdf.add_page()
+                    else:
+                        master_pdf.add_page()
+                    
+                    # Add item info as cover page
+                    master_pdf.set_font("Helvetica", "B", 20)
+                    master_pdf.cell(0, 0.5, f"Item {idx + 1}: {item_data.get('item_name', 'Unknown Item')}", ln=True)
+                    
+                    master_pdf.set_font("Helvetica", "", 10)
+                    master_pdf.ln(0.3)
+                    master_pdf.cell(0, 0.25, f"Item ID: {item_id}", ln=True)
+                    master_pdf.cell(0, 0.25, f"GTIN: {item_data.get('gtin', 'N/A')}", ln=True)
+                    master_pdf.cell(0, 0.25, f"Pack Type: {item_data.get('casepack_type', 'N/A')}", ln=True)
+                    dims_str = f"{item_data.get('vnpk_length', '--')} x {item_data.get('vnpk_width', '--')} x {item_data.get('vnpk_height', '--')}"
+                    master_pdf.cell(0, 0.25, f'Dims: {dims_str}"', ln=True)
+                    
+                    print(f"[BATCH-PDF] Added item {idx + 1}: {item_id}")
+            
+            except Exception as e:
+                print(f"[BATCH-PDF] Error fetching item {item_id}: {str(e)}")
+                # Still add error page
                 if idx > 0:
-                    pdf.add_page()
-                    pdf.set_font("Helvetica", "", 12)
-                    pdf.cell(0, 0.5, f"--- Item {idx + 1}: {item_data.get('item_name', 'Unknown')} ---", align='C')
-        except Exception as e:
-            print(f"[BATCH-PDF] Error: {str(e)}")
+                    master_pdf.add_page()
+                master_pdf.set_font("Helvetica", "B", 14)
+                master_pdf.cell(0, 0.5, f"Error Loading Item {idx + 1}: {item_id}", ln=True)
+                master_pdf.set_font("Helvetica", "", 10)
+                master_pdf.cell(0, 0.25, str(e), ln=True)
+        
+        # Output PDF as bytes
+        pdf_bytes = master_pdf.output()
+        
+        # Return as bytes - use bytes() to ensure it's the right type
+        return Response(
+            content=bytes(pdf_bytes) if isinstance(pdf_bytes, bytearray) else pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="batch_report.pdf"'}
+        )
     
-    pdf_bytes = pdf.output()
-    
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="batch_report.pdf"'}
-    )
+    except Exception as e:
+        print(f"[BATCH-PDF] Fatal error: {str(e)}")
+        return JSONResponse({"error": f"PDF generation failed: {str(e)}"}, status_code=500)
 
 
 if __name__ == "__main__":
