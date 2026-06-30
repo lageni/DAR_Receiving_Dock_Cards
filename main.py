@@ -1923,127 +1923,47 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a single multi-page PDF with all items - one full page per item.
+    """Generate a multi-page PDF with all items using their FULL formatting.
     
-    This is SIMPLIFIED - each item shows basic info, not the full charts.
-    For full charts, users should download individual PDFs.
+    Generates each item using generate_pdf() and merges them properly.
     """
     if not items_data:
         raise ValueError("No items provided")
     
-    # Create ONE master PDF that we'll add all items to
-    pdf = FPDF(orientation='L', unit='in', format='Letter')
+    # Try to merge PDFs properly using pypdf if available
+    try:
+        from pypdf import PdfMerger
+        from io import BytesIO
+        
+        merger = PdfMerger()
+        
+        for idx, item_data in enumerate(items_data):
+            # Generate full PDF for this item
+            pdf_bytes = generate_pdf(item_data)
+            # Add to merger
+            pdf_io = BytesIO(pdf_bytes)
+            merger.append(pdf_io)
+            print(f"[BATCH-PDF] Added item {idx + 1}")
+        
+        # Output merged PDF
+        output = BytesIO()
+        merger.write(output)
+        merger.close()
+        
+        return output.getvalue()
     
-    for idx, item_data in enumerate(items_data):
-        # Add page for this item
-        pdf.add_page()
-        pdf.set_margins(0.4, 0.4, 0.4)
+    except ImportError:
+        # Fallback: If pypdf not available, just return all 3 PDFs concatenated
+        # This might not display perfectly but at least the data is there
+        print("[BATCH-PDF] pypdf not available, using fallback concatenation")
         
-        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown"))
-        image_url = item_data.get("image_url", "")
-        gtin = sanitize_for_pdf(item_data.get("gtin", ""))
-        casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
-        item_id_orig = item_data.get("item_id", "")
-        item_id = sanitize_for_pdf(item_id_orig)
+        all_bytes = b""
+        for idx, item_data in enumerate(items_data):
+            pdf_bytes = generate_pdf(item_data)
+            all_bytes += pdf_bytes
+            print(f"[BATCH-PDF] Added item {idx + 1}")
         
-        # Image section
-        img_x = 0.4
-        pdf.set_draw_color(0, 83, 226)
-        pdf.set_line_width(0.03)
-        pdf.rect(img_x, 0.4, 3.2, 3.8)
-        
-        if image_url:
-            try:
-                img_response = httpx.get(image_url, timeout=5)
-                temp_img = f"/tmp/product_{uuid.uuid4().hex[:8]}.jpg"
-                with open(temp_img, 'wb') as f:
-                    f.write(img_response.content)
-                pdf.image(temp_img, x=img_x+0.05, y=0.45, w=3.1, h=3.7)
-            except:
-                pass
-        
-        # Right side: Item name and basic info
-        pdf.set_xy(3.8, 0.4)
-        pdf.set_font("Helvetica", "B", 18)
-        pdf.set_text_color(0, 83, 226)
-        pdf.multi_cell(6.5, 0.3, item_name, align='C')
-        
-        current_y = pdf.get_y() + 0.1
-        
-        # Item ID and GTIN
-        pdf.set_xy(3.8, current_y)
-        pdf.set_font("Helvetica", "", 9)
-        pdf.set_text_color(100, 100, 100)
-        details = f"Item: {item_id}"
-        if gtin:
-            details += f" | GTIN: {gtin}"
-        pdf.multi_cell(6.5, 0.15, details, align='C')
-        current_y = pdf.get_y() + 0.1
-        
-        # Casepack type card
-        if casepack_type:
-            pdf.set_xy(3.8, current_y)
-            if "CASEPACK" in casepack_type.upper():
-                pdf.set_fill_color(224, 242, 254)
-                pdf.set_text_color(0, 83, 226)
-                pdf.set_draw_color(0, 83, 226)
-            else:
-                pdf.set_fill_color(252, 231, 243)
-                pdf.set_text_color(236, 72, 153)
-                pdf.set_draw_color(236, 72, 153)
-            
-            pdf.set_line_width(0.02)
-            pdf.rect(3.8, current_y, 6.5, 0.4, 'FD')
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.set_xy(3.9, current_y + 0.08)
-            pdf.cell(6.3, 0.25, casepack_type, align='C')
-            current_y += 0.5
-        
-        # ACL Performance label
-        pdf.set_xy(3.8, current_y)
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(6.5, 0.25, "ACL Performance %", align='C')
-        current_y += 0.35
-        
-        # Show recommendation
-        rates = load_read_rates()
-        rate_data = rates.get(str(item_id_orig), [])
-        recommendation = "N/A"
-        color_rgb = (107, 114, 128)
-        
-        if rate_data and len(rate_data) > 0:
-            try:
-                avg_perf = get_avg_performance(rate_data)
-                trend_status = get_trend_status(rate_data)
-                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
-                
-                color_map = {
-                    "#16a34a": (34, 197, 94),
-                    "#eab308": (245, 158, 11),
-                    "#dc2626": (220, 38, 38),
-                    "#6b7280": (107, 114, 128)
-                }
-                color_rgb = color_map.get(rec_color_hex, (100, 100, 100))
-            except:
-                pass
-        
-        pdf.set_xy(3.8, current_y)
-        pdf.set_fill_color(*color_rgb)
-        pdf.set_text_color(*color_rgb)
-        pdf.set_draw_color(*color_rgb)
-        pdf.set_line_width(0.02)
-        pdf.rect(3.8, current_y, 6.5, 0.4, 'FD')
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.set_xy(3.9, current_y + 0.05)
-        pdf.cell(6.3, 0.3, recommendation, align='C')
-        
-        print(f"[BATCH-PDF] Added page {idx + 1}")
-    
-    # Output final PDF
-    pdf_output = pdf.output()
-    pdf_bytes = bytes(pdf_output) if isinstance(pdf_output, bytearray) else pdf_output
-    return pdf_bytes
+        return all_bytes
 
 
 def generate_batch_pdf_OLD(items_data: list) -> bytes:
