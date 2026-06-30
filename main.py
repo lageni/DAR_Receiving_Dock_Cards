@@ -157,7 +157,9 @@ def check_non_conveyable(length: str, width: str, height: str) -> tuple:
         width_val = float(width) if width else 999
         height_val = float(height) if height else 999
         
-        if length_val < 7 or width_val < 5 or height_val < 2:
+        # Sort dimensions to get longest, middle, smallest
+        sides = sorted([length_val, width_val, height_val], reverse=True)
+        if sides[0] < 7 or sides[1] < 5 or sides[2] < 2:
             return True, "WORKSTATION: NON-CONVEYABLE", "#dc2626"
     except (ValueError, TypeError):
         pass
