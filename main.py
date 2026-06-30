@@ -1923,24 +1923,125 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a single multi-page PDF with all items using the same formatting as generate_pdf().
+    """Generate a single multi-page PDF with all items - one full page per item.
     
-    Creates one master FPDF and calls generate_pdf() for each item to add them as pages.
+    This is SIMPLIFIED - each item shows basic info, not the full charts.
+    For full charts, users should download individual PDFs.
     """
     if not items_data:
         raise ValueError("No items provided")
     
-    # Create single master PDF that will contain all items
-    master_pdf = FPDF(orientation='L', unit='in', format='Letter')
+    # Create ONE master PDF that we'll add all items to
+    pdf = FPDF(orientation='L', unit='in', format='Letter')
     
     for idx, item_data in enumerate(items_data):
-        # Call generate_pdf() but pass in the master_pdf so it adds a page to it
-        # Return the PDF object instead of bytes
-        generate_pdf(item_data, master_pdf=master_pdf, return_pdf_object=True)
-        print(f"[BATCH-PDF] Added item {idx + 1}")
+        # Add page for this item
+        pdf.add_page()
+        pdf.set_margins(0.4, 0.4, 0.4)
+        
+        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown"))
+        image_url = item_data.get("image_url", "")
+        gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+        casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
+        item_id_orig = item_data.get("item_id", "")
+        item_id = sanitize_for_pdf(item_id_orig)
+        
+        # Image section
+        img_x = 0.4
+        pdf.set_draw_color(0, 83, 226)
+        pdf.set_line_width(0.03)
+        pdf.rect(img_x, 0.4, 3.2, 3.8)
+        
+        if image_url:
+            try:
+                img_response = httpx.get(image_url, timeout=5)
+                temp_img = f"/tmp/product_{uuid.uuid4().hex[:8]}.jpg"
+                with open(temp_img, 'wb') as f:
+                    f.write(img_response.content)
+                pdf.image(temp_img, x=img_x+0.05, y=0.45, w=3.1, h=3.7)
+            except:
+                pass
+        
+        # Right side: Item name and basic info
+        pdf.set_xy(3.8, 0.4)
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_text_color(0, 83, 226)
+        pdf.multi_cell(6.5, 0.3, item_name, align='C')
+        
+        current_y = pdf.get_y() + 0.1
+        
+        # Item ID and GTIN
+        pdf.set_xy(3.8, current_y)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(100, 100, 100)
+        details = f"Item: {item_id}"
+        if gtin:
+            details += f" | GTIN: {gtin}"
+        pdf.multi_cell(6.5, 0.15, details, align='C')
+        current_y = pdf.get_y() + 0.1
+        
+        # Casepack type card
+        if casepack_type:
+            pdf.set_xy(3.8, current_y)
+            if "CASEPACK" in casepack_type.upper():
+                pdf.set_fill_color(224, 242, 254)
+                pdf.set_text_color(0, 83, 226)
+                pdf.set_draw_color(0, 83, 226)
+            else:
+                pdf.set_fill_color(252, 231, 243)
+                pdf.set_text_color(236, 72, 153)
+                pdf.set_draw_color(236, 72, 153)
+            
+            pdf.set_line_width(0.02)
+            pdf.rect(3.8, current_y, 6.5, 0.4, 'FD')
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_xy(3.9, current_y + 0.08)
+            pdf.cell(6.3, 0.25, casepack_type, align='C')
+            current_y += 0.5
+        
+        # ACL Performance label
+        pdf.set_xy(3.8, current_y)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(6.5, 0.25, "ACL Performance %", align='C')
+        current_y += 0.35
+        
+        # Show recommendation
+        rates = load_read_rates()
+        rate_data = rates.get(str(item_id_orig), [])
+        recommendation = "N/A"
+        color_rgb = (107, 114, 128)
+        
+        if rate_data and len(rate_data) > 0:
+            try:
+                avg_perf = get_avg_performance(rate_data)
+                trend_status = get_trend_status(rate_data)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+                
+                color_map = {
+                    "#16a34a": (34, 197, 94),
+                    "#eab308": (245, 158, 11),
+                    "#dc2626": (220, 38, 38),
+                    "#6b7280": (107, 114, 128)
+                }
+                color_rgb = color_map.get(rec_color_hex, (100, 100, 100))
+            except:
+                pass
+        
+        pdf.set_xy(3.8, current_y)
+        pdf.set_fill_color(*color_rgb)
+        pdf.set_text_color(*color_rgb)
+        pdf.set_draw_color(*color_rgb)
+        pdf.set_line_width(0.02)
+        pdf.rect(3.8, current_y, 6.5, 0.4, 'FD')
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_xy(3.9, current_y + 0.05)
+        pdf.cell(6.3, 0.3, recommendation, align='C')
+        
+        print(f"[BATCH-PDF] Added page {idx + 1}")
     
-    # Convert final PDF to bytes
-    pdf_output = master_pdf.output()
+    # Output final PDF
+    pdf_output = pdf.output()
     pdf_bytes = bytes(pdf_output) if isinstance(pdf_output, bytearray) else pdf_output
     return pdf_bytes
 
