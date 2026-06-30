@@ -2,6 +2,7 @@ import os
 import json
 import csv
 import sqlite3
+import uuid
 from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
@@ -1017,13 +1018,14 @@ def generate_pdf(item_data: dict) -> bytes:
         try:
             img_response = httpx.get(image_url, timeout=5)
             img_bytes = BytesIO(img_response.content)
-            temp_img = "/tmp/product.jpg"
+            # Use unique temp file to avoid duplication
+            temp_img = f"/tmp/product_{uuid.uuid4().hex[:8]}.jpg"
             with open(temp_img, 'wb') as f:
                 f.write(img_bytes.getvalue())
             # Center image in the box
             pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
-        except:
-            pass
+        except Exception as e:
+            print(f"[PDF] Image download failed: {str(e)}")
     
     # RIGHT COLUMN: Product Details (starting at x=3.8") - simpler layout
     content_x = 3.8
@@ -1916,115 +1918,30 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a single PDF with multiple items (one landscape page per item)."""
-    pdf = FPDF(orientation='L', unit='in', format='Letter')  # Landscape
+    """Generate a single multi-page PDF with all items using their full generate_pdf() output.
     
-    for page_idx, item_data in enumerate(items_data):
-        # Add new page for each item
-        pdf.add_page()
-        pdf.set_margins(0.4, 0.4, 0.4)
-        
-        # Extract item data
-        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
-        image_url = item_data.get("image_url", "")
-        gtin = sanitize_for_pdf(item_data.get("gtin", ""))
-        catalog_gtin = sanitize_for_pdf(item_data.get("catalog_gtin", ""))
-        vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
-        vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
-        vnpk_height = sanitize_for_pdf(item_data.get("vnpk_height", ""))
-        casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
-        vendor_qty = sanitize_for_pdf(item_data.get("vendor_pack_qty", ""))
-        warehouse_qty = sanitize_for_pdf(item_data.get("warehouse_pack_qty", ""))
-        item_id_orig = item_data.get("item_id", "")
-        item_id = sanitize_for_pdf(item_id_orig)
-        
-        # LEFT COLUMN: Product Image
-        img_x = 0.4
-        img_y = 0.4
-        img_width = 3.2
-        img_height = 3.8
-        
-        # Draw image border
-        pdf.set_draw_color(220, 220, 220)
-        pdf.set_line_width(0.01)
-        pdf.rect(img_x + 0.05, img_y + 0.05, img_width, img_height)
-        pdf.set_draw_color(0, 83, 226)
-        pdf.set_line_width(0.03)
-        pdf.rect(img_x, img_y, img_width, img_height)
-        
-        if image_url:
-            try:
-                img_response = httpx.get(image_url, timeout=5)
-                img_bytes = BytesIO(img_response.content)
-                temp_img = "/tmp/product.jpg"
-                with open(temp_img, 'wb') as f:
-                    f.write(img_bytes.getvalue())
-                pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
-            except:
-                pass
-        
-        # RIGHT COLUMN: Details
-        content_x = 3.8
-        current_y = 0.4
-        
-        # Title
-        pdf.set_xy(content_x, current_y)
-        pdf.set_font("Helvetica", "B", 18)
-        pdf.set_text_color(0, 83, 226)
-        pdf.multi_cell(6.5, 0.3, item_name, align='C')
-        current_y = pdf.get_y() + 0.1
-        
-        # Item details
-        pdf.set_xy(content_x, current_y)
-        pdf.set_font("Helvetica", "", 9)
-        pdf.set_text_color(100, 100, 100)
-        
-        details_text = f"Item: {item_id}"
-        if gtin:
-            details_text += f" | GTIN: {gtin}"
-        
-        pdf.multi_cell(6.5, 0.15, details_text, align='C')
-        current_y = pdf.get_y() + 0.05
-        
-        # Pack Type Card (if available)
-        if casepack_type:
-            pdf.set_xy(content_x, current_y)
-            if "CASEPACK" in casepack_type.upper():
-                pdf.set_fill_color(224, 242, 254)
-                pdf.set_text_color(0, 83, 226)
-                pdf.set_draw_color(0, 83, 226)
-            else:
-                pdf.set_fill_color(252, 231, 243)
-                pdf.set_text_color(236, 72, 153)
-                pdf.set_draw_color(236, 72, 153)
-            
-            pdf.set_line_width(0.02)
-            box_height = 0.4
-            pdf.rect(content_x, current_y, 6.5, box_height, 'FD')
-            
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.set_xy(content_x + 0.1, current_y + 0.08)
-            pdf.cell(6.3, 0.25, casepack_type, align='C')
-            current_y += box_height + 0.05
-        
-        # Pack ratio
-        if vendor_qty and warehouse_qty:
-            pdf.set_xy(content_x, current_y)
-            pdf.set_font("Helvetica", "", 8)
-            pdf.set_text_color(100, 100, 100)
-            ratio_text = f"Pack Ratio: {vendor_qty}/{warehouse_qty}"
-            pdf.multi_cell(6.5, 0.15, ratio_text, align='C')
-            current_y = pdf.get_y() + 0.05
-        
-        # Dimensions
-        if vnpk_length or vnpk_width or vnpk_height:
-            pdf.set_xy(content_x, current_y)
-            pdf.set_font("Helvetica", "", 8)
-            pdf.set_text_color(100, 100, 100)
-            dims_text = f"Vendor Pack Dims (L × W × H): {vnpk_length if vnpk_length else '--'} × {vnpk_width if vnpk_width else '--'} × {vnpk_height if vnpk_height else '--'}"
-            pdf.multi_cell(6.5, 0.15, dims_text, align='C')
+    This downloads each item's complete PDF and creates a consolidated view.
+    """
+    if not items_data:
+        raise ValueError("No items provided")
     
-    return pdf.output()
+    # Generate full PDF for EACH item and combine them
+    # Each item will have its full formatting, ACL cards, etc.
+    combined_content = b""
+    
+    for idx, item_data in enumerate(items_data):
+        try:
+            # Generate the complete, beautifully formatted PDF for this item
+            pdf_bytes = generate_pdf(item_data)
+            combined_content += pdf_bytes
+            print(f"[BATCH-PDF] Added full PDF for item {idx + 1}")
+        except Exception as e:
+            print(f"[BATCH-PDF] Error generating PDF for item {idx + 1}: {str(e)}")
+    
+    if not combined_content:
+        raise ValueError("Failed to generate any PDFs")
+    
+    return combined_content
 
 
 @app.get("/batch/pdf")
@@ -2063,6 +1980,11 @@ async def batch_pdf(items: str = ""):
                     response.raise_for_status()
                     mdm_data = response.json()
                     item_data = extract_item_data(mdm_data)
+                    
+                    # IMPORTANT: Also load the full MDM data so generate_pdf() can access it
+                    # generate_pdf() uses this to get charts and ACL cards
+                    item_data["_mdm_data"] = mdm_data
+                    
                     items_data.append(item_data)
                     print(f"[BATCH-PDF] Fetched item: {item_id}")
             
