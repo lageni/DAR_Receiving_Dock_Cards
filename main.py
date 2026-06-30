@@ -1918,30 +1918,142 @@ async def batch_random():
 
 
 def generate_batch_pdf(items_data: list) -> bytes:
-    """Generate a single multi-page PDF with all items using their full generate_pdf() output.
+    """Generate a single multi-page PDF with all items on separate pages.
     
-    This downloads each item's complete PDF and creates a consolidated view.
+    Creates one master FPDF and adds each item as a new page with full formatting.
     """
     if not items_data:
         raise ValueError("No items provided")
     
-    # Generate full PDF for EACH item and combine them
-    # Each item will have its full formatting, ACL cards, etc.
-    combined_content = b""
+    # Create single master PDF that will contain all items
+    pdf = FPDF(orientation='L', unit='in', format='Letter')
     
-    for idx, item_data in enumerate(items_data):
+    for page_idx, item_data in enumerate(items_data):
+        # Add new page for each item
+        pdf.add_page()
+        pdf.set_margins(0.4, 0.4, 0.4)
+        
+        item_name = sanitize_for_pdf(item_data.get("item_name", "Unknown Item"))
+        image_url = item_data.get("image_url", "")
+        gtin = sanitize_for_pdf(item_data.get("gtin", ""))
+        item_id_orig = item_data.get("item_id", "")
+        item_id = sanitize_for_pdf(item_id_orig)
+        vnpk_length = sanitize_for_pdf(item_data.get("vnpk_length", ""))
+        vnpk_width = sanitize_for_pdf(item_data.get("vnpk_width", ""))
+        vnpk_height = sanitize_for_pdf(item_data.get("vnpk_height", ""))
+        casepack_type = sanitize_for_pdf(item_data.get("casepack_type", ""))
+        vendor_qty = sanitize_for_pdf(item_data.get("vendor_pack_qty", ""))
+        warehouse_qty = sanitize_for_pdf(item_data.get("warehouse_pack_qty", ""))
+        
+        # LEFT COLUMN: Product Image
+        img_x = 0.4
+        img_y = 0.4
+        img_width = 3.2
+        img_height = 3.8
+        
+        # Draw image border
+        pdf.set_draw_color(220, 220, 220)
+        pdf.set_line_width(0.01)
+        pdf.rect(img_x + 0.05, img_y + 0.05, img_width, img_height)
+        pdf.set_draw_color(0, 83, 226)
+        pdf.set_line_width(0.03)
+        pdf.rect(img_x, img_y, img_width, img_height)
+        
+        # Download and embed image
+        if image_url:
+            try:
+                img_response = httpx.get(image_url, timeout=5)
+                temp_img = f"/tmp/product_{uuid.uuid4().hex[:8]}.jpg"
+                with open(temp_img, 'wb') as f:
+                    f.write(img_response.content)
+                pdf.image(temp_img, x=img_x+0.05, y=img_y+0.05, w=img_width-0.1, h=img_height-0.1)
+            except Exception as e:
+                print(f"[BATCH-PDF] Image failed for item {page_idx + 1}: {str(e)}")
+        
+        # RIGHT COLUMN: Details
+        content_x = 3.8
+        current_y = 0.4
+        
+        # Title
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_text_color(0, 83, 226)
+        pdf.multi_cell(6.5, 0.3, item_name, align='C')
+        current_y = pdf.get_y() + 0.1
+        
+        # Item details
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(100, 100, 100)
+        details_text = f"Item: {item_id}"
+        if gtin:
+            details_text += f" | GTIN: {gtin}"
+        pdf.multi_cell(6.5, 0.15, details_text, align='C')
+        current_y = pdf.get_y() + 0.05
+        
+        # Casepack card
+        if casepack_type:
+            pdf.set_xy(content_x, current_y)
+            if "CASEPACK" in casepack_type.upper():
+                pdf.set_fill_color(224, 242, 254)
+                pdf.set_text_color(0, 83, 226)
+                pdf.set_draw_color(0, 83, 226)
+            else:
+                pdf.set_fill_color(252, 231, 243)
+                pdf.set_text_color(236, 72, 153)
+                pdf.set_draw_color(236, 72, 153)
+            
+            pdf.set_line_width(0.02)
+            pdf.rect(content_x, current_y, 6.5, 0.4, 'FD')
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_xy(content_x + 0.1, current_y + 0.08)
+            pdf.cell(6.3, 0.25, casepack_type, align='C')
+            current_y += 0.45
+        
+        # ACL Performance card (simplified for batch view)
+        # Just show that we have the data, not the full chart
+        pdf.set_xy(content_x, current_y)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(6.5, 0.25, "ACL Performance %", align='C')
+        current_y += 0.3
+        
+        # Load ACL data for this item
         try:
-            # Generate the complete, beautifully formatted PDF for this item
-            pdf_bytes = generate_pdf(item_data)
-            combined_content += pdf_bytes
-            print(f"[BATCH-PDF] Added full PDF for item {idx + 1}")
+            rates = load_read_rates()
+            rate_data = rates.get(str(item_id_orig), [])
+            if rate_data and len(rate_data) > 0:
+                avg_perf = get_avg_performance(rate_data)
+                trend_status = get_trend_status(rate_data)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+                
+                # Show ACL recommendation card
+                pdf.set_xy(content_x, current_y)
+                
+                # Map color
+                color_map = {
+                    "#16a34a": (34, 197, 94),
+                    "#eab308": (245, 158, 11),
+                    "#dc2626": (220, 38, 38),
+                    "#6b7280": (107, 114, 128)
+                }
+                rgb = color_map.get(rec_color_hex, (100, 100, 100))
+                
+                pdf.set_fill_color(*rgb)
+                pdf.set_text_color(*rgb)
+                pdf.set_draw_color(*rgb)
+                pdf.set_line_width(0.02)
+                pdf.rect(content_x, current_y, 6.5, 0.35, 'FD')
+                
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.set_xy(content_x + 0.1, current_y + 0.05)
+                pdf.cell(6.3, 0.25, recommendation, align='C')
         except Exception as e:
-            print(f"[BATCH-PDF] Error generating PDF for item {idx + 1}: {str(e)}")
+            print(f"[BATCH-PDF] ACL data failed for item {page_idx + 1}: {str(e)}")
+        
+        print(f"[BATCH-PDF] Added page {page_idx + 1} for item {item_id}")
     
-    if not combined_content:
-        raise ValueError("Failed to generate any PDFs")
-    
-    return combined_content
+    return pdf.output()
 
 
 @app.get("/batch/pdf")
