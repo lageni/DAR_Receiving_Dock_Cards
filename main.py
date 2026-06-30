@@ -1878,6 +1878,9 @@ async def batch_random():
                 </div>
             </div>
             {casepack_card_html}
+            <div class="mt-4 text-center">
+                <a href="/print-card-pdf?item_id={item_id}" class="inline-block px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">📥 Download PDF</a>
+            </div>
         </div>'''
     
     return f'''<!DOCTYPE html>
@@ -1895,13 +1898,12 @@ async def batch_random():
         <p class="text-sm text-gray-600 mb-6">Randomly selected 3 items from read_rates.db</p>
         
         <div class="mb-6 flex gap-3">
-            <a href="/batch/random" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Refresh (New 3 Items)</a>
-            <a href="/batch/pdf" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Download Multi-Page PDF</a>
-            <a href="/" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back to Search</a>
+            <a href="/batch/random" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">🔄 Refresh (New 3 Items)</a>
+            <a href="/" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">← Back to Search</a>
         </div>
         
         <div class="yellow-box bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
-            <p class="text-yellow-800 text-sm"><strong>TESTING FEATURE:</strong> This batch report is under development. Data shown is from 3 random items. Use "Refresh" to get new items.</p>
+            <p class="text-yellow-800 text-sm"><strong>TESTING FEATURE:</strong> 3 random items shown below. Use "Refresh" to get new items. Click "📥 Download PDF" buttons below each item to download individual PDFs.</p>
         </div>
         
         {cards_html}
