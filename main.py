@@ -381,23 +381,23 @@ async def root():
                 
                 <!-- D.09 Sporting Goods Example -->
                 <div class="space-y-0">
-                    <div style="background-color: #00A4A6; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black;">Dept. 09</div>
-                    <div style="background-color: #00A4A6; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none;">Sporting Goods</div>
-                    <div style="background-color: #323232; color: white; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none; font-size: 0.875rem;">Example Item Description</div>
+                    <div style="background-color: #00A4A6; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; font-size: 0.95rem;">Dept. 09</div>
+                    <div style="background-color: #00A4A6; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.9rem;">Sporting Goods</div>
+                    <div style="background-color: #C4A57B; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.85rem;">Example Item Description</div>
                 </div>
                 
                 <!-- D.23 Mens Wear Example -->
-                <div class="space-y-0">
-                    <div style="background-color: #003DA5; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black;">Dept. 23</div>
-                    <div style="background-color: #003DA5; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none;">Mens Wear</div>
-                    <div style="background-color: #323232; color: white; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none; font-size: 0.875rem;">Example Item Description</div>
+                <div class="space-y-0" style="margin-top: 12px;">
+                    <div style="background-color: #003DA5; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; font-size: 0.95rem;">Dept. 23</div>
+                    <div style="background-color: #003DA5; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.9rem;">Mens Wear</div>
+                    <div style="background-color: #C4A57B; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.85rem;">Example Item Description</div>
                 </div>
                 
                 <!-- D.02 HBA Example -->
-                <div class="space-y-0">
-                    <div style="background-color: #FF8C00; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black;">Dept. 02</div>
-                    <div style="background-color: #FF8C00; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none;">HBA</div>
-                    <div style="background-color: #323232; color: white; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none; font-size: 0.875rem;">Example Item Description</div>
+                <div class="space-y-0" style="margin-top: 12px;">
+                    <div style="background-color: #FF8C00; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; font-size: 0.95rem;">Dept. 02</div>
+                    <div style="background-color: #FF8C00; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.9rem;">HBA</div>
+                    <div style="background-color: #C4A57B; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.85rem;">Example Item Description</div>
                 </div>
             </div>
         </details>
@@ -1189,10 +1189,10 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
         pdf.set_line_width(0.03)
         pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
-        pdf.set_xy(content_x, current_y + 0.02)
+        pdf.set_xy(content_x + 0.1, current_y + 0.02)
         pdf.set_font("Helvetica", "B", 9)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-        pdf.cell(6.5, band_height - 0.02, f"Dept. {supplier_dept}", align='C')
+        pdf.cell(6.3, band_height - 0.02, f"Dept. {supplier_dept}", align='L')
         current_y += band_height
         
         # Band 2: Category Name
@@ -1201,23 +1201,23 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
         pdf.set_line_width(0.03)
         pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
-        pdf.set_xy(content_x, current_y + 0.02)
+        pdf.set_xy(content_x + 0.1, current_y + 0.02)
         pdf.set_font("Helvetica", "B", 8)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-        pdf.cell(6.5, band_height - 0.02, dept_band['name'], align='C')
+        pdf.cell(6.3, band_height - 0.02, dept_band['name'], align='L')
         current_y += band_height
         
-        # Band 3: Item Description (from MDM data)
+        # Band 3: Item Description (from MDM data) - CARDBOARD COLOR
         item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
         pdf.set_xy(content_x, current_y)
-        pdf.set_fill_color(50, 50, 50)  # Dark gray
+        pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
         pdf.set_line_width(0.03)
         pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
-        pdf.set_xy(content_x, current_y + 0.02)
+        pdf.set_xy(content_x + 0.1, current_y + 0.02)
         pdf.set_font("Helvetica", "B", 7)
-        pdf.set_text_color(255, 255, 255)  # WHITE TEXT ON DARK
-        pdf.cell(6.5, band_height - 0.02, item_desc, align='C')
+        pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
+        pdf.cell(6.3, band_height - 0.02, item_desc, align='L')
         current_y += band_height + 0.05
     
     # Add Directive Action card (in right column, below product details)
@@ -2059,23 +2059,23 @@ async def batch_random():
                 
                 <!-- D.09 Sporting Goods Example -->
                 <div class="space-y-0">
-                    <div style="background-color: #00A4A6; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black;">Dept. 09</div>
-                    <div style="background-color: #00A4A6; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none;">Sporting Goods</div>
-                    <div style="background-color: #323232; color: white; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none; font-size: 0.875rem;">Example Item Description</div>
+                    <div style="background-color: #00A4A6; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; font-size: 0.95rem;">Dept. 09</div>
+                    <div style="background-color: #00A4A6; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.9rem;">Sporting Goods</div>
+                    <div style="background-color: #C4A57B; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.85rem;">Example Item Description</div>
                 </div>
                 
                 <!-- D.23 Mens Wear Example -->
-                <div class="space-y-0">
-                    <div style="background-color: #003DA5; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black;">Dept. 23</div>
-                    <div style="background-color: #003DA5; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none;">Mens Wear</div>
-                    <div style="background-color: #323232; color: white; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none; font-size: 0.875rem;">Example Item Description</div>
+                <div class="space-y-0" style="margin-top: 12px;">
+                    <div style="background-color: #003DA5; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; font-size: 0.95rem;">Dept. 23</div>
+                    <div style="background-color: #003DA5; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.9rem;">Mens Wear</div>
+                    <div style="background-color: #C4A57B; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.85rem;">Example Item Description</div>
                 </div>
                 
                 <!-- D.02 HBA Example -->
-                <div class="space-y-0">
-                    <div style="background-color: #FF8C00; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black;">Dept. 02</div>
-                    <div style="background-color: #FF8C00; color: black; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none;">HBA</div>
-                    <div style="background-color: #323232; color: white; padding: 8px; font-weight: bold; text-align: center; border: 2px solid black; border-top: none; font-size: 0.875rem;">Example Item Description</div>
+                <div class="space-y-0" style="margin-top: 12px;">
+                    <div style="background-color: #FF8C00; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; font-size: 0.95rem;">Dept. 02</div>
+                    <div style="background-color: #FF8C00; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.9rem;">HBA</div>
+                    <div style="background-color: #C4A57B; color: black; padding: 10px; font-weight: bold; text-align: left; border: 2px solid black; border-top: none; font-size: 0.85rem;">Example Item Description</div>
                 </div>
             </div>
         </details>
@@ -2202,10 +2202,10 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
             master_pdf.set_line_width(0.03)
             master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
-            master_pdf.set_xy(content_x, current_y + 0.02)
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.02)
             master_pdf.set_font("Helvetica", "B", 9)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(6.0, band_height - 0.02, f"Dept. {supplier_dept}", align='C')
+            master_pdf.cell(5.8, band_height - 0.02, f"Dept. {supplier_dept}", align='L')
             current_y += band_height
             
             # Band 2: Category Name
@@ -2214,23 +2214,23 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
             master_pdf.set_line_width(0.03)
             master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
-            master_pdf.set_xy(content_x, current_y + 0.02)
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.02)
             master_pdf.set_font("Helvetica", "B", 8)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(6.0, band_height - 0.02, dept_band['name'], align='C')
+            master_pdf.cell(5.8, band_height - 0.02, dept_band['name'], align='L')
             current_y += band_height
     
-            # Band 3: Item Description (from MDM data)
+            # Band 3: Item Description (from MDM data) - CARDBOARD COLOR
             item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
             master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(50, 50, 50)  # Dark gray
+            master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
             master_pdf.set_line_width(0.03)
             master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
-            master_pdf.set_xy(content_x, current_y + 0.02)
+            master_pdf.set_xy(content_x + 0.1, current_y + 0.02)
             master_pdf.set_font("Helvetica", "B", 7)
-            master_pdf.set_text_color(255, 255, 255)  # WHITE TEXT ON DARK
-            master_pdf.cell(6.0, band_height - 0.02, item_desc, align='C')
+            master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
+            master_pdf.cell(5.8, band_height - 0.02, item_desc, align='L')
             current_y += band_height + 0.05
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)

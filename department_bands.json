@@ -335,6 +335,118 @@
       "color_pms": "170 U",
       "rgb": [233, 30, 140],
       "icon": "sock"
+    },
+    {
+      "code": "D.29",
+      "name": "Intimates",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "underwear"
+    },
+    {
+      "code": "D.29",
+      "name": "Foundations",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "bra"
+    },
+    {
+      "code": "D.30",
+      "name": "Foundations",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "bra"
+    },
+    {
+      "code": "D.30",
+      "name": "Maternity",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "maternity"
+    },
+    {
+      "code": "D.31",
+      "name": "Handbag",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "purse"
+    },
+    {
+      "code": "D.31",
+      "name": "Backpacks",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "backpack"
+    },
+    {
+      "code": "D.31",
+      "name": "Wallet",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "wallet"
+    },
+    {
+      "code": "D.31",
+      "name": "Hat",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "hat"
+    },
+    {
+      "code": "D.31",
+      "name": "Umbrella",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "umbrella"
+    },
+    {
+      "code": "D.31",
+      "name": "Glove",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "glove"
+    },
+    {
+      "code": "D.32",
+      "name": "Kimono",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "robe"
+    },
+    {
+      "code": "D.32",
+      "name": "Jewelry",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "ring"
+    },
+    {
+      "code": "D.32",
+      "name": "Ring",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "ring"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Wear",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "dress"
     }
   ]
 }
