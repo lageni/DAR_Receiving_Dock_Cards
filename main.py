@@ -654,6 +654,7 @@ def extract_item_data(data: dict) -> dict:
     """Extract product data from MDM API response."""
     item_data = {
         "item_name": "Unknown Item",
+        "item_description": "Item Description",
         "item_id": "",
         "image_url": "",
         "gtin": "",
@@ -687,6 +688,8 @@ def extract_item_data(data: dict) -> dict:
             desc = data["description"][0]
             if isinstance(desc, dict):
                 item_data["item_name"] = desc.get("textValue", "Unknown Item").strip()
+                # Use same as description for department band
+                item_data["item_description"] = item_data["item_name"]
         
         # Item number
         if "number" in data:
@@ -2085,22 +2088,48 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.multi_cell(6.0, 0.15, dims, align='C')
             current_y = master_pdf.get_y() + 0.1
         
-        # 2d. Department Band (if available)
+        # 2d. Department Band Trio (3 bands: Dept # | Category | Description)
         dept_band = get_department_band(supplier_dept)
         if dept_band:
-            master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(*dept_band["rgb"])
-            master_pdf.set_draw_color(*dept_band["rgb"])
-            master_pdf.set_line_width(0.01)
-            master_pdf.rect(content_x, current_y, 6.0, 0.25, 'FD')
+            band_height = 0.22
+            rgb = dept_band["rgb"]
             
+            # Band 1: Department Number
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_fill_color(*rgb)
+            master_pdf.set_draw_color(*rgb)
+            master_pdf.set_line_width(0.01)
+            master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
+            master_pdf.set_xy(content_x, current_y + 0.02)
+            master_pdf.set_font("Helvetica", "B", 9)
+            master_pdf.set_text_color(255, 255, 255)
+            master_pdf.cell(6.0, band_height - 0.02, f"Dept. {supplier_dept}", align='C')
+            current_y += band_height
+            
+            # Band 2: Category Name
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_fill_color(*rgb)
+            master_pdf.set_draw_color(*rgb)
+            master_pdf.set_line_width(0.01)
+            master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
             master_pdf.set_xy(content_x, current_y + 0.02)
             master_pdf.set_font("Helvetica", "B", 8)
-            # White text for dark colors, black for light colors
-            is_dark = sum(dept_band["rgb"]) < 400
-            master_pdf.set_text_color(255, 255, 255) if is_dark else master_pdf.set_text_color(0, 0, 0)
-            master_pdf.cell(6.0, 0.2, f"Dept {supplier_dept}: {dept_band['name']}", align='C')
-            current_y += 0.3
+            master_pdf.set_text_color(255, 255, 255)
+            master_pdf.cell(6.0, band_height - 0.02, dept_band['name'], align='C')
+            current_y += band_height
+            
+            # Band 3: Item Description (from MDM data)
+            item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_fill_color(50, 50, 50)  # Dark gray
+            master_pdf.set_draw_color(50, 50, 50)
+            master_pdf.set_line_width(0.01)
+            master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
+            master_pdf.set_xy(content_x, current_y + 0.02)
+            master_pdf.set_font("Helvetica", "B", 7)
+            master_pdf.set_text_color(255, 255, 255)
+            master_pdf.cell(6.0, band_height - 0.02, item_desc, align='C')
+            current_y += band_height + 0.05
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
         rates = load_read_rates()
