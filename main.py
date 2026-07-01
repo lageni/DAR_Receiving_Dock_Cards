@@ -149,6 +149,30 @@ def get_color_for_performance(pct: float) -> str:
     else:
         return "#16a34a"  # Green
 
+def load_department_bands() -> dict:
+    """Load department band info from JSON file."""
+    bands_file = Path("department_bands.json")
+    if not bands_file.exists():
+        return []
+    try:
+        with open(bands_file) as f:
+            data = json.load(f)
+        return data.get("departments", [])
+    except Exception as e:
+        print(f"[WARNING] Failed to load department bands: {str(e)}")
+        return []
+
+def get_department_band(dept_number: str) -> dict:
+    """Get department band info by department number."""
+    if not dept_number:
+        return None
+    bands = load_department_bands()
+    dept_clean = dept_number.lstrip("D.").lstrip("0") if isinstance(dept_number, str) else str(dept_number)
+    for band in bands:
+        band_code = band.get("code", "").lstrip("D.").split("/")[0].lstrip("0")
+        if band_code == dept_clean:
+            return band
+    return None
 
 def check_non_conveyable(length: str, width: str, height: str) -> tuple:
     """Check if item is non-conveyable based on dimensions."""
@@ -2060,6 +2084,23 @@ def generate_batch_pdf(items_data: list) -> bytes:
             dims = f"Vendor Dims (L × W × H): {vnpk_length or '--'} × {vnpk_width or '--'} × {vnpk_height or '--'}"
             master_pdf.multi_cell(6.0, 0.15, dims, align='C')
             current_y = master_pdf.get_y() + 0.1
+        
+        # 2d. Department Band (if available)
+        dept_band = get_department_band(supplier_dept)
+        if dept_band:
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_fill_color(*dept_band["rgb"])
+            master_pdf.set_draw_color(*dept_band["rgb"])
+            master_pdf.set_line_width(0.01)
+            master_pdf.rect(content_x, current_y, 6.0, 0.25, 'FD')
+            
+            master_pdf.set_xy(content_x, current_y + 0.02)
+            master_pdf.set_font("Helvetica", "B", 8)
+            # White text for dark colors, black for light colors
+            is_dark = sum(dept_band["rgb"]) < 400
+            master_pdf.set_text_color(255, 255, 255) if is_dark else master_pdf.set_text_color(0, 0, 0)
+            master_pdf.cell(6.0, 0.2, f"Dept {supplier_dept}: {dept_band['name']}", align='C')
+            current_y += 0.3
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
         rates = load_read_rates()

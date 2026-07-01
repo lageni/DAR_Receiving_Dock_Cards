@@ -1,0 +1,340 @@
+{
+  "departments": [
+    {
+      "code": "D.02",
+      "name": "HBA",
+      "color_hex": "#FF8C00",
+      "color_pms": "1505 U",
+      "rgb": [255, 140, 0],
+      "icon": "eyelashes"
+    },
+    {
+      "code": "D.02",
+      "name": "Toothbrushes",
+      "color_hex": "#FF8C00",
+      "color_pms": "1505 U",
+      "rgb": [255, 140, 0],
+      "icon": "toothbrush"
+    },
+    {
+      "code": "D.02",
+      "name": "Travel & Trial Size",
+      "color_hex": "#FF8C00",
+      "color_pms": "1505 U",
+      "rgb": [255, 140, 0],
+      "icon": "bottle"
+    },
+    {
+      "code": "D.03",
+      "name": "Card & Party",
+      "color_hex": "#E91E8C",
+      "color_pms": "1788 U",
+      "rgb": [233, 30, 140],
+      "icon": "gift"
+    },
+    {
+      "code": "D.03",
+      "name": "Stationery",
+      "color_hex": "#E91E8C",
+      "color_pms": "1788 U",
+      "rgb": [233, 30, 140],
+      "icon": "pencil"
+    },
+    {
+      "code": "D.04",
+      "name": "Paper Goods",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "paper"
+    },
+    {
+      "code": "D.05/55/72",
+      "name": "Electronics",
+      "color_hex": "#003DA5",
+      "color_pms": "280 U",
+      "rgb": [0, 61, 165],
+      "icon": "camera"
+    },
+    {
+      "code": "D.06/85",
+      "name": "Cameras & Supplies",
+      "color_hex": "#003DA5",
+      "color_pms": "280 U",
+      "rgb": [0, 61, 165],
+      "icon": "camera"
+    },
+    {
+      "code": "D.07",
+      "name": "Toys",
+      "color_hex": "#6B2D7E",
+      "color_pms": "Purple",
+      "rgb": [107, 45, 126],
+      "icon": "toy"
+    },
+    {
+      "code": "D.08",
+      "name": "Pets",
+      "color_hex": "#0070C0",
+      "color_pms": "279 U",
+      "rgb": [0, 112, 192],
+      "icon": "paw"
+    },
+    {
+      "code": "D.09",
+      "name": "Sporting Goods",
+      "color_hex": "#0070C0",
+      "color_pms": "309 U",
+      "rgb": [0, 112, 192],
+      "icon": "tent"
+    },
+    {
+      "code": "D.09",
+      "name": "Knives",
+      "color_hex": "#00A4A6",
+      "color_pms": "309 U",
+      "rgb": [0, 164, 166],
+      "icon": "knife"
+    },
+    {
+      "code": "D.10/37",
+      "name": "Automotive/TLE",
+      "color_hex": "#0070C0",
+      "color_pms": "279 U",
+      "rgb": [0, 112, 192],
+      "icon": "car"
+    },
+    {
+      "code": "D.11",
+      "name": "Hardware",
+      "color_hex": "#0070C0",
+      "color_pms": "279 U",
+      "rgb": [0, 112, 192],
+      "icon": "wrench"
+    },
+    {
+      "code": "D.12",
+      "name": "Do It Yourself",
+      "color_hex": "#0070C0",
+      "color_pms": "279 U",
+      "rgb": [0, 112, 192],
+      "icon": "paintbrush"
+    },
+    {
+      "code": "D.13",
+      "name": "Household Cleaners",
+      "color_hex": "#0070C0",
+      "color_pms": "279 U",
+      "rgb": [0, 112, 192],
+      "icon": "bottle"
+    },
+    {
+      "code": "D.14",
+      "name": "Cook & Dine",
+      "color_hex": "#0070C0",
+      "color_pms": "293 U",
+      "rgb": [0, 112, 192],
+      "icon": "pan"
+    },
+    {
+      "code": "D.14",
+      "name": "Small Appliances",
+      "color_hex": "#0070C0",
+      "color_pms": "293 U",
+      "rgb": [0, 112, 192],
+      "icon": "toaster"
+    },
+    {
+      "code": "D.16",
+      "name": "Lawn & Garden",
+      "color_hex": "#00A046",
+      "color_pms": "355 U",
+      "rgb": [0, 160, 70],
+      "icon": "leaf"
+    },
+    {
+      "code": "D.17",
+      "name": "Home Furnishings",
+      "color_hex": "#003DA5",
+      "color_pms": "1788 U",
+      "rgb": [0, 61, 165],
+      "icon": "couch"
+    },
+    {
+      "code": "D.19",
+      "name": "Fabric & Crafts",
+      "color_hex": "#FF8C00",
+      "color_pms": "264 U",
+      "rgb": [255, 140, 0],
+      "icon": "needle"
+    },
+    {
+      "code": "D.20",
+      "name": "Bath & Shower",
+      "color_hex": "#E91E8C",
+      "color_pms": "Rhodamine Red U",
+      "rgb": [233, 30, 140],
+      "icon": "bathtub"
+    },
+    {
+      "code": "D.20",
+      "name": "Beach",
+      "color_hex": "#E91E8C",
+      "color_pms": "Rhodamine Red U",
+      "rgb": [233, 30, 140],
+      "icon": "umbrella"
+    },
+    {
+      "code": "D.22",
+      "name": "Bedding",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "bed"
+    },
+    {
+      "code": "D.23",
+      "name": "Mens Underwear",
+      "color_hex": "#003DA5",
+      "color_pms": "287 U",
+      "rgb": [0, 61, 165],
+      "icon": "shirt"
+    },
+    {
+      "code": "D.23",
+      "name": "Mens Wear",
+      "color_hex": "#003DA5",
+      "color_pms": "287 U",
+      "rgb": [0, 61, 165],
+      "icon": "shirt"
+    },
+    {
+      "code": "D.23",
+      "name": "Mens Accessories",
+      "color_hex": "#003DA5",
+      "color_pms": "287 U",
+      "rgb": [0, 61, 165],
+      "icon": "accessory"
+    },
+    {
+      "code": "D.23",
+      "name": "Mens Swimwear",
+      "color_hex": "#003DA5",
+      "color_pms": "287 U",
+      "rgb": [0, 61, 165],
+      "icon": "swimsuit"
+    },
+    {
+      "code": "D.23",
+      "name": "Mens Outerwear",
+      "color_hex": "#003DA5",
+      "color_pms": "287 U",
+      "rgb": [0, 61, 165],
+      "icon": "jacket"
+    },
+    {
+      "code": "D.23",
+      "name": "Mens Socks",
+      "color_hex": "#003DA5",
+      "color_pms": "287 U",
+      "rgb": [0, 61, 165],
+      "icon": "sock"
+    },
+    {
+      "code": "D.24",
+      "name": "Boys Underwear",
+      "color_hex": "#003DA5",
+      "color_pms": "285 U",
+      "rgb": [0, 61, 165],
+      "icon": "shirt"
+    },
+    {
+      "code": "D.24",
+      "name": "Boys Wear",
+      "color_hex": "#003DA5",
+      "color_pms": "285 U",
+      "rgb": [0, 61, 165],
+      "icon": "shirt"
+    },
+    {
+      "code": "D.24",
+      "name": "Boys Socks",
+      "color_hex": "#003DA5",
+      "color_pms": "285 U",
+      "rgb": [0, 61, 165],
+      "icon": "sock"
+    },
+    {
+      "code": "D.24",
+      "name": "Boys Swimwear",
+      "color_hex": "#003DA5",
+      "color_pms": "285 U",
+      "rgb": [0, 61, 165],
+      "icon": "swimsuit"
+    },
+    {
+      "code": "D.24",
+      "name": "Boys Outerwear",
+      "color_hex": "#003DA5",
+      "color_pms": "285 U",
+      "rgb": [0, 61, 165],
+      "icon": "jacket"
+    },
+    {
+      "code": "D.24",
+      "name": "Boys Accessories",
+      "color_hex": "#003DA5",
+      "color_pms": "285 U",
+      "rgb": [0, 61, 165],
+      "icon": "accessory"
+    },
+    {
+      "code": "D.25",
+      "name": "Shoes",
+      "color_hex": "#003DA5",
+      "color_pms": "279 U",
+      "rgb": [0, 61, 165],
+      "icon": "shoe"
+    },
+    {
+      "code": "D.26",
+      "name": "Newborn/Infant/Toddler",
+      "color_hex": "#003DA5",
+      "color_pms": "368 U",
+      "rgb": [0, 61, 165],
+      "icon": "baby"
+    },
+    {
+      "code": "D.26",
+      "name": "Infant & Toddler Swimwear",
+      "color_hex": "#003DA5",
+      "color_pms": "368 U",
+      "rgb": [0, 61, 165],
+      "icon": "swimsuit"
+    },
+    {
+      "code": "D.26",
+      "name": "Infant & Toddler Outerwear",
+      "color_hex": "#003DA5",
+      "color_pms": "368 U",
+      "rgb": [0, 61, 165],
+      "icon": "jacket"
+    },
+    {
+      "code": "D.26",
+      "name": "Infant Onesie",
+      "color_hex": "#00A046",
+      "color_pms": "368 U",
+      "rgb": [0, 160, 70],
+      "icon": "onesie"
+    },
+    {
+      "code": "D.29",
+      "name": "Socks/Hosiery",
+      "color_hex": "#E91E8C",
+      "color_pms": "170 U",
+      "rgb": [233, 30, 140],
+      "icon": "sock"
+    }
+  ]
+}
