@@ -342,7 +342,7 @@ async def root():
                 </div>
                 <div class="bg-red-50 border border-red-300 p-3 rounded">
                     <div class="font-bold text-red-700">WORKSTATION: NON-CONVEYABLE</div>
-                    <div class="text-red-600">Length < 7" OR Width < 5" OR Height < 2"</div>
+                    <div class="text-red-600">Longest side < 7" OR 2nd longest < 5" OR smallest < 2"</div>
                     <div class="text-xs text-gray-600 mt-1">Size-based constraint</div>
                 </div>
             </div>
@@ -1918,6 +1918,39 @@ async def batch_random():
             <p class="text-yellow-800 text-sm"><strong>TESTING FEATURE:</strong> 3 random items shown below. Click "📄 Download All 3 as PDF" for consolidated file, or individual "📥 Download PDF" buttons for single items. Use "Refresh" to get new items.</p>
         </div>
         
+        <!-- ACL Directive Actions Ruleset -->
+        <details class="bg-blue-50 border-l-4 border-blue-600 p-4 mb-6 rounded cursor-pointer">
+            <summary class="font-bold text-blue-700 select-none">ACL Directive Actions Ruleset (Click to expand)</summary>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div class="bg-green-50 border border-green-300 p-3 rounded">
+                    <div class="font-bold text-green-700">ACL APPROVED</div>
+                    <div class="text-green-600">Performance >= 85%</div>
+                    <div class="text-xs text-gray-600 mt-1">No action needed</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-300 p-3 rounded">
+                    <div class="font-bold text-yellow-700">ADEQUATE PERFORMANCE</div>
+                    <div class="text-yellow-600">Performance < 85% & Improving</div>
+                    <div class="text-xs text-gray-600 mt-1">Monitor closely</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-300 p-3 rounded">
+                    <div class="font-bold text-yellow-700">REQUIRES MANUAL INSPECTION</div>
+                    <div class="text-yellow-600">Performance < 85% & Declining</div>
+                    <div class="text-xs text-gray-600 mt-1">Review needed</div>
+                </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">WORKSTATION RECOMMENDED</div>
+                    <div class="text-red-600">Performance < 50%</div>
+                    <div class="text-xs text-gray-600 mt-1">Immediate action required</div>
+                </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">WORKSTATION: NON-CONVEYABLE</div>
+                    <div class="text-red-600">Longest side < 7" OR 2nd longest < 5" OR smallest < 2"</div>
+                    <div class="text-xs text-gray-600 mt-1">Size-based constraint</div>
+                </div>
+            </div>
+            <div class="mt-3 text-xs text-gray-600 italic">Note: These rules are directive guidelines subject to change</div>
+        </details>
+        
         {cards_html}
     </div>
 </body>
@@ -1986,8 +2019,8 @@ def generate_batch_pdf(items_data: list) -> bytes:
             except:
                 pass
         
-        # RIGHT COLUMN: Details
-        content_x = 3.8
+        # RIGHT COLUMN: Details (moved right for better spacing from image)
+        content_x = 4.2
         current_y = 0.4
         
         # 1. Item Name (header)
@@ -2010,6 +2043,23 @@ def generate_batch_pdf(items_data: list) -> bytes:
             details += f" | Dept #: {supplier_dept}"
         master_pdf.multi_cell(6.5, 0.15, details, align='C')
         current_y = master_pdf.get_y() + 0.1
+        
+        # 2b. Pack Ratio (moved to top)
+        if vendor_qty and warehouse_qty:
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_font("Helvetica", "", 8)
+            master_pdf.set_text_color(100, 100, 100)
+            master_pdf.multi_cell(6.0, 0.15, f"VNPK/WHPK: {vendor_qty}/{warehouse_qty}", align='C')
+            current_y = master_pdf.get_y() + 0.02
+        
+        # 2c. Dimensions (moved to top)
+        if vnpk_length or vnpk_width or vnpk_height:
+            master_pdf.set_xy(content_x, current_y)
+            master_pdf.set_font("Helvetica", "", 8)
+            master_pdf.set_text_color(100, 100, 100)
+            dims = f"Vendor Dims (L × W × H): {vnpk_length or '--'} × {vnpk_width or '--'} × {vnpk_height or '--'}"
+            master_pdf.multi_cell(6.0, 0.15, dims, align='C')
+            current_y = master_pdf.get_y() + 0.1
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
         rates = load_read_rates()
@@ -2065,24 +2115,9 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.cell(6.3, 0.25, casepack_type, align='C')
             current_y += 0.45
         
-        # 5. Pack Ratio
-        if vendor_qty and warehouse_qty:
-            master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_font("Helvetica", "", 8)
-            master_pdf.set_text_color(100, 100, 100)
-            master_pdf.multi_cell(6.5, 0.15, f"Pack Ratio: {vendor_qty}/{warehouse_qty}", align='C')
-            current_y = master_pdf.get_y() + 0.05
-        
-        # 6. Dimensions
-        if vnpk_length or vnpk_width or vnpk_height:
-            master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_font("Helvetica", "", 8)
-            master_pdf.set_text_color(100, 100, 100)
-            dims = f"Vendor Pack Dims (L × W × H): {vnpk_length or '--'} × {vnpk_width or '--'} × {vnpk_height or '--'}"
-            master_pdf.multi_cell(6.5, 0.15, dims, align='C')
-            current_y = master_pdf.get_y() + 0.15
-        
-        # 7. ACL PERFORMANCE SECTION with LIGHT BACKGROUND (NOT dashed border)
+        # 6. ACL PERFORMANCE SECTION with LIGHT BACKGROUND (NOT dashed border)
+        # Add more spacing before ACL section
+        current_y += 0.15
         acl_bg_y = current_y
         
         # Light background fill for ACL section
@@ -2101,7 +2136,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
         
         if item_rates:
             avg_perf = get_avg_performance(item_rates)
-            trend_status = get_trend_status(item_rates)
+            trend_status = get_trend_status(item_rates).upper()  # ALL CAPS
             color = get_color_for_performance(avg_perf)
             
             # AVG PERFORMANCE box
@@ -2111,12 +2146,12 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_line_width(0.02)
             master_pdf.rect(content_x, current_y, 3.2, 0.65, style='FD')
             
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.03)
+            master_pdf.set_xy(content_x, current_y + 0.03)
             master_pdf.set_font("Helvetica", "B", 6)
             master_pdf.set_text_color(180, 140, 0)
-            master_pdf.cell(3.0, 0.12, "AVG PERFORMANCE", align='C')
+            master_pdf.cell(3.2, 0.12, "AVG PERFORMANCE", align='C')
             
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.2)
+            master_pdf.set_xy(content_x, current_y + 0.2)
             master_pdf.set_font("Helvetica", "B", 15)
             if color == "#dc2626":
                 master_pdf.set_text_color(220, 38, 38)
@@ -2124,7 +2159,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
                 master_pdf.set_text_color(234, 179, 8)
             else:
                 master_pdf.set_text_color(22, 163, 74)
-            master_pdf.cell(3.0, 0.25, f"{avg_perf:.1f}%", align='C')
+            master_pdf.cell(3.2, 0.25, f"{avg_perf:.1f}%", align='C')
             
             # TREND box
             master_pdf.set_xy(content_x + 3.3, current_y)
@@ -2133,15 +2168,15 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_line_width(0.02)
             master_pdf.rect(content_x + 3.3, current_y, 3.2, 0.65, style='FD')
             
-            master_pdf.set_xy(content_x + 3.4, current_y + 0.03)
+            master_pdf.set_xy(content_x + 3.3, current_y + 0.03)
             master_pdf.set_font("Helvetica", "B", 6)
             master_pdf.set_text_color(140, 100, 180)
-            master_pdf.cell(3.0, 0.12, "TREND", align='C')
+            master_pdf.cell(3.2, 0.12, "TREND", align='C')
             
-            master_pdf.set_xy(content_x + 3.4, current_y + 0.2)
-            master_pdf.set_font("Helvetica", "B", 12)
+            master_pdf.set_xy(content_x + 3.3, current_y + 0.2)
+            master_pdf.set_font("Helvetica", "B", 11)
             master_pdf.set_text_color(60, 20, 140)
-            master_pdf.cell(3.0, 0.25, trend_status, align='C')
+            master_pdf.cell(3.2, 0.25, trend_status, align='C')
             
             current_y += 0.7
             
