@@ -189,9 +189,13 @@ def check_non_conveyable(length: str, width: str, height: str) -> tuple:
         pass
     return False, "", ""
 
-def get_recommendation(avg_perf: float, trend_status: str) -> tuple:
-    """Get ACL recommendation based on performance and trend."""
-    if avg_perf >= 85:
+def get_recommendation(avg_perf: float, trend_status: str, catalog_gtin: str = "") -> tuple:
+    """Get ACL recommendation based on performance and trend.
+    If performance < 50% AND catalog_gtin present -> "INSPECT CATALOG; TAKE TO PROBLEMS"
+    """
+    if avg_perf < 50 and catalog_gtin:
+        return "INSPECT CATALOG; TAKE TO PROBLEMS", "#dc2626", "from-red-50 via-red-50 to-red-100 border-red-300"
+    elif avg_perf >= 85:
         return "ACL APPROVED", "#16a34a", "from-green-50 via-green-50 to-green-100 border-green-300"
     elif avg_perf < 50:
         return "WORKSTATION RECOMMENDED", "#dc2626", "from-red-50 via-red-50 to-red-100 border-red-300"
@@ -1180,44 +1184,44 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
     # Add Department Band Trio (3 bands: Dept # | Category | Description)
     dept_band = get_department_band(supplier_dept)
     if dept_band:
-        band_height = 0.22
+        band_height = 0.11  # HALF SIZE
         rgb = dept_band["rgb"]
         
-        # Band 1: Department Number
+        # Band 1: Department Number (COLORED)
         pdf.set_xy(content_x, current_y)
         pdf.set_fill_color(*rgb)
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-        pdf.set_line_width(0.03)
+        pdf.set_line_width(0.02)
         pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
-        pdf.set_xy(content_x + 0.1, current_y + 0.02)
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_xy(content_x + 0.05, current_y + 0.01)
+        pdf.set_font("Helvetica", "B", 7)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-        pdf.cell(6.3, band_height - 0.02, f"Dept. {supplier_dept}", align='L')
+        pdf.cell(6.4, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
         current_y += band_height
         
-        # Band 2: Category Name
+        # Band 2: Category Name (CARDBOARD)
         pdf.set_xy(content_x, current_y)
-        pdf.set_fill_color(*rgb)
+        pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-        pdf.set_line_width(0.03)
+        pdf.set_line_width(0.02)
         pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
-        pdf.set_xy(content_x + 0.1, current_y + 0.02)
-        pdf.set_font("Helvetica", "B", 8)
+        pdf.set_xy(content_x + 0.05, current_y + 0.01)
+        pdf.set_font("Helvetica", "B", 7)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-        pdf.cell(6.3, band_height - 0.02, dept_band['name'], align='L')
+        pdf.cell(6.4, band_height - 0.01, dept_band['name'], align='L')
         current_y += band_height
         
-        # Band 3: Item Description (from MDM data) - CARDBOARD COLOR
+        # Band 3: Item Description (CARDBOARD)
         item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
         pdf.set_xy(content_x, current_y)
         pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-        pdf.set_line_width(0.03)
+        pdf.set_line_width(0.02)
         pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
-        pdf.set_xy(content_x + 0.1, current_y + 0.02)
-        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_xy(content_x + 0.05, current_y + 0.01)
+        pdf.set_font("Helvetica", "B", 6)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
-        pdf.cell(6.3, band_height - 0.02, item_desc, align='L')
+        pdf.cell(6.4, band_height - 0.01, item_desc, align='L')
         current_y += band_height + 0.05
     
     # Add Directive Action card (in right column, below product details)
@@ -2193,44 +2197,44 @@ def generate_batch_pdf(items_data: list) -> bytes:
         # 2d. Department Band Trio (3 bands: Dept  | Description)
         dept_band = get_department_band(supplier_dept)
         if dept_band:
-            band_height = 0.22
+            band_height = 0.11  # HALF SIZE
             rgb = dept_band["rgb"]
             
-            # Band 1: Department Number
+            # Band 1: Department Number (COLORED)
             master_pdf.set_xy(content_x, current_y)
             master_pdf.set_fill_color(*rgb)
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-            master_pdf.set_line_width(0.03)
+            master_pdf.set_line_width(0.02)
             master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.02)
-            master_pdf.set_font("Helvetica", "B", 9)
+            master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
+            master_pdf.set_font("Helvetica", "B", 7)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(5.8, band_height - 0.02, f"Dept. {supplier_dept}", align='L')
+            master_pdf.cell(5.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
             current_y += band_height
             
-            # Band 2: Category Name
+            # Band 2: Category Name (CARDBOARD)
             master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(*rgb)
+            master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-            master_pdf.set_line_width(0.03)
+            master_pdf.set_line_width(0.02)
             master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.02)
-            master_pdf.set_font("Helvetica", "B", 8)
+            master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
+            master_pdf.set_font("Helvetica", "B", 7)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(5.8, band_height - 0.02, dept_band['name'], align='L')
+            master_pdf.cell(5.9, band_height - 0.01, dept_band['name'], align='L')
             current_y += band_height
     
-            # Band 3: Item Description (from MDM data) - CARDBOARD COLOR
+            # Band 3: Item Description (CARDBOARD)
             item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
             master_pdf.set_xy(content_x, current_y)
             master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-            master_pdf.set_line_width(0.03)
+            master_pdf.set_line_width(0.02)
             master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
-            master_pdf.set_xy(content_x + 0.1, current_y + 0.02)
-            master_pdf.set_font("Helvetica", "B", 7)
+            master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
+            master_pdf.set_font("Helvetica", "B", 6)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
-            master_pdf.cell(5.8, band_height - 0.02, item_desc, align='L')
+            master_pdf.cell(5.9, band_height - 0.01, item_desc, align='L')
             current_y += band_height + 0.05
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
@@ -2372,9 +2376,10 @@ def generate_batch_pdf(items_data: list) -> bytes:
                 for pct in [0, 50, 100]:
                     y_pos = chart_y + chart_height - (pct / 100.0) * chart_height
                     master_pdf.line(chart_x - 0.05, y_pos, chart_x + chart_width, y_pos)
-                    # Add axis label
-                    master_pdf.set_xy(chart_x - 0.35, y_pos - 0.08)
-                    master_pdf.cell(0.25, 0.1, f"{pct}%", align='R')
+                    # Add axis label INSIDE chart (top-left corner)
+                    if pct == 100:
+                        master_pdf.set_xy(chart_x + 0.05, chart_y - 0.05)
+                        master_pdf.cell(0.2, 0.08, "100%", align='L')
                 
                 # Plot data
                 master_pdf.set_draw_color(0, 83, 226)
