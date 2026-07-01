@@ -832,7 +832,7 @@ def generate_print_card(data: dict, item_id: str) -> str:
     if rate_data and len(rate_data) > 0:
         avg_perf = get_avg_performance(rate_data)
         trend_status = get_trend_status(rate_data)
-        recommendation, rec_color, _ = get_recommendation(avg_perf, trend_status)
+        recommendation, rec_color, _ = get_recommendation(avg_perf, trend_status, catalog_gtin)
 
     image_section = ""
     if image_url:
@@ -1232,7 +1232,7 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
     if rate_data and len(rate_data) > 0:
         avg_perf = get_avg_performance(rate_data)
         trend_status = get_trend_status(rate_data)
-        recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+        recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status, catalog_gtin)
     
     # Color mapping - matching what get_recommendation() returns
     color_map = {
@@ -2247,7 +2247,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
             try:
                 avg_perf = get_avg_performance(item_rates)
                 trend_status = get_trend_status(item_rates)
-                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status, catalog_gtin)
             except:
                 pass
         
