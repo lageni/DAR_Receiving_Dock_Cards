@@ -373,6 +373,11 @@ async def root():
                     <div class="text-red-600">Longest side < 7" OR 2nd longest < 5" OR smallest < 2"</div>
                     <div class="text-xs text-gray-600 mt-1">Size-based constraint</div>
                 </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">INSPECT CATALOG; TAKE TO PROBLEMS</div>
+                    <div class="text-red-600">Performance < 50% & Catalog GTIN exists</div>
+                    <div class="text-xs text-gray-600 mt-1">Catalog mismatch requires review</div>
+                </div>
             </div>
             <div class="mt-3 text-xs text-gray-600 italic">Note: These rules are directive guidelines subject to change</div>
         </details>
@@ -1192,11 +1197,11 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
         pdf.set_fill_color(*rgb)
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
         pdf.set_line_width(0.02)
-        pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
+        pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
         pdf.set_xy(content_x + 0.05, current_y + 0.01)
         pdf.set_font("Helvetica", "B", 7)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-        pdf.cell(6.4, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
+        pdf.cell(2.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
         current_y += band_height
         
         # Band 2: Category Name (CARDBOARD)
@@ -1204,11 +1209,11 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
         pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
         pdf.set_line_width(0.02)
-        pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
+        pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
         pdf.set_xy(content_x + 0.05, current_y + 0.01)
         pdf.set_font("Helvetica", "B", 7)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-        pdf.cell(6.4, band_height - 0.01, dept_band['name'], align='L')
+        pdf.cell(2.9, band_height - 0.01, dept_band['name'], align='L')
         current_y += band_height
         
         # Band 3: Item Description (CARDBOARD)
@@ -1217,11 +1222,11 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
         pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
         pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
         pdf.set_line_width(0.02)
-        pdf.rect(content_x, current_y, 6.5, band_height, 'FD')
+        pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
         pdf.set_xy(content_x + 0.05, current_y + 0.01)
         pdf.set_font("Helvetica", "B", 6)
         pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
-        pdf.cell(6.4, band_height - 0.01, item_desc, align='L')
+        pdf.cell(2.9, band_height - 0.01, item_desc, align='L')
         current_y += band_height + 0.05
     
     # Add Directive Action card (in right column, below product details)
@@ -2051,6 +2056,11 @@ async def batch_random():
                     <div class="text-red-600">Longest side < 7" OR 2nd longest < 5" OR smallest < 2"</div>
                     <div class="text-xs text-gray-600 mt-1">Size-based constraint</div>
                 </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">INSPECT CATALOG; TAKE TO PROBLEMS</div>
+                    <div class="text-red-600">Performance < 50% & Catalog GTIN exists</div>
+                    <div class="text-xs text-gray-600 mt-1">Catalog mismatch requires review</div>
+                </div>
             </div>
             <div class="mt-3 text-xs text-gray-600 italic">Note: These rules are directive guidelines subject to change</div>
         </details>
@@ -2205,11 +2215,11 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_fill_color(*rgb)
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
             master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
+            master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
             master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
             master_pdf.set_font("Helvetica", "B", 7)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(5.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
+            master_pdf.cell(2.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
             current_y += band_height
             
             # Band 2: Category Name (CARDBOARD)
@@ -2217,11 +2227,11 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
             master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
+            master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
             master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
             master_pdf.set_font("Helvetica", "B", 7)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(5.9, band_height - 0.01, dept_band['name'], align='L')
+            master_pdf.cell(2.9, band_height - 0.01, dept_band['name'], align='L')
             current_y += band_height
     
             # Band 3: Item Description (CARDBOARD)
@@ -2230,11 +2240,11 @@ def generate_batch_pdf(items_data: list) -> bytes:
             master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
             master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
             master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 6.0, band_height, 'FD')
+            master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
             master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
             master_pdf.set_font("Helvetica", "B", 6)
             master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
-            master_pdf.cell(5.9, band_height - 0.01, item_desc, align='L')
+            master_pdf.cell(2.9, band_height - 0.01, item_desc, align='L')
             current_y += band_height + 0.05
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
