@@ -1935,9 +1935,9 @@ async def scheduler_diagnostics():
     html = '<div class="space-y-4">'
     
     # Token input
-    html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
+    html += '<div id="token-section" class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
     html += '<h4 class="font-bold text-blue-900 mb-2">JWT Token</h4>'
-    html += '<form hx-post="/api/scheduler/set-token" hx-swap="none" class="space-y-2">'
+    html += '<form hx-post="/api/scheduler/set-token" hx-target="#token-section" hx-swap="outerHTML" class="space-y-2">'
     html += '<textarea name="token" placeholder="Paste JWT token here" class="w-full px-3 py-2 border rounded text-xs font-mono" rows="3"></textarea>'
     html += '<button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Save Token</button>'
     html += '</form>'
@@ -1974,7 +1974,7 @@ async def scheduler_diagnostics():
 
 @app.post("/api/scheduler/set-token", response_class=HTMLResponse)
 async def set_scheduler_token(request: Request):
-    """Store JWT token in .env."""
+    """Store JWT token in .env and return updated token section."""
     try:
         form = await request.form()
         token = form.get("token", "").strip()
@@ -1994,7 +1994,16 @@ async def set_scheduler_token(request: Request):
         with open(env_file, "w") as f:
             f.write("\n".join(lines))
         
-        return '<p class="text-green-600 text-sm">✓ Token saved! Use the search form below.</p>'
+        # Return the entire token section with updated status
+        html = '<div id="token-section" class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
+        html += '<h4 class="font-bold text-blue-900 mb-2">JWT Token</h4>'
+        html += '<form hx-post="/api/scheduler/set-token" hx-target="#token-section" hx-swap="outerHTML" class="space-y-2">'
+        html += '<textarea name="token" placeholder="Paste JWT token here" class="w-full px-3 py-2 border rounded text-xs font-mono" rows="3"></textarea>'
+        html += '<button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Save Token</button>'
+        html += '</form>'
+        html += '<p class="text-sm text-green-700 mt-2">✓ Token loaded</p>'
+        html += '</div>'
+        return html
     except Exception as e:
         return f'<p class="text-red-600 text-sm">Error: {str(e)[:100]}</p>'
 
