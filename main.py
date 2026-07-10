@@ -1962,14 +1962,11 @@ async def scheduler_diagnostics():
     # Search
     html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
     html += '<h4 class="font-bold text-green-900 mb-2">Search Deliveries</h4>'
-    if not client.is_configured():
-        html += '<p class="text-sm text-green-800">Enter token above first</p>'
-    else:
-        html += '<form hx-post="/api/scheduler/search" hx-target="#search-results" hx-swap="innerHTML" class="space-y-2">'
-        html += '<input type="text" name="delivery_number" placeholder="Delivery number (globalSearchKeyword)" class="w-full px-3 py-2 border rounded" required>'
-        html += '<button type="submit" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Search</button>'
-        html += '</form>'
-        html += '<div id="search-results" class="mt-4"></div>'
+    html += '<form hx-post="/api/scheduler/search" hx-target="#search-results" hx-swap="innerHTML" class="space-y-2">'
+    html += '<input type="text" name="delivery_number" placeholder="Delivery number (globalSearchKeyword)" class="w-full px-3 py-2 border rounded" required>'
+    html += '<button type="submit" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Search</button>'
+    html += '</form>'
+    html += '<div id="search-results" class="mt-4"></div>'
     html += '</div>'
     
     html += '</div>'
@@ -1998,7 +1995,7 @@ async def set_scheduler_token(request: Request):
         with open(env_file, "w") as f:
             f.write("\n".join(lines))
         
-        return '<p class="text-green-600 text-sm">Token saved!</p>'
+        return '<p class="text-green-600 text-sm">✓ Token saved! Use the search form below.</p>'
     except Exception as e:
         return f'<p class="text-red-600 text-sm">Error: {str(e)[:100]}</p>'
 
