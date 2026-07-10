@@ -1712,12 +1712,9 @@ async def admin_page():
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
-            <h2 class="text-xl font-bold mb-4">Scheduler.walmart.com Session/Token</h2>
-            <p class="text-sm text-gray-600 mb-4">Diagnose and test authentication to scheduler.walmart.com</p>
-            <button hx-get="/diagnostics/scheduler" hx-target="#scheduler-results" hx-swap="innerHTML" hx-indicator="#scheduler-spinner" class="px-4 py-2 bg-indigo-600 text-white rounded font-semibold hover:bg-indigo-700">Test Scheduler Auth</button>
-            <div id="scheduler-spinner" class="hidden mt-3 text-sm text-gray-600">Checking scheduler.walmart.com...</div>
-            <div id="scheduler-results" class="mt-4"></div>
-            <p class="text-xs text-gray-500 mt-3">See SCHEDULER_AUTH_TROUBLESHOOTING.md for detailed guide on inspecting the auth flow</p>
+            <h2 class="text-xl font-bold mb-4">Scheduler.walmart.com - Automatic Login</h2>
+            <p class="text-sm text-gray-600 mb-4">Automatic authentication and token management</p>
+            <div hx-get="/diagnostics/scheduler" hx-trigger="load" hx-swap="innerHTML"></div>
         </div>
         
         <div class="flex gap-3">
@@ -1911,154 +1908,117 @@ async def informix_diagnostics():
 
 @app.get("/diagnostics/scheduler", response_class=HTMLResponse)
 async def scheduler_diagnostics():
-    """Scheduler.walmart.com session/token diagnostics."""
+    """Scheduler.walmart.com auto-login diagnostics."""
+    from scheduler_client import SchedulerClient
     import os
     
     html = '<div class="bg-white p-6 rounded-lg border shadow">'
-    html += '<h3 class="text-lg font-bold mb-4">Scheduler.walmart.com Diagnostics</h3>'
+    html += '<h3 class="text-lg font-bold mb-4">Scheduler.walmart.com - Automatic Login</h3>'
     
-    # Check environment variables
-    scheduler_token = os.getenv("SCHEDULER_TOKEN", "").strip()
-    scheduler_api_key = os.getenv("SCHEDULER_API_KEY", "").strip()
+    # Check configuration
     scheduler_username = os.getenv("SCHEDULER_USERNAME", "").strip()
-    scheduler_password = os.getenv("SCHEDULER_PASSWORD", "").strip() # Don't show the value!
+    scheduler_password = os.getenv("SCHEDULER_PASSWORD", "").strip()
+    scheduler_api_key = os.getenv("SCHEDULER_API_KEY", "").strip()
     
-    # Check .env file status
-    env_file = os.getenv("DATABASE_PATH", "Not found")
     env_path = os.path.join(os.path.dirname(__file__), ".env")
     has_env = os.path.exists(env_path)
     
     html += '<div class="mb-6">'
     html += '<h4 class="font-semibold mb-2">Configuration Status</h4>'
     html += '<table class="w-full text-sm border-collapse">'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">Has .env file:</td><td class="py-2"><span class="{"text-green-600" if has_env else "text-red-600"}">{"✓ YES" if has_env else "X NO"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">SCHEDULER_TOKEN:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_token else "text-orange-600"}">{"+Present" if scheduler_token else "MISSING (not in .env)"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">SCHEDULER_API_KEY:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_api_key else "text-orange-600"}">{"+Present" if scheduler_api_key else "MISSING (not in .env)"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">SCHEDULER_USERNAME:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_username else "text-orange-600"}">{"+Present" if scheduler_username else "MISSING (not in .env)"}</span></td></tr>'
-    html += f'<tr><td class="py-2 font-semibold">SCHEDULER_PASSWORD:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_password else "text-orange-600"}">{"+Present (hidden)" if scheduler_password else "MISSING (not in .env)"}</span></td></tr>'
+    html += f'<tr class="border-b"><td class="py-2 font-semibold">Has .env file:</td><td class="py-2"><span class="{"text-green-600" if has_env else "text-red-600"}">{"+YES" if has_env else "X NO"}</span></td></tr>'
+    html += f'<tr class="border-b"><td class="py-2 font-semibold">SCHEDULER_USERNAME:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_username else "text-orange-600"}">{"+Present" if scheduler_username else "NOT SET"}</span></td></tr>'
+    html += f'<tr class="border-b"><td class="py-2 font-semibold">SCHEDULER_PASSWORD:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_password else "text-orange-600"}">{"+Present (hidden)" if scheduler_password else "NOT SET"}</span></td></tr>'
+    html += f'<tr><td class="py-2 font-semibold">SCHEDULER_API_KEY:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if scheduler_api_key else "text-orange-600"}">{"+Present" if scheduler_api_key else "NOT SET"}</span></td></tr>'
     html += '</table>'
     html += '</div>'
     
-    # Browser troubleshooting steps
+    # Check if configured
+    if not (scheduler_username and scheduler_password) and not scheduler_api_key:
+        html += '<div class="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4 mb-6">'
+        html += '<h4 class="font-bold text-yellow-900 mb-2">Not Configured Yet</h4>'
+        html += '<p class="text-sm text-yellow-800 mb-3">Add credentials to .env to enable automatic login:</p>'
+        html += '<code class="bg-yellow-100 px-3 py-2 rounded text-xs block">'
+        html += 'SCHEDULER_USERNAME=your.name@walmart.com<br>'
+        html += 'SCHEDULER_PASSWORD=your_password_here'
+        html += '</code>'
+        html += '<p class="text-xs text-yellow-700 mt-3">OR for API key auth:</p>'
+        html += '<code class="bg-yellow-100 px-3 py-2 rounded text-xs block">'
+        html += 'SCHEDULER_API_KEY=your_api_key_here'
+        html += '</code>'
+        html += '</div>'
+    else:
+        html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4 mb-6">'
+        html += '<h4 class="font-bold text-green-900 mb-2">Credentials Configured</h4>'
+        html += '<p class="text-sm text-green-800 mb-3">Ready for automatic login. Click the button below to test:</p>'
+        html += '<button hx-post="/api/scheduler/auto-login" hx-target="#login-result" hx-swap="innerHTML" hx-indicator="#login-spinner" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Test Auto-Login</button>'
+        html += '<div id="login-spinner" class="hidden mt-3 text-sm text-gray-600">Attempting login...</div>'
+        html += '<div id="login-result" class="mt-4"></div>'
+        html += '</div>'
+    
+    # Troubleshooting info
     html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4 mb-6">'
-    html += '<h4 class="font-bold text-blue-900 mb-2">Next Steps: Inspect Browser Session</h4>'
-    html += '<ol class="text-sm text-blue-800 space-y-2 list-decimal list-inside">'
-    html += '<li>Go to https://scheduler.walmart.com in your browser</li>'
-    html += '<li>Open DevTools (F12) -> Application tab -> Session Storage</li>'
-    html += '<li>Look for keys: <code class="bg-white px-1">token</code>, <code class="bg-white px-1">auth_token</code>, <code class="bg-white px-1">session_id</code></li>'
-    html += '<li>Copy the token value (starts with eyJ... if JWT)</li>'
-    html += '<li>Add to .env: <code class="bg-white px-1">SCHEDULER_TOKEN=&lt;paste-token-here&gt;</code></li>'
-    html += '<li>Or set SCHEDULER_API_KEY if using API key auth</li>'
-    html += '<li>Or set SCHEDULER_USERNAME and SCHEDULER_PASSWORD for login auth</li>'
+    html += '<h4 class="font-bold text-blue-900 mb-2">How It Works</h4>'
+    html += '<ol class="text-sm text-blue-800 space-y-1 list-decimal list-inside">'
+    html += '<li>Server automatically logs in using credentials from .env</li>'
+    html += '<li>Token is obtained and stored in memory</li>'
+    html += '<li>Token is automatically refreshed before expiration</li>'
+    html += '<li>All API calls include the token automatically</li>'
+    html += '<li>No manual token extraction needed!</li>'
     html += '</ol>'
     html += '</div>'
     
-    # Token format checker
-    if scheduler_token:
-        html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4 mb-6">'
-        html += '<h4 class="font-bold text-green-900 mb-2">Token Found</h4>'
-        # Check if JWT
-        is_jwt = scheduler_token.startswith('eyJ') and scheduler_token.count('.') >= 2
-        token_preview = scheduler_token[:50] + "..." if len(scheduler_token) > 50 else scheduler_token
-        html += f'<p class="text-sm text-green-800 mb-2"><strong>Format:</strong> {"JWT Token" if is_jwt else "Other (API Key / UUID / etc)"}</p>'
-        html += f'<p class="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded">{token_preview}</p>'
-        if is_jwt:
-            html += '<p class="text-xs text-gray-600 mt-2">Paste full token at <a href="https://jwt.io" target="_blank" class="text-blue-600 underline">jwt.io</a> to decode</p>'
-        html += '</div>'
-    
-    # Test button if token exists
-    if scheduler_token or scheduler_api_key or scheduler_username:
-        html += '<div class="mt-6 p-4 bg-gray-50 rounded border">'
-        html += '<h4 class="font-semibold mb-3">Test API Call</h4>'
-        html += '<button onclick="testSchedulerAPI()" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Try API Request</button>'
-        html += '<div id="api-test-result" class="mt-3 text-sm hidden"></div>'
-        html += '</div>'
-    
     html += '</div>'
-    html += '''<script>
-        async function testSchedulerAPI() {
-            const resultDiv = document.getElementById('api-test-result');
-            resultDiv.classList.remove('hidden');
-            resultDiv.innerHTML = '<div class="text-blue-600">Testing API...</div>';
-            
-            try {
-                const response = await fetch('/api/scheduler/test', {\n                    method: 'GET',\n                    headers: {'Content-Type': 'application/json'}\n                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    resultDiv.innerHTML = `<div class="bg-green-100 border border-green-400 rounded p-3">
-                        <p class="text-green-800 font-semibold">API Test Successful</p>
-                        <p class="text-sm text-green-700 mt-1">Token is valid and working!</p>
-                    </div>`;
-                } else {
-                    resultDiv.innerHTML = `<div class="bg-red-100 border border-red-400 rounded p-3">
-                        <p class="text-red-800 font-semibold">API Test Failed</p>
-                        <p class="text-sm text-red-700 mt-1">${result.error || result.message}</p>
-                    </div>`;
-                }
-            } catch (err) {
-                resultDiv.innerHTML = `<div class="bg-red-100 border border-red-400 rounded p-3">
-                    <p class="text-red-800 font-semibold">Error</p>
-                    <p class="text-sm text-red-700 mt-1">${err.message}</p>
-                </div>`;
-            }
-        }
-    </script>'''
     
     return html
 
 
-@app.get("/api/scheduler/test")
-async def test_scheduler_api():
-    """Test scheduler.walmart.com API with current token."""
+@app.post("/api/scheduler/auto-login", response_class=HTMLResponse)
+async def scheduler_auto_login():
+    """Attempt automatic login to scheduler.walmart.com."""
+    from scheduler_client import SchedulerClient
     import os
     
-    scheduler_token = os.getenv("SCHEDULER_TOKEN", "").strip()
-    scheduler_api_key = os.getenv("SCHEDULER_API_KEY", "").strip()
+    scheduler_username = os.getenv("SCHEDULER_USERNAME", "").strip()
+    scheduler_password = os.getenv("SCHEDULER_PASSWORD", "").strip()
     
-    if not scheduler_token and not scheduler_api_key:
-        return JSONResponse({
-            "status": "error",
-            "error": "No token or API key configured",
-            "message": "Set SCHEDULER_TOKEN or SCHEDULER_API_KEY in .env"
-        }, status_code=400)
+    if not scheduler_username or not scheduler_password:
+        return '<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800 font-semibold">Error: Credentials Not Configured</p><p class="text-sm text-red-700 mt-2">Set SCHEDULER_USERNAME and SCHEDULER_PASSWORD in .env</p></div>'
     
     try:
-        # Try to make a simple API call to scheduler
-        # This is a test endpoint - adjust based on actual scheduler.walmart.com API
-        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-            headers = {}
-            if scheduler_token:
-                headers['Authorization'] = f'Bearer {scheduler_token}'
-            if scheduler_api_key:
-                headers['X-API-Key'] = scheduler_api_key
+        print("[AUTO-LOGIN] Starting automatic login...")
+        client = SchedulerClient()
+        
+        # Attempt login
+        success = await client.login()
+        
+        if success and client.token:
+            token_preview = client.token[:50] + "..." if len(client.token) > 50 else client.token
+            expires_str = client.token_expires_at.strftime("%Y-%m-%d %H:%M:%S") if client.token_expires_at else "Unknown"
             
-            # Try a basic endpoint (you may need to adjust this)
-            response = await client.get(
-                'https://scheduler.walmart.com/api/health',
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                return JSONResponse({
-                    "status": "success",
-                    "message": "Token is valid and working",
-                    "http_status": response.status_code
-                })
-            else:
-                return JSONResponse({
-                    "status": "error",
-                    "error": f"HTTP {response.status_code}",
-                    "message": response.text[:200] if response.text else "No response body"
-                }, status_code=response.status_code)
+            html = '<div class="bg-green-100 border border-green-400 rounded p-4">'
+            html += '<p class="text-green-800 font-semibold">Login Successful!</p>'
+            html += f'<p class="text-sm text-green-700 mt-2">Token obtained and stored in memory</p>'
+            html += f'<p class="text-xs font-mono text-gray-700 mt-3 bg-white px-2 py-1 rounded">{token_preview}</p>'
+            if client.token_expires_at:
+                html += f'<p class="text-xs text-green-700 mt-2">Expires: {expires_str}</p>'
+            html += '</div>'
+            return html
+        else:
+            html = '<div class="bg-red-100 border border-red-400 rounded p-4">'
+            html += '<p class="text-red-800 font-semibold">Login Failed</p>'
+            html += '<p class="text-sm text-red-700 mt-2">Check server logs for details. Auth endpoint may be different.</p>'
+            html += '<p class="text-xs text-red-600 mt-2">See SCHEDULER_AUTO_LOGIN_SETUP.md for how to inspect the actual auth flow.</p>'
+            html += '</div>'
+            return html
     
     except Exception as e:
-        return JSONResponse({
-            "status": "error",
-            "error": type(e).__name__,
-            "message": str(e)[:200]
-        }, status_code=500)
+        error_msg = str(e)[:200]
+        html = '<div class="bg-red-100 border border-red-400 rounded p-4">'
+        html += '<p class="text-red-800 font-semibold">Error During Login</p>'
+        html += f'<p class="text-sm text-red-700 mt-2">{error_msg}</p>'
+        html += '</div>'
+        return html
 
 
 @app.get("/test_informix_query", response_class=HTMLResponse)
