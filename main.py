@@ -18,27 +18,19 @@ load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 app = FastAPI(title="CodePuppy DAR")
 
-# Auto-extract scheduler token on startup if credentials provided
+# Check scheduler token on startup
 @app.on_event("startup")
-async def startup_extract_scheduler_token():
-    """Auto-extract scheduler token if credentials are set and token is missing."""
+async def startup_check_scheduler_token():
+    """Check if scheduler token is configured."""
     import os
-    from scheduler_token_extractor import auto_extract_scheduler_token, save_token_to_env
     
-    username = os.getenv("WALMART_USERNAME", "").strip()
-    password = os.getenv("WALMART_PASSWORD", "").strip()
     token = os.getenv("SCHEDULER_JWT_TOKEN", "").strip()
     
-    # If credentials exist but no token, auto-extract
-    if username and password and not token:
-        print("[STARTUP] Extracting Scheduler JWT token...")
-        result = await auto_extract_scheduler_token(username, password)
-        
-        if result["status"] == "success":
-            save_token_to_env(result["token"])
-            print("[STARTUP] Token extracted and saved!")
-        else:
-            print(f"[STARTUP] Token extraction failed: {result.get('message')}")
+    if token:
+        print("[STARTUP] Scheduler JWT token loaded")
+    else:
+        print("[STARTUP] No scheduler JWT token configured")
+        print("[STARTUP] Visit /admin to extract token")
 
 # Get database path from .env or default to local
 def get_database_path():
@@ -1966,23 +1958,16 @@ async def scheduler_diagnostics():
     html += '</table>'
     html += '</div>'
     
-    if has_creds and not client.is_configured():
+    if not client.is_configured():
         html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
-        html += '<h4 class="font-bold text-blue-900 mb-2">Extract Token</h4>'
-        html += '<p class="text-sm text-blue-800 mb-3">Click to automatically extract and save JWT token:</p>'
-        html += '<button hx-post="/api/scheduler/extract-token" hx-target="#extract-result" hx-swap="innerHTML" hx-indicator="#extract-spinner" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Extract & Save</button>'
-        html += '<div id="extract-spinner" class="hidden mt-3 text-sm text-gray-600">Extracting...</div>'
-        html += '<div id="extract-result" class="mt-4"></div>'
-        html += '</div>'
-    elif not client.is_configured():
-        html += '<div class="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4">'
-        html += '<h4 class="font-bold text-yellow-900 mb-2">Setup Required</h4>'
-        html += '<p class="text-sm text-yellow-800 mb-2">Add to <code class="bg-yellow-100 px-1">.env</code>:</p>'
-        html += '<code class="bg-yellow-100 px-3 py-2 rounded text-xs block">'
-        html += 'WALMART_USERNAME=your.name@walmart.com<br>'
-        html += 'WALMART_PASSWORD=your_password<br>'
-        html += '</code>'
-        html += '<p class="text-xs text-yellow-700 mt-3">Then restart server to auto-extract token, or click Extract button above</p>'
+        html += '<h4 class="font-bold text-blue-900 mb-2">Extract JWT Token</h4>'
+        html += '<p class="text-sm text-blue-800 mb-3">Enter your Walmart credentials to extract token:</p>'
+        html += '<form hx-post="/api/scheduler/login" hx-target="#login-result" hx-swap="innerHTML" class="space-y-3">'
+        html += '<input type="email" name="username" placeholder="your.name@walmart.com" class="w-full px-3 py-2 border rounded" required>'
+        html += '<input type="password" name="password" placeholder="Password" class="w-full px-3 py-2 border rounded" required>'
+        html += '<button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Extract Token</button>'
+        html += '</form>'
+        html += '<div id="login-result" class="mt-4"></div>'
         html += '</div>'
     else:
         html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
@@ -1997,33 +1982,29 @@ async def scheduler_diagnostics():
 
 
 
-@app.post("/api/scheduler/extract-token", response_class=HTMLResponse)
-async def extract_scheduler_token_endpoint():
-    """On-demand endpoint to extract token using credentials from .env."""
-    from scheduler_token_extractor import auto_extract_scheduler_token, save_token_to_env
-    
-    # Get credentials from .env
-    username = os.getenv("WALMART_USERNAME", "").strip()
-    password = os.getenv("WALMART_PASSWORD", "").strip()
-    
-    if not username or not password:
-        return '<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800 font-semibold">Error: Credentials not configured in .env</p></div>'
-    
-    html = '<div class="bg-blue-100 border border-blue-400 rounded p-4"><p class="text-blue-800">Extracting token...</p></div>'
+@app.post("/api/scheduler/login", response_class=HTMLResponse)
+async def scheduler_login(request: Request):
+    """Extract token from credentials."""
+    from scheduler_token_extractor import extract_token, save_token
     
     try:
-        result = await auto_extract_scheduler_token(username, password)
+        form = await request.form()
+        username = form.get("username", "").strip()
+        password = form.get("password", "").strip()
+        
+        if not username or not password:
+            return '<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800">Username and password required</p></div>'
+        
+        result = await extract_token(username, password)
         
         if result["status"] == "success":
-            save_token_to_env(result["token"])
-            html = '<div class="bg-green-100 border border-green-400 rounded p-4"><p class="text-green-800 font-semibold">Success! Token extracted and saved</p></div>'
+            save_token(result["token"])
+            return '<div class="bg-green-100 border border-green-400 rounded p-4"><p class="text-green-800 font-semibold">Success! Token extracted and saved to .env</p><p class="text-sm text-green-700 mt-2">Restart the server to use it</p></div>'
         else:
-            html = f'<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800 font-semibold">Failed: {result.get("message")}</p></div>'
+            return f'<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800">{result.get("message")}</p></div>'
     
     except Exception as e:
-        html = f'<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800">{str(e)[:150]}</p></div>'
-    
-    return html
+        return f'<div class="bg-red-100 border border-red-400 rounded p-4"><p class="text-red-800">{str(e)[:150]}</p></div>'
 async def test_informix_query(query: str = None):
     """Execute a test query against Informix and return results."""
     if not query:
