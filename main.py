@@ -17,6 +17,18 @@ load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 app = FastAPI(title="CodePuppy DAR")
 
+# Auto-login to Walmart Scheduler on startup
+@app.on_event("startup")
+async def startup_scheduler_login():
+    """Automatically login to Walmart Scheduler and extract JWT token."""
+    from scheduler_auto_login import auto_login_on_startup
+    try:
+        token = await auto_login_on_startup()
+    except ImportError:
+        print("[STARTUP] Playwright not installed. Run: uv sync")
+    except Exception as e:
+        print(f"[STARTUP] Scheduler auto-login error: {str(e)[:150]}")
+
 # Get database path from .env or default to local
 def get_database_path():
     """Get read_rates.db path from .env (DATABASE_PATH) or use default.
@@ -1712,9 +1724,9 @@ async def admin_page():
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
-            <h2 class="text-xl font-bold mb-4">Scheduler.walmart.com - JWT Token</h2>
-            <p class="text-sm text-gray-600 mb-4">Extract and use JWT token for scheduler.walmart.com API access</p>
-            <div hx-get="/diagnostics/scheduler-jwt" hx-trigger="load" hx-swap="innerHTML"></div>
+            <h2 class="text-xl font-bold mb-4">Scheduler.walmart.com</h2>
+            <p class="text-sm text-gray-600 mb-4">Automatic authentication via PingFederate SSO</p>
+            <div hx-get="/diagnostics/scheduler" hx-trigger="load" hx-swap="innerHTML"></div>
         </div>
         
         <div class="flex gap-3">
@@ -1906,77 +1918,80 @@ async def informix_diagnostics():
     """
 
 
-@app.get("/diagnostics/scheduler-jwt", response_class=HTMLResponse)
-async def scheduler_jwt_diagnostics():
-    """Scheduler.walmart.com JWT token diagnostics."""
-    from scheduler_jwt_client import SchedulerJWTClient
+@app.get("/diagnostics/scheduler", response_class=HTMLResponse)
+async def scheduler_diagnostics():
+    """Scheduler.walmart.com automatic authentication status."""
     import os
+    from datetime import datetime
     
     html = '<div class="bg-white p-6 rounded-lg border shadow">'
     
-    client = SchedulerJWTClient()
-    is_configured = client.is_configured()
-    token_preview = client.get_token_preview()
-    token_info = client.get_token_info()
+    jwt_token = os.getenv("SCHEDULER_JWT_TOKEN", "").strip()
+    username = os.getenv("WALMART_USERNAME", "").strip()
+    auto_login_enabled = bool(username and os.getenv("WALMART_PASSWORD", "").strip())
     
+    # Decode token if exists
+    token_info = None
+    if jwt_token:
+        try:
+            import base64
+            parts = jwt_token.split(".")
+            if len(parts) == 3:
+                payload_str = parts[1]
+                padding = 4 - (len(payload_str) % 4)
+                if padding != 4:
+                    payload_str += "=" * padding
+                token_info = json.loads(base64.urlsafe_b64decode(payload_str))
+        except:
+            pass
+    
+    # Status table
     html += '<div class="mb-6">'
-    html += '<h4 class="font-semibold mb-2">JWT Token Status</h4>'
+    html += '<h4 class="font-semibold mb-2">Authentication Status</h4>'
     html += '<table class="w-full text-sm border-collapse">'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">Token Configured:</td><td class="py-2"><span class="{"text-green-600 font-semibold" if is_configured else "text-orange-600"}">{"+YES" if is_configured else "NOT SET"}</span></td></tr>'
+    html += f'<tr class="border-b"><td class="py-2 font-semibold">JWT Token:</td><td class="py-2"><span class="{"text-green-600 font-semibold" if jwt_token else "text-red-600"}">{"Loaded" if jwt_token else "NOT SET"}</span></td></tr>'
+    html += f'<tr class="border-b"><td class="py-2 font-semibold">Auto-Login Enabled:</td><td class="py-2"><span class="{"text-green-600 font-semibold" if auto_login_enabled else "text-orange-600"}">{"YES" if auto_login_enabled else "NO"}</span></td></tr>'
     
-    if is_configured and token_info:
-        html += f'<tr class="border-b"><td class="py-2 font-semibold">Security ID:</td><td class="py-2 text-sm font-mono">{token_info.get("security_id", "N/A")}</td></tr>'
-        html += f'<tr class="border-b"><td class="py-2 font-semibold">User Type:</td><td class="py-2 text-sm">{token_info.get("userType", "N/A")}</td></tr>'
-        html += f'<tr class="border-b"><td class="py-2 font-semibold">Org Name:</td><td class="py-2 text-sm">{token_info.get("orgName", "N/A")}</td></tr>'
+    if token_info:
+        html += f'<tr class="border-b"><td class="py-2 font-semibold">User:</td><td class="py-2 text-sm">{token_info.get("security_id", "N/A")}</td></tr>'
+        html += f'<tr class="border-b"><td class="py-2 font-semibold">Org:</td><td class="py-2 text-sm">{token_info.get("orgName", "N/A")}</td></tr>'
         
-        # Check expiration
-        from datetime import datetime
         exp = token_info.get("exp")
         if exp:
             exp_dt = datetime.fromtimestamp(exp)
             is_expired = datetime.now() > exp_dt
-            remaining_hours = (exp_dt - datetime.now()).total_seconds() / 3600 if not is_expired else 0
-            html += f'<tr><td class="py-2 font-semibold">Token Status:</td><td class="py-2 text-sm"><span class="{"text-red-600 font-semibold" if is_expired else "text-green-600 font-semibold"}">{"EXPIRED" if is_expired else f"Valid ({remaining_hours:.1f}h remaining)"}</span></td></tr>'
-    else:
-        html += '</tr>'
+            if is_expired:
+                status = '<span class="text-red-600 font-semibold">EXPIRED</span>'
+            else:
+                remaining_hours = (exp_dt - datetime.now()).total_seconds() / 3600
+                status = f'<span class="text-green-600 font-semibold">Valid ({remaining_hours:.1f}h)</span>'
+            html += f'<tr><td class="py-2 font-semibold">Token Status:</td><td class="py-2 text-sm">{status}</td></tr>'
     
     html += '</table>'
     html += '</div>'
     
-    if not is_configured:
-        html += '<div class="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4 mb-6">'
-        html += '<h4 class="font-bold text-yellow-900 mb-2">JWT Token Not Configured</h4>'
-        html += '<p class="text-sm text-yellow-800 mb-3">To set up automatic scheduler access:</p>'
-        html += '<ol class="text-sm text-yellow-800 space-y-2 list-decimal list-inside">'
-        html += '<li>Go to <a href="https://scheduler.walmart.com" target="_blank" class="text-yellow-600 underline">scheduler.walmart.com</a> in your browser</li>'
-        html += '<li>Log in through PingFederate (enter your Walmart credentials)</li>'
-        html += '<li>After login, look at the URL in your browser address bar</li>'
-        html += '<li>Find the <code class="bg-yellow-100 px-1">uat=</code> parameter</li>'
-        html += '<li>Copy the entire token value (long string starting with <code class="bg-yellow-100 px-1">eyJ</code>)</li>'
-        html += '<li>Add to <code class="bg-yellow-100 px-1">.env</code>:</li>'
-        html += '</ol>'
-        html += '<code class="bg-yellow-100 px-3 py-2 rounded text-xs block mt-2">'
-        html += 'SCHEDULER_JWT_TOKEN=eyJhbGciOi...'
+    # Instructions
+    if not auto_login_enabled and not jwt_token:
+        html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
+        html += '<h4 class="font-bold text-blue-900 mb-2">Setup Automatic Authentication</h4>'
+        html += '<p class="text-sm text-blue-800 mb-2">Add to .env:</p>'
+        html += '<code class="bg-blue-100 px-3 py-2 rounded text-xs block">'
+        html += 'WALMART_USERNAME=your.name@walmart.com<br>'
+        html += 'WALMART_PASSWORD=your_password<br>'
         html += '</code>'
-        html += '<p class="text-xs text-yellow-700 mt-3">Then restart the server and return here</p>'
+        html += '<p class="text-xs text-blue-700 mt-3">Server will automatically login on startup and extract JWT token</p>'
         html += '</div>'
-    else:
-        html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4 mb-6">'
-        html += '<h4 class="font-bold text-green-900 mb-2">JWT Token Configured</h4>'
-        html += '<p class="text-sm text-green-800 mb-2">Token loaded and ready to use</p>'
-        html += f'<p class="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded">{token_preview}</p>'
+    elif auto_login_enabled:
+        html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
+        html += '<h4 class="font-bold text-green-900 mb-2">Auto-Login Ready</h4>'
+        html += f'<p class="text-sm text-green-800">Will login as: <strong>{username}</strong></p>'
+        html += '<p class="text-xs text-green-700 mt-2">Server automatically logs in on startup and extracts JWT token</p>'
         html += '</div>'
-    
-    html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
-    html += '<h4 class="font-bold text-blue-900 mb-2">How It Works</h4>'
-    html += '<p class="text-sm text-blue-800 mb-2">Once JWT token is configured:</p>'
-    html += '<ol class="text-sm text-blue-800 space-y-1 list-decimal list-inside">'
-    html += '<li>Server uses JWT token for all scheduler.walmart.com API calls</li>'
-    html += '<li>Token is automatically included in request headers</li>'
-    html += '<li>When token expires, extract a new one and update .env</li>'
-    html += '<li>No additional authentication needed</li>'
-    html += '</ol>'
-    html += '</div>'
+    elif jwt_token:
+        html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
+        html += '<h4 class="font-bold text-green-900 mb-2">Token Loaded</h4>'
+        html += '<p class="text-sm text-green-800">Using stored JWT token for API access</p>'
+        html += '</div>'
     
     html += '</div>'
     return html

@@ -28,6 +28,9 @@ dependencies = [
     
     # GCS (Google Cloud Storage)
     "google-cloud-storage>=2.10.0",
+    
+    # Browser Automation for Walmart SSO
+    "playwright>=1.40.0",
 ]
 
 [build-system]
