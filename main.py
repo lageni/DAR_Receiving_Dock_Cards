@@ -1712,9 +1712,9 @@ async def admin_page():
         </div>
         
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
-            <h2 class="text-xl font-bold mb-4">Scheduler.walmart.com - SSO (Single Sign-On)</h2>
-            <p class="text-sm text-gray-600 mb-4">Automatic Walmart SSO authentication and token management</p>
-            <div hx-get="/diagnostics/scheduler-sso" hx-trigger="load" hx-swap="innerHTML"></div>
+            <h2 class="text-xl font-bold mb-4">Scheduler.walmart.com - JWT Token</h2>
+            <p class="text-sm text-gray-600 mb-4">Extract and use JWT token for scheduler.walmart.com API access</p>
+            <div hx-get="/diagnostics/scheduler-jwt" hx-trigger="load" hx-swap="innerHTML"></div>
         </div>
         
         <div class="flex gap-3">
@@ -1906,81 +1906,75 @@ async def informix_diagnostics():
     """
 
 
-@app.get("/diagnostics/scheduler-sso", response_class=HTMLResponse)
-async def scheduler_sso_diagnostics():
-    """Scheduler.walmart.com SSO diagnostics."""
+@app.get("/diagnostics/scheduler-jwt", response_class=HTMLResponse)
+async def scheduler_jwt_diagnostics():
+    """Scheduler.walmart.com JWT token diagnostics."""
+    from scheduler_jwt_client import SchedulerJWTClient
     import os
     
     html = '<div class="bg-white p-6 rounded-lg border shadow">'
     
-    # Check SSO configuration
-    client_id = os.getenv("SCHEDULER_CLIENT_ID", "").strip()
-    client_secret = os.getenv("SCHEDULER_CLIENT_SECRET", "").strip()
-    auth_endpoint = os.getenv("SCHEDULER_AUTH_ENDPOINT", "").strip()
-    token_endpoint = os.getenv("SCHEDULER_TOKEN_ENDPOINT", "").strip()
-    redirect_uri = os.getenv("SCHEDULER_REDIRECT_URI", "").strip()
-    username = os.getenv("SCHEDULER_USERNAME", "").strip()
-    password = os.getenv("SCHEDULER_PASSWORD", "").strip()
-    
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
-    has_env = os.path.exists(env_path)
-    
-    is_configured = all([client_id, client_secret, auth_endpoint, token_endpoint, redirect_uri])
+    client = SchedulerJWTClient()
+    is_configured = client.is_configured()
+    token_preview = client.get_token_preview()
+    token_info = client.get_token_info()
     
     html += '<div class="mb-6">'
-    html += '<h4 class="font-semibold mb-2">SSO Configuration Status</h4>'
+    html += '<h4 class="font-semibold mb-2">JWT Token Status</h4>'
     html += '<table class="w-full text-sm border-collapse">'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">Has .env file:</td><td class="py-2"><span class="{"text-green-600" if has_env else "text-red-600"}">{"+YES" if has_env else "X NO"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">CLIENT_ID:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if client_id else "text-orange-600"}">{"+Set" if client_id else "MISSING"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">CLIENT_SECRET:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if client_secret else "text-orange-600"}">{"+Set (hidden)" if client_secret else "MISSING"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">AUTH_ENDPOINT:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if auth_endpoint else "text-orange-600"}">{"+Set" if auth_endpoint else "MISSING"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">TOKEN_ENDPOINT:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if token_endpoint else "text-orange-600"}">{"+Set" if token_endpoint else "MISSING"}</span></td></tr>'
-    html += f'<tr><td class="py-2 font-semibold">REDIRECT_URI:</td><td class="py-2 text-sm"><span class="{"text-green-600 font-semibold" if redirect_uri else "text-orange-600"}">{"+Set" if redirect_uri else "MISSING"}</span></td></tr>'
+    html += f'<tr class="border-b"><td class="py-2 font-semibold">Token Configured:</td><td class="py-2"><span class="{"text-green-600 font-semibold" if is_configured else "text-orange-600"}">{"+YES" if is_configured else "NOT SET"}</span></td></tr>'
+    
+    if is_configured and token_info:
+        html += f'<tr class="border-b"><td class="py-2 font-semibold">Security ID:</td><td class="py-2 text-sm font-mono">{token_info.get("security_id", "N/A")}</td></tr>'
+        html += f'<tr class="border-b"><td class="py-2 font-semibold">User Type:</td><td class="py-2 text-sm">{token_info.get("userType", "N/A")}</td></tr>'
+        html += f'<tr class="border-b"><td class="py-2 font-semibold">Org Name:</td><td class="py-2 text-sm">{token_info.get("orgName", "N/A")}</td></tr>'
+        
+        # Check expiration
+        from datetime import datetime
+        exp = token_info.get("exp")
+        if exp:
+            exp_dt = datetime.fromtimestamp(exp)
+            is_expired = datetime.now() > exp_dt
+            remaining_hours = (exp_dt - datetime.now()).total_seconds() / 3600 if not is_expired else 0
+            html += f'<tr><td class="py-2 font-semibold">Token Status:</td><td class="py-2 text-sm"><span class="{"text-red-600 font-semibold" if is_expired else "text-green-600 font-semibold"}">{"EXPIRED" if is_expired else f"Valid ({remaining_hours:.1f}h remaining)"}</span></td></tr>'
+    else:
+        html += '</tr>'
+    
     html += '</table>'
     html += '</div>'
     
     if not is_configured:
-        html += '<div class="bg-red-50 border-l-4 border-red-400 rounded p-4 mb-6">'
-        html += '<h4 class="font-bold text-red-900 mb-2">SSO Not Yet Configured</h4>'
-        html += '<p class="text-sm text-red-800 mb-3">Scheduler.walmart.com uses SSO (Single Sign-On). To configure automatic login:</p>'
-        html += '<ol class="text-sm text-red-800 space-y-2 list-decimal list-inside">'
-        html += '<li>Read: <code class="bg-red-100 px-1">SSO_INSPECTION_GUIDE.md</code> in the repo</li>'
-        html += '<li>Open scheduler.walmart.com in your browser</li>'
-        html += '<li>Open DevTools (F12) → Network tab</li>'
-        html += '<li>Follow login flow and capture:'
-        html += '<ul class="list-disc list-inside ml-4 mt-1">'
-        html += '<li>Auth endpoint URL (usually login.walmart.com/authorize)</li>'
-        html += '<li>Token endpoint URL (usually login.walmart.com/token)</li>'
-        html += '<li>Client ID and Client Secret</li>'
-        html += '</ul></li>'
-        html += '<li>Add to .env:</li>'
+        html += '<div class="bg-yellow-50 border-l-4 border-yellow-400 rounded p-4 mb-6">'
+        html += '<h4 class="font-bold text-yellow-900 mb-2">JWT Token Not Configured</h4>'
+        html += '<p class="text-sm text-yellow-800 mb-3">To set up automatic scheduler access:</p>'
+        html += '<ol class="text-sm text-yellow-800 space-y-2 list-decimal list-inside">'
+        html += '<li>Go to <a href="https://scheduler.walmart.com" target="_blank" class="text-yellow-600 underline">scheduler.walmart.com</a> in your browser</li>'
+        html += '<li>Log in through PingFederate (enter your Walmart credentials)</li>'
+        html += '<li>After login, look at the URL in your browser address bar</li>'
+        html += '<li>Find the <code class="bg-yellow-100 px-1">uat=</code> parameter</li>'
+        html += '<li>Copy the entire token value (long string starting with <code class="bg-yellow-100 px-1">eyJ</code>)</li>'
+        html += '<li>Add to <code class="bg-yellow-100 px-1">.env</code>:</li>'
         html += '</ol>'
-        html += '<code class="bg-red-100 px-3 py-2 rounded text-xs block mt-2">'
-        html += 'SCHEDULER_CLIENT_ID=your_client_id<br>'
-        html += 'SCHEDULER_CLIENT_SECRET=your_client_secret<br>'
-        html += 'SCHEDULER_AUTH_ENDPOINT=https://login.walmart.com/authorize<br>'
-        html += 'SCHEDULER_TOKEN_ENDPOINT=https://login.walmart.com/token<br>'
-        html += 'SCHEDULER_REDIRECT_URI=https://scheduler.walmart.com/callback'
+        html += '<code class="bg-yellow-100 px-3 py-2 rounded text-xs block mt-2">'
+        html += 'SCHEDULER_JWT_TOKEN=eyJhbGciOi...'
         html += '</code>'
-        html += '<p class="text-xs text-red-700 mt-3">Optionally also set SCHEDULER_USERNAME and SCHEDULER_PASSWORD for programmatic login</p>'
+        html += '<p class="text-xs text-yellow-700 mt-3">Then restart the server and return here</p>'
         html += '</div>'
     else:
         html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4 mb-6">'
-        html += '<h4 class="font-bold text-green-900 mb-2">SSO Configured!</h4>'
-        html += '<p class="text-sm text-green-800 mb-3">Ready to use. Server will handle token management automatically.</p>'
-        html += '<button hx-post="/api/scheduler/test-sso" hx-target="#sso-test-result" hx-swap="innerHTML" hx-indicator="#sso-spinner" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Test SSO Configuration</button>'
-        html += '<div id="sso-spinner" class="hidden mt-3 text-sm text-gray-600">Testing...</div>'
-        html += '<div id="sso-test-result" class="mt-4"></div>'
+        html += '<h4 class="font-bold text-green-900 mb-2">JWT Token Configured</h4>'
+        html += '<p class="text-sm text-green-800 mb-2">Token loaded and ready to use</p>'
+        html += f'<p class="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded">{token_preview}</p>'
         html += '</div>'
     
     html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
-    html += '<h4 class="font-bold text-blue-900 mb-2">How SSO Works</h4>'
+    html += '<h4 class="font-bold text-blue-900 mb-2">How It Works</h4>'
+    html += '<p class="text-sm text-blue-800 mb-2">Once JWT token is configured:</p>'
     html += '<ol class="text-sm text-blue-800 space-y-1 list-decimal list-inside">'
-    html += '<li>Server redirects to Walmart login (login.walmart.com)</li>'
-    html += '<li>Server receives auth code in callback</li>'
-    html += '<li>Server exchanges code for access token</li>'
-    html += '<li>Token stored in memory with auto-refresh</li>'
-    html += '<li>All API calls automatically include token</li>'
+    html += '<li>Server uses JWT token for all scheduler.walmart.com API calls</li>'
+    html += '<li>Token is automatically included in request headers</li>'
+    html += '<li>When token expires, extract a new one and update .env</li>'
+    html += '<li>No additional authentication needed</li>'
     html += '</ol>'
     html += '</div>'
     
@@ -1988,69 +1982,7 @@ async def scheduler_sso_diagnostics():
     return html
 
 
-@app.post("/api/scheduler/test-sso", response_class=HTMLResponse)
-async def test_scheduler_sso():
-    """Test SSO configuration."""
-    from sso_client import SSOClient
-    import os
-    
-    html = '<div class="space-y-3">'
-    
-    # Check configuration
-    client_id = os.getenv("SCHEDULER_CLIENT_ID", "").strip()
-    client_secret = os.getenv("SCHEDULER_CLIENT_SECRET", "").strip()
-    auth_endpoint = os.getenv("SCHEDULER_AUTH_ENDPOINT", "").strip()
-    token_endpoint = os.getenv("SCHEDULER_TOKEN_ENDPOINT", "").strip()
-    redirect_uri = os.getenv("SCHEDULER_REDIRECT_URI", "").strip()
-    username = os.getenv("SCHEDULER_USERNAME", "").strip()
-    password = os.getenv("SCHEDULER_PASSWORD", "").strip()
-    
-    if not all([client_id, client_secret, auth_endpoint, token_endpoint, redirect_uri]):
-        html += '<div class="bg-red-100 border border-red-400 rounded p-4">'
-        html += '<p class="text-red-800 font-semibold">SSO Not Configured</p>'
-        html += '<p class="text-sm text-red-700 mt-2">Missing required SSO configuration in .env</p>'
-        html += '</div>'
-        return html + '</div>'
-    
-    html += '<div class="bg-blue-100 border border-blue-400 rounded p-4">'
-    html += '<p class="text-blue-800 font-semibold mb-2">SSO Configuration Loaded</p>'
-    html += '<p class="text-sm text-blue-700">Auth Endpoint: ' + auth_endpoint + '</p>'
-    html += '<p class="text-sm text-blue-700">Token Endpoint: ' + token_endpoint + '</p>'
-    html += '</div>'
-    
-    try:
-        client = SSOClient()
-        
-        # Get login URL (informational)
-        login_url = client.get_login_url()
-        
-        html += '<div class="bg-green-100 border border-green-400 rounded p-4">'
-        html += '<p class="text-green-800 font-semibold mb-2">SSO Ready</p>'
-        html += '<p class="text-sm text-green-700 mb-2">SSO configuration is valid and ready for use.</p>'
-        html += '<details class="text-xs text-green-700"><summary>Show login URL</summary>'
-        html += f'<code class="block mt-2 bg-white px-2 py-1 rounded overflow-auto max-h-32 text-xs">{login_url}</code>'
-        html += '</details>'
-        html += '</div>'
-        
-        if not (username and password):
-            html += '<div class="bg-yellow-100 border border-yellow-400 rounded p-4">'
-            html += '<p class="text-yellow-800 font-semibold text-sm">Note</p>'
-            html += '<p class="text-xs text-yellow-700 mt-1">Set SCHEDULER_USERNAME and SCHEDULER_PASSWORD in .env for programmatic login</p>'
-            html += '</div>'
-        else:
-            html += '<div class="bg-green-100 border border-green-400 rounded p-4">'
-            html += '<p class="text-green-800 text-sm">Programmatic login credentials: Configured</p>'
-            html += '</div>'
-    
-    except Exception as e:
-        error_msg = str(e)[:200]
-        html += '<div class="bg-red-100 border border-red-400 rounded p-4">'
-        html += '<p class="text-red-800 font-semibold">Error</p>'
-        html += f'<p class="text-sm text-red-700 mt-2">{error_msg}</p>'
-        html += '</div>'
-    
-    html += '</div>'
-    return html
+
 
 
 @app.get("/test_informix_query", response_class=HTMLResponse)
