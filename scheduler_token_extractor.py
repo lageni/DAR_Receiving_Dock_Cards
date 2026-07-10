@@ -31,76 +31,54 @@ async def extract_token(username: str, password: str) -> dict:
     session.verify = False
     session.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     })
     
     try:
         print(f"[TOKEN] Logging in as {username}...")
         
-        # Get initial redirect to PingFederate
+        # Get login page
         resp = session.get("https://scheduler.walmart.com/", timeout=15, allow_redirects=True)
-        print(f"[TOKEN] Redirected to: {resp.url}")
+        print(f"[TOKEN] Got: {resp.url[:80]}")
         
-        # Submit credentials directly to authorization endpoint
-        auth_url = "https://pfedprod.wal-mart.com/as/authorization.oauth2"
+        # Find form action
+        form_match = re.search(r'<form[^>]*action=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
+        if not form_match:
+            return {"status": "error", "message": "Login form not found"}
         
-        login_data = {
-            "username": username,
-            "password": password,
-            "client_id": "scheduler",
-        }
+        form_action = form_match.group(1)
+        if not form_action.startswith("http"):
+            parsed = urlparse(resp.url)
+            form_action = f"{parsed.scheme}://{parsed.netloc}{form_action}"
         
-        print(f"[TOKEN] Submitting to {auth_url}")
-        resp = session.post(auth_url, data=login_data, timeout=15, allow_redirects=True)
+        print(f"[TOKEN] Form: {form_action}")
         
-        print(f"[TOKEN] Response: {resp.url[:100]}")
+        # Extract form fields
+        form_data = {}
+        for match in re.finditer(r'<input[^>]*name=["\']([^"\']+)["\'](?:[^>]*value=["\']([^"\']*)["\'])?', resp.text, re.IGNORECASE):
+            form_data[match.group(1)] = match.group(2) or ""
         
-        # Check URL for token
+        # Add credentials
+        form_data['pf.username'] = username if "@" in username else f"{username}@wmsc.wal-mart.com"
+        form_data['pf.pass'] = password
+        form_data['pf.ok'] = "clicked"
+        
+        print(f"[TOKEN] Submitting form...")
+        resp = session.post(form_action, data=form_data, timeout=15, allow_redirects=True)
+        print(f"[TOKEN] Response: {resp.url[:80]}")
+        
+        # Check URL
         token = extract_token_from_url(resp.url)
         if token:
-            print("[TOKEN] Token found!")
             return {"status": "success", "token": token}
         
-        # Check HTML for token
+        # Check HTML
         token = extract_token_from_html(resp.text)
         if token:
-            print("[TOKEN] Token found in HTML!")
             return {"status": "success", "token": token}
         
-        # Check for redirect with form
-        if 'form' in resp.text.lower():
-            match = re.search(r'<form[^>]*action=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
-            if match:
-                form_action = match.group(1)
-                if not form_action.startswith("http"):
-                    parsed = urlparse(resp.url)
-                    form_action = f"{parsed.scheme}://{parsed.netloc}{form_action}"
-                
-                print(f"[TOKEN] Found form, submitting to {form_action}")
-                
-                form_data = {}
-                for m in re.finditer(r'<input[^>]*name=["\']([^"\']+)["\'](?:[^>]*value=["\']([^"\']*)["\'])?', resp.text, re.IGNORECASE):
-                    form_data[m.group(1)] = m.group(2) or ""
-                
-                form_data['username'] = username
-                form_data['password'] = password
-                
-                resp = session.post(form_action, data=form_data, timeout=15, allow_redirects=True)
-                print(f"[TOKEN] Form response: {resp.url[:100]}")
-                
-                token = extract_token_from_url(resp.url)
-                if token:
-                    return {"status": "success", "token": token}
-                
-                token = extract_token_from_html(resp.text)
-                if token:
-                    return {"status": "success", "token": token}
-        
-        print("[TOKEN] No token found in response")
-        return {"status": "error", "message": "Login failed or credentials invalid"}
+        return {"status": "error", "message": "No token received"}
     
     except Exception as e:
-        print(f"[TOKEN] Error: {str(e)}")
         return {"status": "error", "message": str(e)[:100]}
 
 
