@@ -18,31 +18,7 @@ load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 app = FastAPI(title="CodePuppy DAR")
 
-# Auto-extract scheduler token on startup
-@app.on_event("startup")
-async def startup_extract_token():
-    """Auto-extract token if not configured."""
-    import os
-    from scheduler_token_extractor import extract_token, save_token
-    
-    token = os.getenv("SCHEDULER_JWT_TOKEN", "").strip()
-    username = os.getenv("WALMART_USERNAME", "").strip()
-    password = os.getenv("WALMART_PASSWORD", "").strip()
-    
-    if token:
-        print("[STARTUP] Scheduler token loaded from .env")
-        return
-    
-    if username and password:
-        print(f"[STARTUP] Extracting token for {username}...")
-        result = await extract_token(username, password)
-        if result["status"] == "success":
-            save_token(result["token"])
-            print("[STARTUP] Token extracted and saved")
-        else:
-            print(f"[STARTUP] Token extraction failed: {result['message']}")
-    else:
-        print("[STARTUP] No credentials configured for auto-extraction")
+
 
 # Get database path from .env or default to local
 def get_database_path():
@@ -1970,28 +1946,120 @@ async def scheduler_diagnostics():
     html += '</table>'
     html += '</div>'
     
+    html += '<div class="space-y-4">'
+    
+    # Token input
+    html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
+    html += '<h4 class="font-bold text-blue-900 mb-2">JWT Token</h4>'
+    html += '<form hx-post="/api/scheduler/set-token" hx-swap="none" class="space-y-2">'
+    html += '<textarea name="token" placeholder="Paste JWT token here" class="w-full px-3 py-2 border rounded text-xs font-mono" rows="3"></textarea>'
+    html += '<button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Save Token</button>'
+    html += '</form>'
+    if client.is_configured():
+        html += '<p class="text-sm text-green-700 mt-2">✓ Token loaded</p>'
+    html += '</div>'
+    
+    # Search
+    html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
+    html += '<h4 class="font-bold text-green-900 mb-2">Search Deliveries</h4>'
     if not client.is_configured():
-        html += '<div class="bg-red-50 border-l-4 border-red-400 rounded p-4">'
-        html += '<h4 class="font-bold text-red-900 mb-2">Token Not Configured</h4>'
-        html += '<p class="text-sm text-red-800">Add to .env:</p>'
-        html += '<code class="bg-red-100 px-2 py-1 rounded text-xs block mt-1">WALMART_USERNAME=d0h0pf7</code>'
-        html += '<code class="bg-red-100 px-2 py-1 rounded text-xs block mt-1">WALMART_PASSWORD=your_password</code>'
-        html += '<p class="text-xs text-red-700 mt-2">Then restart server to auto-extract</p>'
-        html += '</div>'
+        html += '<p class="text-sm text-green-800">Enter token above first</p>'
     else:
-        html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
-        html += '<h4 class="font-bold text-green-900 mb-2">Ready</h4>'
-        html += '<p class="text-sm text-green-800">Token configured and ready for API calls</p>'
-        html += '</div>'
+        html += '<form hx-post="/api/scheduler/search" hx-target="#search-results" hx-swap="innerHTML" class="space-y-2">'
+        html += '<input type="text" name="delivery_number" placeholder="Delivery number (globalSearchKeyword)" class="w-full px-3 py-2 border rounded" required>'
+        html += '<button type="submit" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Search</button>'
+        html += '</form>'
+        html += '<div id="search-results" class="mt-4"></div>'
+    html += '</div>'
     
     html += '</div>'
     return html
 
 
+@app.post("/api/scheduler/set-token", response_class=HTMLResponse)
+async def set_scheduler_token(request: Request):
+    """Store JWT token in .env."""
+    try:
+        form = await request.form()
+        token = form.get("token", "").strip()
+        
+        if not token:
+            return '<p class="text-red-600">Token required</p>'
+        
+        env_file = os.path.join(os.path.dirname(__file__), ".env")
+        content = ""
+        if os.path.exists(env_file):
+            with open(env_file, "r") as f:
+                content = f.read()
+        
+        lines = [l for l in content.split("\n") if not l.startswith("SCHEDULER_JWT_TOKEN=")]
+        lines.append(f"SCHEDULER_JWT_TOKEN={token}")
+        
+        with open(env_file, "w") as f:
+            f.write("\n".join(lines))
+        
+        return '<p class="text-green-600 text-sm">Token saved!</p>'
+    except Exception as e:
+        return f'<p class="text-red-600 text-sm">Error: {str(e)[:100]}</p>'
+
+
+@app.post("/api/scheduler/search", response_class=HTMLResponse)
+async def search_deliveries(request: Request):
+    """Search scheduler using delivery number."""
+    import json
+    
+    try:
+        form = await request.form()
+        delivery_number = form.get("delivery_number", "").strip()
+        token = os.getenv("SCHEDULER_JWT_TOKEN", "").strip()
+        
+        if not delivery_number:
+            return '<p class="text-red-600 text-sm">Delivery number required</p>'
+        
+        if not token:
+            return '<p class="text-red-600 text-sm">Token not configured</p>'
+        
+        async with httpx.AsyncClient(verify=False, timeout=30) as client:
+            resp = await client.post(
+                "https://scheduler.walmart.com/ILP2/common-search-api/rest/delivery/search",
+                headers={
+                    "security_id": "d0h0pf7@ADLocal",
+                    "wmt_sch_country": "US",
+                    "country_code": "US",
+                    "lang_code": "101",
+                    "userType": "COMPANY",
+                    "token": token,
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "globalSearchKeyword": delivery_number,
+                    "organization": "Walmart Stores Inc.",
+                    "userName": "d0h0pf7@ADLocal"
+                }
+            )
+        
+        if resp.status_code == 401:
+            return '<p class="text-red-600 text-sm">Token invalid/expired - update and try again</p>'
+        
+        if resp.status_code != 200:
+            return f'<p class="text-red-600 text-sm">Error: HTTP {resp.status_code}</p>'
+        
+        data = resp.json()
+        html = '<div class="bg-gray-50 border rounded p-4 text-sm font-mono overflow-x-auto">'
+        html += '<pre>' + json.dumps(data, indent=2)[:2000] + '</pre>'
+        html += '</div>'
+        return html
+    
+    except Exception as e:
+        return f'<p class="text-red-600 text-sm">Error: {str(e)[:150]}</p>'
 
 
 
 
+
+
+@app.get("/test_informix_query", response_class=HTMLResponse)
 async def test_informix_query(query: str = None):
     """Execute a test query against Informix and return results."""
     if not query:
