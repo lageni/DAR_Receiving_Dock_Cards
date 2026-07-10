@@ -39,24 +39,22 @@ if errorlevel 1 (
 for /f "tokens=2" %%i in ('python --version') do set PYTHON_VERSION=%%i
 echo [OK] Python %PYTHON_VERSION% found
 
-REM Step 2: Install dependencies
+REM Step 2: Sync dependencies from Walmart Artifactory
 echo.
-echo [2/5] Installing dependencies...
-pip install -q httpx fastapi uvicorn python-dotenv fpdf2
+echo [2/5] Syncing dependencies from Walmart Artifactory...
+echo       Index: https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple
+uv sync
 if errorlevel 1 (
-    echo Trying with uv instead...
-    uv sync
-    if errorlevel 1 (
-        echo ERROR: Failed to install dependencies
-        pause
-        exit /b 1
-    )
+    echo ERROR: Failed to sync dependencies
+    echo Make sure you are connected to Walmart VPN or Eagle WiFi
+    pause
+    exit /b 1
 )
-echo [OK] Dependencies installed
+echo [OK] Dependencies synced - see DEPENDENCIES.md for full list
 
 REM Step 3: Check .env
 echo.
-echo [3/5] Checking .env configuration...
+echo [3/4] Checking .env configuration...
 if not exist ".env" (
     echo WARNING: .env file not found!
     echo Creating template .env file...
@@ -78,7 +76,7 @@ if not exist ".env" (
 
 REM Step 4: Initialize database
 echo.
-echo [4/5] Initializing SQLite database...
+echo [4/4] Initializing SQLite database...
 python db.py
 if errorlevel 1 (
     echo ERROR: Database initialization failed
@@ -87,9 +85,9 @@ if errorlevel 1 (
 )
 echo [OK] Database initialized
 
-REM Step 5: Verify connectivity
+REM Verify connectivity (informational)
 echo.
-echo [5/6] Testing network connectivity...
+echo [INFO] Testing network connectivity...
 ping -n 1 uwms-item.prod.us.walmart.net >nul 2>&1
 if errorlevel 1 (
     echo WARNING: Cannot reach MDM API endpoint
@@ -98,9 +96,9 @@ if errorlevel 1 (
     echo [OK] MDM API endpoint reachable
 )
 
-REM Step 6: Test BigQuery (optional)
+REM Test BigQuery (optional)
 echo.
-echo [6/6] Testing BigQuery connection (optional)...
+echo [INFO] BigQuery connection status (optional)...
 echo If your GCS_PROJECT_ID, GCS_DATASET_ID, GCS_TABLE_ID are set in .env, they will be tested
 echo Otherwise, you can configure this in the admin debug page
 echo.
@@ -113,17 +111,20 @@ echo ============================================================
 echo.
 
 :startup
-REM Start the server
+REM Start the server using uv run
 echo [SERVER] Starting CodePuppyDAR...
 echo.
 echo Local Access:        http://localhost:8000
 echo Admin Debug Page:    http://localhost:8000/admin/debug
 echo.
+echo Tip: For development, use: uv run uvicorn main:app --reload
+echo.
 
 REM Try to open browser automatically
 start http://localhost:8000
 
-python main.py
+REM Run using uv to ensure correct environment
+uv run python main.py
 
 REM If we get here, server was stopped
 echo.

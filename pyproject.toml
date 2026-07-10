@@ -4,14 +4,30 @@ version = "0.1.0"
 description = "Informix Deliveries Dashboard"
 requires-python = ">=3.9"
 dependencies = [
+    # Web Framework
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
+    "httpx>=0.24.0",
+    
+    # Configuration & Data
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
-    "httpx>=0.24.0",
+    
+    # PDF Generation
     "fpdf2>=2.7.0",
-    "pyodbc>=5.0.0",
     "PyPDF2>=3.0.0",
+    
+    # Database
+    "pyodbc>=5.0.0",
+    
+    # Google Cloud BigQuery
+    "google-cloud-bigquery>=3.11.0",
+    "google-auth>=2.20.0",
+    "google-auth-oauthlib>=1.0.0",
+    "google-auth-httplib2>=0.2.0",
+    
+    # GCS (Google Cloud Storage)
+    "google-cloud-storage>=2.10.0",
 ]
 
 [build-system]

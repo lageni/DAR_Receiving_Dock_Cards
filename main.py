@@ -1807,8 +1807,12 @@ async def informix_diagnostics():
     # Check pyodbc first
     try:
         import pyodbc
+        from importlib.metadata import version as get_version
         pyodbc_available = True
-        pyodbc_version = pyodbc.__version__
+        try:
+            pyodbc_version = get_version('pyodbc')
+        except Exception:
+            pyodbc_version = "INSTALLED (version unknown)"
         odbc_drivers = pyodbc.drivers()
         odbc_driver_found = "IBM INFORMIX" in str(odbc_drivers) or "Informix" in str(odbc_drivers)
     except ImportError:
@@ -1883,14 +1887,74 @@ async def informix_diagnostics():
         <div class="bg-white p-6 rounded-lg border shadow mb-6">
             <h2 class="text-xl font-bold mb-4">Test Query (When Connected)</h2>
             <p class="text-sm text-gray-600 mb-3">Query: <span class="font-mono bg-gray-100 px-2 py-1">SELECT * FROM rdc_db:informix.po_line LIMIT 10</span></p>
-            <p class="text-sm text-gray-600">Status: Pending</p>
+            <button hx-get="/test_informix_query" hx-target="#query-results" hx-swap="innerHTML" hx-indicator="#query-spinner" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700 mt-3">Execute Query</button>
+            <div id="query-spinner" class="hidden mt-3"><span class="text-sm text-gray-600">Executing...</span></div>
+            <div id="query-results" class="mt-4"></div>
         </div>
         
         <a href="/admin" class="inline-block px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Back to Admin</a>
     </div>
+    <script src="https://unpkg.com/htmx.org"></script>
 </body>
 </html>
     """
+
+
+@app.get("/test_informix_query", response_class=HTMLResponse)
+async def test_informix_query(query: str = None):
+    """Execute a test query against Informix and return results."""
+    if not query:
+        query = "SELECT * FROM rdc_db:informix.po_line LIMIT 10"
+    
+    try:
+        from informix_connect import InformixConnection
+        
+        conn = InformixConnection()
+        conn.connect()
+        cursor = conn.conn.cursor()
+        
+        # Execute the query
+        cursor.execute(query)
+        
+        # Fetch column names
+        columns = [desc[0] for desc in cursor.description]
+        rows = cursor.fetchall()
+        
+        conn.disconnect()
+        
+        # Build HTML table with results
+        if not rows:
+            return '<div class="bg-blue-50 border border-blue-300 rounded p-4 mt-2"><p class="text-blue-800 text-sm">Query executed successfully. No rows returned.</p></div>'
+        
+        html = '<div class="mt-4 border rounded overflow-x-auto">'
+        html += '<table class="w-full text-sm border-collapse">'
+        html += '<thead class="bg-gray-200"><tr>'
+        
+        # Add header row
+        for col in columns:
+            html += f'<th class="border px-3 py-2 text-left font-semibold">{col}</th>'
+        html += '</tr></thead><tbody>'
+        
+        # Add data rows
+        for idx, row in enumerate(rows):
+            bg_class = 'bg-gray-50' if idx % 2 == 0 else 'bg-white'
+            html += f'<tr class="{bg_class}">'
+            for cell in row:
+                # Truncate long values
+                cell_str = str(cell) if cell is not None else "NULL"
+                if len(cell_str) > 100:
+                    cell_str = cell_str[:100] + "..."
+                html += f'<td class="border px-3 py-2 font-mono text-xs">{cell_str}</td>'
+            html += '</tr>'
+        
+        html += '</tbody></table></div>'
+        html += f'<p class="text-sm text-gray-600 mt-3">✓ Query executed successfully. Returned {len(rows)} row(s).</p>'
+        
+        return html
+        
+    except Exception as e:
+        error_msg = str(e)
+        return f'<div class="bg-red-50 border border-red-300 rounded p-4 mt-2"><p class="text-red-800 text-sm"><strong>Query Error:</strong> {error_msg}</p></div>'
 
 
 # TESTING ENDPOINTS - Multi-item batch reporting (NOT PRODUCTION)
