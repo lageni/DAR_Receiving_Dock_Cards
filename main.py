@@ -1912,41 +1912,27 @@ async def informix_diagnostics():
 @app.get("/diagnostics/scheduler", response_class=HTMLResponse)
 async def scheduler_diagnostics():
     """Scheduler.walmart.com JWT token status."""
-    from scheduler_client import SchedulerClient
     from datetime import datetime
+    import base64
+    import json
     
-    client = SchedulerClient()
-    token_info = client.get_token_info()
-    username = os.getenv("WALMART_USERNAME", "").strip()
-    password = os.getenv("WALMART_PASSWORD", "").strip()
-    has_creds = bool(username and password)
+    # Always read token directly from .env (not cached)
+    token = os.getenv("SCHEDULER_JWT_TOKEN", "").strip()
+    is_configured = bool(token)
     
-    html = '<div class="bg-white p-6 rounded-lg border shadow">'
-    html += '<div class="mb-6">'
-    html += '<h4 class="font-semibold mb-2">Status</h4>'
-    html += '<table class="w-full text-sm border-collapse">'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">Token:</td><td class="py-2"><span class="{"text-green-600 font-semibold" if client.is_configured() else "text-red-600"}">{"Loaded" if client.is_configured() else "NOT SET"}</span></td></tr>'
-    html += f'<tr class="border-b"><td class="py-2 font-semibold">Credentials:</td><td class="py-2"><span class="{"text-green-600 font-semibold" if has_creds else "text-orange-600"}">{"Configured" if has_creds else "Not Set"}</span></td></tr>'
-    
-    if token_info:
-        html += f'<tr class="border-b"><td class="py-2 font-semibold">User:</td><td class="py-2 text-sm">{token_info.get("security_id", "N/A")}</td></tr>'
-        html += f'<tr class="border-b"><td class="py-2 font-semibold">Org:</td><td class="py-2 text-sm">{token_info.get("orgName", "N/A")}</td></tr>'
-        
-        exp = token_info.get("exp")
-        if exp:
-            exp_dt = datetime.fromtimestamp(exp)
-            is_expired = datetime.now() > exp_dt
-            if is_expired:
-                status = '<span class="text-red-600 font-semibold">EXPIRED</span>'
-            else:
-                remaining_hours = (exp_dt - datetime.now()).total_seconds() / 3600
-                status = f'<span class="text-green-600 font-semibold">Valid ({remaining_hours:.1f}h)</span>'
-            html += f'<tr><td class="py-2 font-semibold">Status:</td><td class="py-2 text-sm">{status}</td></tr>'
-    
-    html += '</table>'
-    html += '</div>'
-    
-    html += '<div class="space-y-4">'
+    token_info = None
+    if token:
+        try:
+            parts = token.split(".")
+            if len(parts) == 3:
+                payload_str = parts[1]
+                padding = 4 - (len(payload_str) % 4)
+                if padding != 4:
+                    payload_str += "=" * padding
+                token_info = json.loads(base64.urlsafe_b64decode(payload_str))
+        except:
+            pass
+    html = '<div class="space-y-4">'
     
     # Token input
     html += '<div class="bg-blue-50 border-l-4 border-blue-400 rounded p-4">'
@@ -1955,9 +1941,22 @@ async def scheduler_diagnostics():
     html += '<textarea name="token" placeholder="Paste JWT token here" class="w-full px-3 py-2 border rounded text-xs font-mono" rows="3"></textarea>'
     html += '<button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">Save Token</button>'
     html += '</form>'
-    if client.is_configured():
+    if is_configured:
         html += '<p class="text-sm text-green-700 mt-2">✓ Token loaded</p>'
     html += '</div>'
+    
+    # Search
+    html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
+    html += '<h4 class="font-bold text-green-900 mb-2">Search Deliveries</h4>'
+    html += '<form hx-post="/api/scheduler/search" hx-target="#search-results" hx-swap="innerHTML" class="space-y-2">'
+    html += '<input type="text" name="delivery_number" placeholder="Delivery number (globalSearchKeyword)" class="w-full px-3 py-2 border rounded" required>'
+    html += '<button type="submit" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Search</button>'
+    html += '</form>'
+    html += '<div id="search-results" class="mt-4"></div>'
+    html += '</div>'
+    
+    html += '</div>'
+    return html
     
     # Search
     html += '<div class="bg-green-50 border-l-4 border-green-400 rounded p-4">'
