@@ -1,0 +1,82 @@
+# Automatic Walmart Scheduler Authentication
+
+## Setup (2 Steps)
+
+### Step 1: Add Credentials to .env
+```env
+WALMART_USERNAME=your.name@walmart.com
+WALMART_PASSWORD=your_password
+```
+
+### Step 2: Install Playwright
+```bash
+uv sync
+```
+
+## What Happens on Startup
+
+1. Server starts
+2. Automatically logs into Walmart Scheduler using Playwright
+3. Extracts JWT token from URL
+4. Saves token to .env for next restart
+5. Ready to make API calls
+
+## Verify in Admin
+
+Go to `http://localhost:8000/admin` → "Scheduler.walmart.com" section
+
+You'll see:
+- JWT Token: Loaded
+- Auto-Login Enabled: YES
+- User: Your username
+- Token Status: Valid (X hours remaining)
+
+## Use in Code
+
+```python
+from scheduler_auto_login import SchedulerAutoLogin
+
+client = SchedulerAutoLogin()
+token = client.get_token()
+```
+
+Or use the JWT client directly:
+
+```python
+import os
+import httpx
+
+async def api_call(endpoint: str):
+    token = os.getenv("SCHEDULER_JWT_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    async with httpx.AsyncClient(verify=False) as client:
+        response = await client.get(
+            f"https://scheduler.walmart.com{endpoint}",
+            headers=headers
+        )
+    return response.json()
+```
+
+## When Token Expires
+
+Token automatically refreshes on next server restart.
+
+If you need to manually refresh:
+1. Restart the server
+2. Server will re-login automatically
+3. New token saved to .env
+
+## Troubleshooting
+
+### "Playwright not installed"
+Run: `uv sync`
+
+### "401 Unauthorized on API calls"
+Token has expired. Restart server to re-login.
+
+### "Login failed"
+Check credentials in .env:
+- Username must be valid Walmart account
+- Password must be correct
+- Network must have internet access to reach Walmart servers
