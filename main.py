@@ -3166,18 +3166,40 @@ async def delivery_analysis_search(delivery_number: str):
             </div>
         </div>'''
         
-        # Build detailed table
+        # Build lookup dict from problematic items data for MDM info
+        mdm_data_lookup = {}
+        for item in problematic_items_data:
+            mds_id = item.get("mds_fam_id", "")
+            mdm_data_lookup[str(mds_id)] = item
+        
+        # Build detailed table with MDM columns
         table_rows = ""
         for idx, row in enumerate(po_rows, 1):
             mds_fam_id = row.get("mds_fam_id", "")
             batching_info = row.get("batching_info", {})
             batch_record_count = batching_info.get("record_count", 0)
             
+            # Get MDM data if available
+            mdm_item = mdm_data_lookup.get(str(mds_fam_id), {})
+            item_name = mdm_item.get("item_name", "—")
+            gtin = mdm_item.get("gtin", "—")
+            if gtin and len(gtin) > 15:
+                gtin = gtin[:12] + "..."
+            vnpk_length = mdm_item.get("vnpk_length", "")
+            vnpk_width = mdm_item.get("vnpk_width", "")
+            vnpk_height = mdm_item.get("vnpk_height", "")
+            dimensions = f"{vnpk_length}x{vnpk_width}x{vnpk_height}" if any([vnpk_length, vnpk_width, vnpk_height]) else "—"
+            casepack = mdm_item.get("casepack_type", "—")
+            
             bg_class = "bg-white" if idx % 2 == 0 else "bg-gray-50"
             
             table_rows += f'''<tr class="{bg_class} border-b hover:bg-blue-50 transition">
                 <td class="px-4 py-3 text-sm font-mono text-gray-600">{idx}</td>
                 <td class="px-4 py-3 text-sm font-bold text-blue-600">{mds_fam_id}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">{item_name}</td>
+                <td class="px-4 py-3 text-sm text-gray-700 font-mono text-xs">{gtin}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">{dimensions}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">{casepack}</td>
                 <td class="px-4 py-3 text-sm">{row.get("po_nbr", "—")}</td>
                 <td class="px-4 py-3 text-sm">{row.get("po_line_nbr", "—")}</td>
                 <td class="px-4 py-3 text-sm text-center">
@@ -3201,9 +3223,13 @@ async def delivery_analysis_search(delivery_number: str):
                         <tr class="bg-gray-200 text-gray-800 font-semibold">
                             <th class="px-4 py-3 text-left">#</th>
                             <th class="px-4 py-3 text-left">MDS_FAM_ID</th>
+                            <th class="px-4 py-3 text-left">Item Name</th>
+                            <th class="px-4 py-3 text-left">GTIN</th>
+                            <th class="px-4 py-3 text-left">Dimensions</th>
+                            <th class="px-4 py-3 text-left">Pack Type</th>
                             <th class="px-4 py-3 text-left">PO #</th>
                             <th class="px-4 py-3 text-left">Line #</th>
-                            <th class="px-4 py-3 text-center">Read Rate Records</th>
+                            <th class="px-4 py-3 text-center">Read Rate Recs</th>
                             <th class="px-4 py-3 text-left">Vendor Stock ID</th>
                             <th class="px-4 py-3 text-right">Order Qty</th>
                             <th class="px-4 py-3 text-right">Max Rcv Qty</th>
@@ -3215,31 +3241,7 @@ async def delivery_analysis_search(delivery_number: str):
                 </table>
             </div>
         </div>'''
-        
-        # Build batching summary (unique items)
-        batching_summary = ""
-        for mds_id in sorted(mds_fam_ids):
-            item_batch_data = batching_data.get(mds_id, {})
-            record_count_item = item_batch_data.get("record_count", 0)
-            error = item_batch_data.get("error", "")
-            
-            if error:
-                batching_summary += f'''<div class="bg-red-50 border border-red-200 p-3 rounded text-sm mb-2">
-                    <strong class="text-red-700">MDS {mds_id}:</strong> <span class="text-red-600">Error - {error}</span>
-                </div>'''
-            else:
-                batching_summary += f'''<div class="bg-green-50 border border-green-200 p-3 rounded text-sm mb-2 flex justify-between">
-                    <strong class="text-green-700">MDS {mds_id}</strong>
-                    <span class="text-green-600 font-semibold">{record_count_item} records</span>
-                </div>'''
-        
-        batching_html = f'''<div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h3 class="text-xl font-bold text-gray-800 mb-4">Batching Summary</h3>
-            <p class="text-sm text-gray-600 mb-4">Read rate data loaded for {len(mds_fam_ids)} unique MDS items:</p>
-            <div class="max-h-64 overflow-y-auto">
-                {batching_summary}
-            </div>
-        </div>'''
+
         
         # Get progress logs
         progress_logs = progress.get_logs()
@@ -3455,27 +3457,39 @@ async def delivery_analysis_search(delivery_number: str):
         # Escape for JavaScript embedding
         json_escaped = json_data_str.replace('"', r'"').replace('\n', ' ')
         
-        buttons_html = f'''<div class="flex gap-3 mb-6 flex-wrap">
-            <a href="/delivery-analysis" class="px-6 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">New Search</a>
-            <button onclick="downloadJSON()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Download JSON</button>
-            <a href="/api/delivery-analysis/pdf?delivery_number={delivery_number}" class="px-6 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Batch PDF Report</a>
-            <a href="/" class="px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back</a>
+        top_buttons_html = f'''<div class="bg-white rounded-lg shadow-lg p-4 mb-6 border-b-4 border-blue-600">
+            <div class="flex flex-wrap gap-3 items-center">
+                <a href="/delivery-analysis" class="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 text-sm">New Search</a>
+                <a href="/api/delivery-analysis/pdf?delivery_number={delivery_number}&include_approved=false" id="pdfButtonProblematic" class="px-4 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700 text-sm">Batch PDF (Problematic Only)</a>
+                <a href="#" id="pdfButtonAll" style="display:none;" class="px-4 py-2 bg-purple-700 text-white rounded font-semibold hover:bg-purple-800 text-sm">Batch PDF (All Items)</a>
+                <button onclick="downloadJSON()" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700 text-sm">Download JSON</button>
+                <label class="flex items-center gap-2 cursor-pointer ml-auto">
+                    <input type="checkbox" id="includeApprovedCheckbox" onchange="updatePdfLink()" class="w-4 h-4">
+                    <span class="text-sm text-gray-700">Include ACL APPROVED in PDF</span>
+                </label>
+            </div>
         </div>
-        
-        <details class="bg-gray-900 border-2 border-green-400 rounded-lg p-6 mb-6 cursor-pointer">
-            <summary class="font-mono text-green-400 font-bold select-none hover:text-green-300">
-                > Show Analysis Logs ({len(progress.stages)} stages)
-            </summary>
-            <pre class="text-xs mt-4 bg-black text-green-400 p-4 rounded overflow-x-auto font-mono">{progress_logs}</pre>
-            <p class="text-xs text-gray-400 mt-3">Also check browser console (F12) for additional details</p>
-        </details>
         
         <script>
         const jsonData = "{json_escaped}";
         
+        function updatePdfLink() {{
+            const checkbox = document.getElementById('includeApprovedCheckbox');
+            const probLink = document.getElementById('pdfButtonProblematic');
+            const allLink = document.getElementById('pdfButtonAll');
+            
+            if (checkbox.checked) {{
+                probLink.style.display = 'none';
+                allLink.style.display = 'inline-block';
+                allLink.href = '/api/delivery-analysis/pdf?delivery_number={delivery_number}&include_approved=true';
+            }} else {{
+                probLink.style.display = 'inline-block';
+                allLink.style.display = 'none';
+            }}
+        }}
+        
         function downloadJSON() {{
-            const data = jsonData;
-            const blob = new Blob([data], {{type: 'application/json'}});
+            const blob = new Blob([jsonData], {{type: 'application/json'}});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -3483,30 +3497,23 @@ async def delivery_analysis_search(delivery_number: str):
             a.click();
             URL.revokeObjectURL(url);
         }}
-        
-        // Log to browser console
-        console.group('%c Delivery Analysis Complete', 'color: green; font-weight: bold; font-size: 14px;');
-        console.log('Delivery Number: {delivery_number}');
-        console.log('Total Rows: {record_count}');
-        console.log('Unique Items: {len(mds_fam_ids)}');
-        console.log('Total Time: {overall_elapsed:.2f} seconds');
-        console.groupEnd();
         </script>'''
         
         progress.log("COMPLETE", f"Response ready ({overall_elapsed:.2f}s total)")
         
-        return f'''{summary_html}
+        footer_html = f'''<details class="bg-gray-900 border-2 border-green-400 rounded-lg p-6 mb-6 cursor-pointer">
+            <summary class="font-mono text-green-400 font-bold select-none hover:text-green-300">
+                > Show Analysis Logs ({len(progress.stages)} stages)
+            </summary>
+            <pre class="text-xs mt-4 bg-black text-green-400 p-4 rounded overflow-x-auto font-mono">{progress_logs}</pre>
+            <p class="text-xs text-gray-400 mt-3">Also check browser console (F12) for additional details</p>
+        </details>'''
+        
+        return f'''{top_buttons_html}
+{summary_html}
 {cards_section}
 {table_html}
-{batching_html}
-{buttons_html}'''
-        
-        progress.log("COMPLETE", f"Response ready ({overall_elapsed:.2f}s total)")
-        
-        return f'''{summary_html}
-{table_html}
-{batching_html}
-{buttons_html}'''
+{footer_html}'''
     
     except Exception as e:
         import traceback
