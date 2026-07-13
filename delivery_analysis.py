@@ -70,11 +70,11 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
         line.whpk_order_qty,
         line.whpk_max_rcv_qty,
         line.status as line_status
-    from rdc_db:informix.purchase_order po
+    from dc_common:informix.purchase_order po
     inner join dc_common:informix.po_line line on po.pur_ord_id = line.pur_ord_id
     left join rdc_db:informix.dc_receiver rcv on po.po_nbr = rcv.po_nbr
+        and po.pur_ord_id = rcv.pur_ord_id
     where po.must_arrive_by_dt > today - 60
-    and rcv.receiver_final_ts > today - 60
     and mod(po.po_type_code, 2) = 1
     and rcv.appointment_nbr = {delivery_number}
     """
