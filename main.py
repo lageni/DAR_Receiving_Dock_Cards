@@ -422,7 +422,8 @@ async def root():
                 <input type="hidden" name="node" value="6068">
                 <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded font-semibold text-sm hover:bg-blue-700">Search</button>
                 <button type="button" onclick="loadExample()" class="bg-gray-300 text-gray-800 px-4 py-2 rounded font-semibold text-sm hover:bg-gray-400">Example</button>
-                <a href="/batch/random" class="inline-block bg-orange-500 text-white px-4 py-2 rounded font-semibold text-sm hover:bg-orange-600">🧪 Batch Test (3 Random)</a>
+                <a href="/batch/random" class="inline-block bg-orange-500 text-white px-4 py-2 rounded font-semibold text-sm hover:bg-orange-600">Test Batch (3 Random)</a>
+                <a href="/delivery-analysis" class="inline-block bg-purple-600 text-white px-4 py-2 rounded font-semibold text-sm hover:bg-purple-700">Delivery Analysis</a>
             </form>
         </div>
         
@@ -2051,8 +2052,50 @@ async def search_deliveries(request: Request):
             return f'<p class="text-red-600 text-sm">Error: HTTP {resp.status_code}</p>'
         
         data = resp.json()
-        html = '<div class="bg-gray-50 border rounded p-4 text-sm font-mono overflow-x-auto">'
-        html += '<pre>' + json.dumps(data, indent=2)[:2000] + '</pre>'
+        if not data or len(data) == 0:
+            return '<p class="text-yellow-600 text-sm">No deliveries found</p>'
+        
+        delivery = data[0]  # First result
+        
+        # Format delivery details
+        html = '<div class="space-y-4">'
+        
+        # Main delivery info
+        html += '<div class="bg-white border rounded p-4">'
+        html += '<h3 class="font-bold text-lg mb-3">Delivery Details</h3>'
+        html += '<div class="grid grid-cols-2 gap-4 text-sm">'
+        
+        info_fields = [
+            ('Delivery ID', delivery.get('deliveryId')),
+            ('Load Number', delivery.get('loadNumber')),
+            ('Status', delivery.get('deliveryStatus')),
+            ('SCAC', delivery.get('scac')),
+            ('Node', delivery.get('destinationNodeDets', {}).get('nodeName')),
+            ('Delivery Type', delivery.get('deliveryType')),
+            ('Inventory Type', delivery.get('inventoryTypeName')),
+            ('Total Cases', delivery.get('totalCaseQty')),
+            ('Appointment', delivery.get('appointmentDate')),
+            ('Arrived', delivery.get('deliveryArrivedTimeStamp', 'N/A')[:10]),
+            ('Window Time', delivery.get('manageWindowDets', {}).get('windowStartTime', 'N/A')),
+            ('Country', delivery.get('countryCode')),
+        ]
+        
+        for label, value in info_fields:
+            html += f'<div><span class="font-semibold">{label}:</span> <span class="text-gray-700">{value or "N/A"}</span></div>'
+        
+        html += '</div></div>'
+        
+        # Purchase Orders section
+        po_str = delivery.get('purchaseOrders', '')
+        if po_str:
+            pos = [po.strip() for po in po_str.split('|') if po.strip()]
+            html += '<div class="bg-blue-50 border border-blue-200 rounded p-4">'
+            html += f'<h3 class="font-bold text-lg mb-3">Purchase Orders ({len(pos)} total)</h3>'
+            html += '<div class="grid grid-cols-4 gap-2 text-sm">'
+            for po in pos:
+                html += f'<div class="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs">{po}</div>'
+            html += '</div></div>'
+        
         html += '</div>'
         return html
     
@@ -2857,6 +2900,223 @@ async def batch_pdf(items: str = ""):
     except Exception as e:
         print(f"[BATCH-PDF] Fatal error: {str(e)}")
         return JSONResponse({"error": f"PDF generation failed: {str(e)}"}, status_code=500)
+
+
+# ============================================================================
+# DELIVERY ANALYSIS ENDPOINTS - Query Informix + apply batching to mds_fam_ids
+# ============================================================================
+
+@app.get("/delivery-analysis", response_class=HTMLResponse)
+async def delivery_analysis_page():
+    """Delivery Analysis search page - user inputs delivery number."""
+    return f'''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-6xl mx-auto p-6">
+        <h1 class="text-4xl font-bold text-blue-600 mb-2"> Delivery Analysis</h1>
+        <p class="text-gray-700 mb-6">Enter a delivery number to analyze purchase order data, batching, and item performance.</p>
+        
+        <div class="bg-white p-8 rounded-lg shadow-lg border-2 border-blue-200">
+            <form hx-get="/api/delivery-analysis/search" hx-target="#results" hx-indicator="#loading" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Delivery Number</label>
+                    <input 
+                        type="text" 
+                        name="delivery_number" 
+                        placeholder="e.g., 10691042" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded font-mono text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                    >
+                    <p class="text-xs text-gray-500 mt-1">Corresponds to rcv.appointment_nbr in the Informix query</p>
+                </div>
+                
+                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-3 rounded hover:bg-blue-700 transition">
+                     Search
+                </button>
+            </form>
+        </div>
+        
+        <div id="loading" class="htmx-request:block hidden text-center mt-8">
+            <p class="text-gray-600 font-semibold">Loading...</p>
+        </div>
+        
+        <div id="results" class="mt-8"></div>
+        
+        <div class="mt-6">
+            <a href="/" class="inline-block px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">← Back to Home</a>
+        </div>
+    </div>
+</body>
+</html>'''
+
+
+@app.get("/api/delivery-analysis/search", response_class=HTMLResponse)
+async def delivery_analysis_search(delivery_number: str):
+    """Search for delivery data and apply batching to all mds_fam_ids."""
+    from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
+    
+    try:
+        # Step 1: Query Informix
+        delivery_data = get_delivery_po_data(delivery_number)
+        
+        if not delivery_data["success"]:
+            return f'''<div class="bg-red-50 border-l-4 border-red-600 p-4 rounded text-red-700">
+                <strong>Error:</strong> {delivery_data["error"]}
+            </div>'''
+        
+        # Step 2: Apply batching to all mds_fam_ids
+        delivery_data = apply_batching_to_delivery(delivery_data)
+        
+        # Step 3: Build HTML response
+        po_rows = delivery_data.get("data", [])
+        record_count = delivery_data.get("record_count", 0)
+        mds_fam_ids = delivery_data.get("mds_fam_ids", [])
+        
+        if record_count == 0:
+            return f'''<div class="bg-yellow-50 border-l-4 border-yellow-600 p-4 rounded text-yellow-700">
+                <strong>No Results:</strong> Delivery {delivery_number} returned no PO lines.
+            </div>'''
+        
+        # Build summary section
+        summary_html = f'''<div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-6">
+            <h2 class="text-2xl font-bold text-blue-700 mb-4"> Delivery Summary</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div class="bg-white p-4 rounded border border-blue-200">
+                    <div class="text-3xl font-bold text-blue-600">{record_count}</div>
+                    <div class="text-xs text-gray-600 mt-1">PO Lines</div>
+                </div>
+                <div class="bg-white p-4 rounded border border-blue-200">
+                    <div class="text-3xl font-bold text-blue-600">{len(mds_fam_ids)}</div>
+                    <div class="text-xs text-gray-600 mt-1">Unique MDS Items</div>
+                </div>
+                <div class="bg-white p-4 rounded border border-blue-200">
+                    <div class="text-3xl font-bold text-blue-600">{delivery_number}</div>
+                    <div class="text-xs text-gray-600 mt-1">Delivery #</div>
+                </div>
+                <div class="bg-white p-4 rounded border border-blue-200">
+                    <div class="text-3xl font-bold text-blue-600 font-mono text-lg"></div>
+                    <div class="text-xs text-gray-600 mt-1">Query OK</div>
+                </div>
+            </div>
+        </div>'''
+        
+        # Build detailed table
+        table_rows = ""
+        for idx, row in enumerate(po_rows, 1):
+            mds_fam_id = row.get("mds_fam_id", "")
+            batching_info = row.get("batching_info", {})
+            batch_record_count = batching_info.get("record_count", 0)
+            
+            bg_class = "bg-white" if idx % 2 == 0 else "bg-gray-50"
+            
+            table_rows += f'''<tr class="{bg_class} border-b hover:bg-blue-50 transition">
+                <td class="px-4 py-3 text-sm font-mono">{idx}</td>
+                <td class="px-4 py-3 text-sm font-bold text-blue-600">{mds_fam_id}</td>
+                <td class="px-4 py-3 text-sm">{row.get("po_nbr", "—")}</td>
+                <td class="px-4 py-3 text-sm">{row.get("po_line_nbr", "—")}</td>
+                <td class="px-4 py-3 text-sm text-center">
+                    <span class="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
+                        {batch_record_count} records
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm">{row.get("vendor_stock_id", "—")}</td>
+                <td class="px-4 py-3 text-sm text-right">{row.get("whpk_order_qty", "—")}</td>
+                <td class="px-4 py-3 text-sm text-right">{row.get("whpk_max_rcv_qty", "—")}</td>
+            </tr>'''
+        
+        table_html = f'''<div class="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
+            <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
+                <h3 class="text-xl font-bold text-gray-800"> Purchase Order Lines</h3>
+                <p class="text-xs text-gray-600 mt-1">All rows for delivery {delivery_number} with batching data applied</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-200 text-gray-800 font-semibold">
+                            <th class="px-4 py-3 text-left">#</th>
+                            <th class="px-4 py-3 text-left">MDS_FAM_ID</th>
+                            <th class="px-4 py-3 text-left">PO #</th>
+                            <th class="px-4 py-3 text-left">Line #</th>
+                            <th class="px-4 py-3 text-center">Read Rate Records</th>
+                            <th class="px-4 py-3 text-left">Vendor Stock ID</th>
+                            <th class="px-4 py-3 text-right">Order Qty</th>
+                            <th class="px-4 py-3 text-right">Max Rcv Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {table_rows}
+                    </tbody>
+                </table>
+            </div>
+        </div>'''
+        
+        # Build batching summary (unique items)
+        batching_summary = ""
+        for mds_id in sorted(mds_fam_ids):
+            item_batch_data = delivery_data["batching_data"].get(mds_id, {})
+            record_count = item_batch_data.get("record_count", 0)
+            error = item_batch_data.get("error", "")
+            
+            if error:
+                batching_summary += f'''<div class="bg-red-50 border border-red-200 p-3 rounded text-sm mb-2">
+                    <strong class="text-red-700">MDS {mds_id}:</strong> Error - {error}
+                </div>'''
+            else:
+                batching_summary += f'''<div class="bg-green-50 border border-green-200 p-3 rounded text-sm mb-2">
+                    <strong class="text-green-700">MDS {mds_id}:</strong> {record_count} read rate records loaded 
+                </div>'''
+        
+        batching_html = f'''<div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-4"> Batching Summary</h3>
+            <p class="text-sm text-gray-600 mb-4">Read rate data loaded for {len(mds_fam_ids)} unique MDS items:</p>
+            <div class="max-h-64 overflow-y-auto">
+                {batching_summary}
+            </div>
+        </div>'''
+        
+        # Full JSON download button
+        json_data = json.dumps(delivery_data, indent=2, default=str)
+        json_b64 = json_data.encode().hex()
+        
+        buttons_html = f'''<div class="flex gap-3 mb-6">
+            <a href="/delivery-analysis" class="px-6 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"> New Search</a>
+            <button onclick="downloadJSON()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700"> Download JSON</button>
+            <a href="/" class="px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">← Back</a>
+        </div>
+        
+        <script>
+        function downloadJSON() {{
+            const data = {json_data.replace(chr(39), "&#39;")};
+            const blob = new Blob([data], {{type: 'application/json'}});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'delivery_{delivery_number}_analysis.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }}
+        </script>'''
+        
+        return f'''{summary_html}
+{table_html}
+{batching_html}
+{buttons_html}'''
+    
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[DELIVERY-ANALYSIS] Error: {str(e)}")
+        print(error_details)
+        return f'''<div class="bg-red-50 border-l-4 border-red-600 p-4 rounded text-red-700">
+            <strong>Error:</strong> {str(e)}
+            <pre class="text-xs mt-2 bg-red-100 p-2 rounded overflow-x-auto">{error_details}</pre>
+        </div>'''
 
 
 if __name__ == "__main__":
