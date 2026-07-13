@@ -2937,11 +2937,11 @@ async def delivery_analysis_page():
     </style>
 </head>
 <body class="bg-gray-50">
-    <div class="max-w-6xl mx-auto p-6">
+    <div class="w-full p-6" style="max-width: none;">
         <h1 class="text-4xl font-bold text-blue-600 mb-2">Delivery Analysis</h1>
         <p class="text-gray-700 mb-6">Enter a delivery number to analyze purchase order data, batching, and item performance.</p>
         
-        <div class="bg-white p-8 rounded-lg shadow-lg border-2 border-blue-200">
+        <div class="bg-white p-6 rounded-lg shadow-lg border-2 border-blue-200" style="max-width: 600px;">
             <form hx-get="/api/delivery-analysis/search" hx-target="#results" hx-indicator="#loading" class="space-y-4">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Delivery Number</label>
@@ -3107,6 +3107,9 @@ async def delivery_analysis_search(delivery_number: str):
             </details>'''
         
         progress.log("HTML", f"Building HTML response for {record_count} rows")
+        
+        # Load read rates cache first (used in calculations)
+        read_rates_cache = load_read_rates()
         
         # Calculate delivery case summary
         total_po_qty = 0
