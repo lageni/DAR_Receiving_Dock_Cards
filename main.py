@@ -219,6 +219,9 @@ def get_read_rate_chart(mds_fam_id: str, length: str = "", width: str = "", heig
             <div class="bg-red-50 border-2 border-red-300 p-6 rounded-xl text-center shadow-lg">
                 <div class="text-3xl font-black text-red-600">{non_convey_text}</div>
             </div>
+            <div class="mt-3 text-xs text-gray-600 text-center border-t pt-2">
+                <p>Total PO Qty: <strong>{total_po_qty:,}</strong></p>
+            </div>
         </div>'''
     
     rates = load_read_rates()
@@ -2284,7 +2287,7 @@ async def batch_random():
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-100">
-    <div class="max-w-6xl mx-auto p-6">
+    <div class="w-full p-6" style="max-width: none;">
         <h1 class="text-4xl font-bold text-blue-600 mb-2">Batch Report - Testing</h1>
         <p class="text-sm text-gray-600 mb-6">Randomly selected 3 items from read_rates.db</p>
         
@@ -3105,31 +3108,42 @@ async def delivery_analysis_search(delivery_number: str):
         
         progress.log("HTML", f"Building HTML response for {record_count} rows")
         
+        # Calculate delivery case summary
+        total_po_qty = 0
+        total_perf = 0
+        items_with_data = 0
+        
+        for row in po_rows:
+            qty = row.get('whpk_order_qty', 0)
+            if qty:
+                try:
+                    total_po_qty += int(qty) if isinstance(qty, str) else qty
+                except:
+                    pass
+            
+            mds_id = str(row.get('mds_fam_id', ''))
+            rate_data = read_rates_cache.get(mds_id, [])
+            if rate_data:
+                avg_perf = get_avg_performance(rate_data)
+                total_perf += avg_perf
+                items_with_data += 1
+        
+        avg_read_rate = (total_perf / items_with_data) if items_with_data > 0 else 0
+        estimated_good = int(total_po_qty * (avg_read_rate / 100))
+        estimated_bad = int(total_po_qty * ((100 - avg_read_rate) / 100))
+        no_history = len(mds_fam_ids) - items_with_data
+        
         # Build summary section with timing
         overall_elapsed = time.time() - overall_start
         summary_html = f'''<div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-6">
             <h2 class="text-2xl font-bold text-blue-700 mb-4">Delivery Summary</h2>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-                <div class="bg-white p-4 rounded border border-blue-200">
-                    <div class="text-3xl font-bold text-blue-600">{record_count}</div>
-                    <div class="text-xs text-gray-600 mt-1">PO Lines</div>
-                </div>
-                <div class="bg-white p-4 rounded border border-blue-200">
-                    <div class="text-3xl font-bold text-blue-600">{len(mds_fam_ids)}</div>
-                    <div class="text-xs text-gray-600 mt-1">Unique MDS Items</div>
-                </div>
-                <div class="bg-white p-4 rounded border border-blue-200">
-                    <div class="text-3xl font-bold text-blue-600 font-mono text-lg">{delivery_number}</div>
-                    <div class="text-xs text-gray-600 mt-1">Delivery #</div>
-                </div>
-                <div class="bg-white p-4 rounded border border-blue-200">
-                    <div class="text-3xl font-bold text-green-600">{overall_elapsed:.2f}s</div>
-                    <div class="text-xs text-gray-600 mt-1">Total Time</div>
-                </div>
-                <div class="bg-white p-4 rounded border border-green-200">
-                    <div class="text-2xl font-bold text-green-600">OK</div>
-                    <div class="text-xs text-gray-600 mt-1">Status</div>
-                </div>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+                <div class="bg-white p-3 rounded border border-blue-200"><div class="text-2xl font-bold text-blue-600">{record_count}</div><div class="text-xs text-gray-600 mt-1">PO Lines</div></div>
+                <div class="bg-white p-3 rounded border border-blue-200"><div class="text-2xl font-bold text-blue-600">{len(mds_fam_ids)}</div><div class="text-xs text-gray-600 mt-1">Items</div></div>
+                <div class="bg-white p-3 rounded border border-orange-300"><div class="text-2xl font-bold text-orange-600">{no_history}</div><div class="text-xs text-gray-600 mt-1">No History</div></div>
+                <div class="bg-white p-3 rounded border border-green-300"><div class="text-2xl font-bold text-green-600">{estimated_good:,}</div><div class="text-xs text-gray-600 mt-1">Est. Good</div></div>
+                <div class="bg-white p-3 rounded border border-red-300"><div class="text-2xl font-bold text-red-600">{estimated_bad:,}</div><div class="text-xs text-gray-600 mt-1">Est. Bad</div></div>
+                <div class="bg-white p-3 rounded border border-purple-300"><div class="text-2xl font-bold text-purple-600">{avg_read_rate:.0f}%</div><div class="text-xs text-gray-600 mt-1">Avg Rate</div></div>
             </div>
         </div>'''
         
@@ -3445,7 +3459,9 @@ async def delivery_analysis_pdf(delivery_number: str):
             if rate_data:
                 avg_perf = get_avg_performance(rate_data)
                 trend = get_trend_status(rate_data)
-                _, acl_status = get_recommendation(avg_perf, trend)
+                _, _, _ = get_recommendation(avg_perf, trend)
+                if avg_perf >= 85:
+                    acl_status = "ACL APPROVED"
                 
                 if acl_status == "ACL APPROVED":
                     approved_items.append((mds_id, avg_perf))
