@@ -43,6 +43,9 @@ def get_database_path():
 # Cache for read rates data
 _read_rates_cache = None
 
+# Cache for delivery analysis to avoid re-querying for PDF
+_delivery_cache = {}
+
 
 def load_read_rates():
     """Load read rates from read_rates.db (SQLite). Returns dict[mds_fam_id] -> list of records."""
