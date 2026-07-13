@@ -3153,15 +3153,54 @@ async def delivery_analysis_search(delivery_number: str):
         # Get progress logs
         progress_logs = progress.get_logs()
         
+        # Build read rate cards for each item
+        cards_html = ""
+        read_rates_cache = load_read_rates()
+        
+        for idx, mds_id in enumerate(sorted(mds_fam_ids)[:10], 1):  # Show first 10 items with cards
+            rate_data = read_rates_cache.get(str(mds_id), [])
+            if rate_data:
+                # Get performance metrics
+                if rate_data:
+                    avg_perf = get_avg_performance(rate_data)
+                    trend = get_trend_status(rate_data)
+                    color = get_color_for_performance(avg_perf)
+                    
+                    cards_html += f'''<div class="bg-white p-4 rounded-lg border-l-4 mb-3" style="border-color: {color};">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-bold text-gray-800">MDS {mds_id}</h4>
+                                <p class="text-sm text-gray-600">{len(rate_data)} data points</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold" style="color: {color};">{avg_perf:.1f}%</div>
+                                <div class="text-xs font-semibold" style="color: {color};">{trend}</div>
+                            </div>
+                        </div>
+                    </div>'''
+        
+        if cards_html:
+            cards_section = f'''<div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Read Rate Performance (First 10 Items)</h3>
+                {cards_html}
+                <p class="text-xs text-gray-500 mt-4">Showing performance summary for first 10 items. Expand logs to see all data.</p>
+            </div>'''
+        else:
+            cards_section = ''
+        
         # Full JSON download button
         # Strip out the progress tracker from JSON (not serializable)
         json_export = dict(delivery_data)
         json_export.pop("progress", None)
-        json_data = json.dumps(json_export, indent=2, default=str)
+        json_data_str = json.dumps(json_export, indent=2, default=str)
+        
+        # Escape for JavaScript embedding
+        json_escaped = json_data_str.replace('"', r'"').replace('\n', ' ')
         
         buttons_html = f'''<div class="flex gap-3 mb-6 flex-wrap">
             <a href="/delivery-analysis" class="px-6 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">New Search</a>
             <button onclick="downloadJSON()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Download JSON</button>
+            <a href="/api/delivery-analysis/pdf?delivery_number={delivery_number}" class="px-6 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Download PDF</a>
             <a href="/" class="px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back</a>
         </div>
         
@@ -3174,8 +3213,10 @@ async def delivery_analysis_search(delivery_number: str):
         </details>
         
         <script>
+        const jsonData = "{json_escaped}";
+        
         function downloadJSON() {{
-            const data = {json.dumps(json_data)};
+            const data = jsonData;
             const blob = new Blob([data], {{type: 'application/json'}});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -3187,13 +3228,20 @@ async def delivery_analysis_search(delivery_number: str):
         
         // Log to browser console
         console.group('%c Delivery Analysis Complete', 'color: green; font-weight: bold; font-size: 14px;');
-        console.log('%c{progress_logs}', 'color: #0f0; font-family: monospace; white-space: pre;');
-        console.log('Delivery Number:', '{delivery_number}');
-        console.log('Total Rows:', {record_count});
-        console.log('Unique Items:', {len(mds_fam_ids)});
-        console.log('Total Time:', {overall_elapsed:.2f}, 'seconds');
+        console.log('Delivery Number: {delivery_number}');
+        console.log('Total Rows: {record_count}');
+        console.log('Unique Items: {len(mds_fam_ids)}');
+        console.log('Total Time: {overall_elapsed:.2f} seconds');
         console.groupEnd();
         </script>'''
+        
+        progress.log("COMPLETE", f"Response ready ({overall_elapsed:.2f}s total)")
+        
+        return f'''{summary_html}
+{cards_section}
+{table_html}
+{batching_html}
+{buttons_html}'''
         
         progress.log("COMPLETE", f"Response ready ({overall_elapsed:.2f}s total)")
         
@@ -3221,6 +3269,81 @@ async def delivery_analysis_search(delivery_number: str):
         console.error('Delivery Analysis Error:', {json.dumps(str(e))});
         console.error('Stack:', {json.dumps(error_details)});
         </script>'''
+
+
+@app.get("/api/delivery-analysis/pdf")
+async def delivery_analysis_pdf(delivery_number: str):
+    """Generate PDF report for delivery analysis."""
+    from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
+    
+    try:
+        # Query and batch the data
+        delivery_data = get_delivery_po_data(delivery_number)
+        if not delivery_data["success"]:
+            return JSONResponse({"error": "Query failed"}, status_code=400)
+        
+        delivery_data = apply_batching_to_delivery(delivery_data)
+        
+        # Create PDF
+        pdf = FPDF(orientation='L', unit='mm', format='A4')
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 16)
+        pdf.cell(0, 10, f"Delivery Analysis Report - {delivery_number}", ln=True)
+        
+        # Summary
+        pdf.set_font('Arial', 'B', 12)
+        pdf.cell(0, 8, f"Summary", ln=True)
+        pdf.set_font('Arial', '', 10)
+        pdf.cell(0, 6, f"Total PO Lines: {len(delivery_data.get('data', []))}", ln=True)
+        pdf.cell(0, 6, f"Unique MDS Items: {len(delivery_data.get('mds_fam_ids', []))}", ln=True)
+        pdf.ln(4)
+        
+        # Table header
+        pdf.set_font('Arial', 'B', 9)
+        col_widths = [15, 30, 20, 15, 25, 25, 20, 25]
+        headers = ['#', 'MDS_FAM_ID', 'PO #', 'Line#', 'Vendor Stock ID', 'Read Rate Records', 'Order Qty', 'Max Rcv Qty']
+        for i, header in enumerate(headers):
+            pdf.cell(col_widths[i], 7, header, border=1)
+        pdf.ln()
+        
+        # Table rows
+        pdf.set_font('Arial', '', 8)
+        for idx, row in enumerate(delivery_data.get('data', [])[:100], 1):  # First 100 rows
+            mds_id = str(row.get('mds_fam_id', ''))
+            batching_info = row.get('batching_info', {})
+            batch_count = batching_info.get('record_count', 0)
+            
+            row_data = [
+                str(idx),
+                mds_id[:10],
+                str(row.get('po_nbr', ''))[:10],
+                str(row.get('po_line_nbr', '')),
+                str(row.get('vendor_stock_id', ''))[:15],
+                str(batch_count),
+                str(row.get('whpk_order_qty', '')),
+                str(row.get('whpk_max_rcv_qty', ''))
+            ]
+            
+            for i, cell_data in enumerate(row_data):
+                pdf.cell(col_widths[i], 6, cell_data, border=1)
+            pdf.ln()
+        
+        # Footer note
+        total_rows = len(delivery_data.get('data', []))
+        if total_rows > 100:
+            pdf.set_font('Arial', 'I', 8)
+            pdf.cell(0, 6, f"Showing first 100 of {total_rows} rows", ln=True)
+        
+        pdf_bytes = bytes(pdf.output())
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="delivery_{delivery_number}_analysis.pdf"'}
+        )
+    
+    except Exception as e:
+        print(f"[DELIVERY-PDF] Error: {str(e)}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":
