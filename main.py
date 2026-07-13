@@ -3272,69 +3272,166 @@ async def delivery_analysis_search(delivery_number: str):
         </details>'''
         
         # Build read rate cards for ONLY problematic items
-        cards_html = ""
+        # Step 1: First pass - identify problematic items
         read_rates_cache = load_read_rates()
-        problematic_count = 0
+        problematic_mds_ids = []
+        problematic_details = {}  # Store ACL details
         approved_count = 0
         total_items = len(mds_fam_ids)
         
         progress.log("ANALYZE", f"Analyzing {total_items} items for ACL status")
         
         for idx, mds_id in enumerate(sorted(mds_fam_ids), 1):
-            # Log progress every 5 items
             if idx % 5 == 0 or idx == total_items:
                 progress.log("ANALYZE", f"Processed {idx}/{total_items} items")
             
             rate_data = read_rates_cache.get(str(mds_id), [])
-            if rate_data:
-                avg_perf = get_avg_performance(rate_data)
-                trend = get_trend_status(rate_data)
-                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
-                
-                # Determine ACL status from average performance
-                if avg_perf >= 85:
-                    acl_status_name = "ACL APPROVED"
-                    is_problematic = False
-                elif avg_perf < 50:
-                    acl_status_name = "FAILING"
-                    is_problematic = True
-                elif "Improving" in trend:
-                    acl_status_name = "ADEQUATE PERFORMANCE"
-                    is_problematic = True
-                else:
-                    acl_status_name = "REQUIRES MANUAL INSPECTION"
-                    is_problematic = True
-                
-                # Only show cards for problematic items (not ACL APPROVED)
-                if is_problematic:
-                    problematic_count += 1
-                    
-                    # Get chart
-                    chart_html = get_read_rate_chart(str(mds_id))
-                    
-                    cards_html += f'''<div class="bg-white p-6 rounded-lg shadow-md mb-6 border-l-4" style="border-color: {color_hex};">
-                        <h3 class="text-xl font-bold text-blue-600 mb-4">Item {idx}: MDS {mds_id}</h3>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <div class="text-sm text-gray-600 mb-2"><strong>MDS Family ID:</strong> {mds_id}</div>
-                                <div class="text-sm text-gray-600 mb-2"><strong>Records:</strong> {len(rate_data)}</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="text-3xl font-bold" style="color: {color_hex};">{avg_perf:.1f}%</div>
-                                <div class="text-sm font-semibold" style="color: {color_hex};">{acl_status_name}</div>
-                                <div class="text-xs text-gray-600 mt-1">{trend}</div>
-                            </div>
+            avg_perf = get_avg_performance(rate_data) if rate_data else 0
+            trend = get_trend_status(rate_data) if rate_data else "No Data"
+            recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
+            
+            # Determine ACL status
+            if avg_perf >= 85:
+                acl_status_name = "ACL APPROVED"
+                is_problematic = False
+            elif avg_perf < 50:
+                acl_status_name = "FAILING"
+                is_problematic = True
+            elif "Improving" in trend:
+                acl_status_name = "ADEQUATE PERFORMANCE"
+                is_problematic = True
+            else:
+                acl_status_name = "REQUIRES MANUAL INSPECTION"
+                is_problematic = True
+            
+            if is_problematic:
+                problematic_mds_ids.append(mds_id)
+                problematic_details[str(mds_id)] = {
+                    "avg_perf": avg_perf,
+                    "trend": trend,
+                    "acl_status": acl_status_name,
+                    "recommendation": recommendation,
+                    "color_hex": color_hex,
+                    "gradient_class": gradient_class,
+                    "rate_data": rate_data
+                }
+            else:
+                approved_count += 1
+        
+        progress.log("ANALYZE", f"Analysis complete: {len(problematic_mds_ids)} problematic, {approved_count} approved")
+        
+        # Step 2: Fetch MDM data for problematic items (BATCH PATTERN)
+        problematic_items_data = []
+        if problematic_mds_ids:
+            progress.log("MDM", f"Fetching MDM data for {len(problematic_mds_ids)} problematic items")
+            
+            api_key = os.getenv("MDM_API_KEY", "")
+            facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+            facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+            wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+            
+            mdm_headers = {
+                "Api-Key": api_key,
+                "Facilitynum": facility_num,
+                "Facilitycountrycode": facility_country,
+                "Wmt-Userid": wmt_userid
+            }
+            
+            import asyncio
+            
+            async def fetch_mdm_for_mds_ids():
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                    for mds_id in problematic_mds_ids:
+                        try:
+                            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
+                            response = await client.get(api_url, headers=mdm_headers)
+                            response.raise_for_status()
+                            mdm_data = response.json()
+                            
+                            item_data = extract_item_data(mdm_data)
+                            item_data["mds_fam_id"] = str(mds_id)
+                            item_data["acl_details"] = problematic_details.get(str(mds_id), {})
+                            problematic_items_data.append(item_data)
+                            
+                            progress.log("MDM", f"Fetched MDM data for MDS {mds_id}")
+                        except Exception as e:
+                            progress.log("MDM", f"Error fetching MDS {mds_id}: {str(e)}")
+                            problematic_items_data.append({
+                                "mds_fam_id": str(mds_id),
+                                "item_name": f"MDS {mds_id}",
+                                "image_url": "",
+                                "error": str(e),
+                                "acl_details": problematic_details.get(str(mds_id), {})
+                            })
+            
+            # Run async fetch
+            import asyncio
+            try:
+                asyncio.run(fetch_mdm_for_mds_ids())
+            except:
+                # Fallback if event loop already running
+                import nest_asyncio
+                nest_asyncio.apply()
+                asyncio.run(fetch_mdm_for_mds_ids())
+        
+        # Step 3: Build cards HTML with images and details
+        cards_html = ""
+        for item_data in problematic_items_data:
+            mds_id = item_data.get("mds_fam_id", "")
+            acl_details = item_data.get("acl_details", {})
+            color_hex = acl_details.get("color_hex", "#ef4444")
+            acl_status_name = acl_details.get("acl_status", "UNKNOWN")
+            recommendation = acl_details.get("recommendation", "")
+            avg_perf = acl_details.get("avg_perf", 0)
+            trend = acl_details.get("trend", "No Data")
+            rate_data = acl_details.get("rate_data", [])
+            
+            image_url = item_data.get("image_url", "")
+            item_name = item_data.get("item_name", "Unknown")
+            gtin = item_data.get("gtin", "")
+            vendor_dept = item_data.get("supplier_dept", "")
+            vnpk_length = item_data.get("vnpk_length", "")
+            vnpk_width = item_data.get("vnpk_width", "")
+            vnpk_height = item_data.get("vnpk_height", "")
+            casepack = item_data.get("casepack_type", "")
+            
+            image_html = f'<img src="{image_url}" class="w-full h-64 object-cover rounded border mb-2">'
+            if not image_url:
+                image_html = '<div class="w-full h-64 bg-gray-200 rounded border mb-2 flex items-center justify-center"><p class="text-gray-500">No Image</p></div>'
+            
+            chart_html = get_read_rate_chart(str(mds_id))
+            
+            cards_html += f'''<div class="bg-white p-6 rounded-lg shadow-md mb-6 border-l-4" style="border-color: {color_hex};">
+                <h3 class="text-xl font-bold text-blue-600 mb-4">{item_name}</h3>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        {image_html}
+                        <div class="text-xs text-gray-600 mt-2 space-y-1">
+                            <p><strong>MDS:</strong> {mds_id}</p>
+                            <p><strong>GTIN:</strong> {gtin if gtin else "N/A"}</p>
+                            <p><strong>Dept:</strong> {vendor_dept if vendor_dept else "N/A"}</p>
+                            <p><strong>Pack:</strong> {casepack if casepack else "N/A"}</p>
+                            <p><strong>Dims:</strong> {vnpk_length}x{vnpk_width}x{vnpk_height}</p>
+                            <p><strong>Records:</strong> {len(rate_data)}</p>
                         </div>
-                        <div class="{gradient_class} p-4 rounded mb-4">
-                            <div class="font-bold" style="color: {color_hex};">{acl_status_name}</div>
-                            <div class="text-sm text-gray-700 mt-1">{recommendation}</div>
-                        </div>
-                        <div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200">
-                            {chart_html}
-                        </div>
-                    </div>'''
-                else:
-                    approved_count += 1
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <div class="text-5xl font-bold" style="color: {color_hex};">{avg_perf:.1f}%</div>
+                        <div class="text-sm font-semibold" style="color: {color_hex};">{acl_status_name}</div>
+                        <div class="text-xs text-gray-600 mt-2">{trend}</div>
+                        <a href="/api/delivery-analysis/pdf-item?mds_id={mds_id}" class="mt-4 px-4 py-2 bg-green-600 text-white rounded text-sm font-semibold hover:bg-green-700 text-center">Download PDF</a>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                        {chart_html}
+                    </div>
+                </div>
+                <div class="{acl_details.get('gradient_class', 'from-red-50 to-red-100')} p-4 rounded">
+                    <div class="font-bold" style="color: {color_hex};">{acl_status_name}</div>
+                    <div class="text-sm text-gray-700 mt-1">{recommendation}</div>
+                </div>
+            </div>'''
+        
+        problematic_count = len(problematic_items_data)
         
         progress.log("ANALYZE", f"Analysis complete: {problematic_count} problematic, {approved_count} approved")
         
@@ -3354,6 +3451,9 @@ async def delivery_analysis_search(delivery_number: str):
                 <h3 class="text-xl font-bold text-green-700">All Items ACL Approved</h3>
                 <p class="text-green-700">All {len(mds_fam_ids)} items have performance >= 85%. No action required.</p>
             </div>'''
+        
+        # Store problematic_items_data for PDF generation (reuse in batch PDF endpoint)
+        progress.log("HTML", f"Prepared {len(problematic_items_data)} items for display and PDF")
         
         # Full JSON download button
         # Strip out the progress tracker from JSON (not serializable)
@@ -3440,7 +3540,7 @@ async def delivery_analysis_search(delivery_number: str):
 
 @app.get("/api/delivery-analysis/pdf")
 async def delivery_analysis_pdf(delivery_number: str):
-    """Generate PDF batch report for delivery analysis - shows all items with ACL status."""
+    """Generate PDF batch report for delivery analysis - FULL batch-style report with images and charts."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
     
     try:
@@ -3450,115 +3550,99 @@ async def delivery_analysis_pdf(delivery_number: str):
             return JSONResponse({"error": "Query failed"}, status_code=400)
         
         delivery_data = apply_batching_to_delivery(delivery_data)
+        mds_fam_ids = delivery_data.get('mds_fam_ids', [])
+        po_rows = delivery_data.get('data', [])
         
-        # Create PDF
-        pdf = FPDF(orientation='P', unit='mm', format='A4')
-        pdf.add_page()
-        pdf.set_font('Arial', 'B', 16)
-        pdf.cell(0, 10, f"Delivery Analysis - {delivery_number}", ln=True)
-        pdf.ln(2)
-        
-        # Summary
-        pdf.set_font('Arial', 'B', 10)
-        pdf.cell(0, 6, "SUMMARY", ln=True)
-        pdf.set_font('Arial', '', 9)
-        po_count = len(delivery_data.get('data', []))
-        mds_count = len(delivery_data.get('mds_fam_ids', []))
-        pdf.cell(0, 5, f"Total PO Lines: {po_count}", ln=True)
-        pdf.cell(0, 5, f"Unique MDS Items: {mds_count}", ln=True)
-        pdf.ln(3)
-        
-        # ACL Status breakdown
+        # Step 1: Identify problematic items (SAME LOGIC AS WEB PAGE)
         read_rates_cache = load_read_rates()
-        approved_items = []
-        problematic_items = []
+        problematic_mds_ids = []
+        problematic_details = {}
         
-        for mds_id in delivery_data.get('mds_fam_ids', []):
+        for mds_id in mds_fam_ids:
             rate_data = read_rates_cache.get(str(mds_id), [])
-            if rate_data:
-                avg_perf = get_avg_performance(rate_data)
-                trend = get_trend_status(rate_data)
-                _, _, _ = get_recommendation(avg_perf, trend)
-                if avg_perf >= 85:
-                    acl_status = "ACL APPROVED"
-                
-                if acl_status == "ACL APPROVED":
-                    approved_items.append((mds_id, avg_perf))
-                else:
-                    problematic_items.append((mds_id, avg_perf, acl_status, trend))
-        
-        pdf.set_font('Arial', 'B', 10)
-        pdf.cell(0, 6, f"ACL STATUS: {len(approved_items)} Approved | {len(problematic_items)} Problematic", ln=True)
-        pdf.ln(2)
-        
-        # Problematic items table
-        if problematic_items:
-            pdf.set_font('Arial', 'B', 9)
-            pdf.cell(0, 6, "ITEMS REQUIRING ATTENTION", ln=True)
+            avg_perf = get_avg_performance(rate_data) if rate_data else 0
+            trend = get_trend_status(rate_data) if rate_data else "No Data"
+            recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
             
-            # Table header
-            pdf.set_font('Arial', 'B', 8)
-            pdf.cell(30, 5, 'MDS_FAM_ID', border=1)
-            pdf.cell(30, 5, 'Performance', border=1)
-            pdf.cell(30, 5, 'Status', border=1)
-            pdf.cell(40, 5, 'Trend', border=1)
-            pdf.ln()
+            if avg_perf >= 85:
+                acl_status_name = "ACL APPROVED"
+                is_problematic = False
+            elif avg_perf < 50:
+                acl_status_name = "FAILING"
+                is_problematic = True
+            elif "Improving" in trend:
+                acl_status_name = "ADEQUATE PERFORMANCE"
+                is_problematic = True
+            else:
+                acl_status_name = "REQUIRES MANUAL INSPECTION"
+                is_problematic = True
             
-            # Table rows
-            pdf.set_font('Arial', '', 8)
-            for mds_id, perf, status, trend in problematic_items:
-                pdf.cell(30, 5, str(mds_id)[:15], border=1)
-                pdf.cell(30, 5, f"{perf:.1f}%", border=1)
-                pdf.cell(30, 5, status[:15], border=1)
-                pdf.cell(40, 5, trend[:20], border=1)
-                pdf.ln()
+            if is_problematic:
+                problematic_mds_ids.append(mds_id)
+                problematic_details[str(mds_id)] = {
+                    "avg_perf": avg_perf,
+                    "trend": trend,
+                    "acl_status": acl_status_name,
+                    "recommendation": recommendation,
+                    "rate_data": rate_data
+                }
         
-        # Approved items summary
-        if approved_items:
-            pdf.ln(2)
-            pdf.set_font('Arial', 'B', 9)
-            pdf.cell(0, 6, f"ACL APPROVED ITEMS ({len(approved_items)} items) - See attached detailed report for chart view", ln=True)
-        
-        # PO Lines summary table
-        pdf.ln(3)
-        pdf.set_font('Arial', 'B', 9)
-        pdf.cell(0, 6, f"PO LINES DETAIL (All {po_count} rows)", ln=True)
-        
-        # Table header
-        pdf.set_font('Arial', 'B', 7)
-        col_w = [8, 22, 18, 10, 20, 18, 15, 15]
-        pdf.cell(col_w[0], 4, '#', border=1)
-        pdf.cell(col_w[1], 4, 'MDS_FAM_ID', border=1)
-        pdf.cell(col_w[2], 4, 'PO #', border=1)
-        pdf.cell(col_w[3], 4, 'Line', border=1)
-        pdf.cell(col_w[4], 4, 'Vendor Stock', border=1)
-        pdf.cell(col_w[5], 4, 'RR Records', border=1)
-        pdf.cell(col_w[6], 4, 'Order Qty', border=1)
-        pdf.cell(col_w[7], 4, 'Max Rcv', border=1)
-        pdf.ln()
-        
-        # Table rows
-        pdf.set_font('Arial', '', 6)
-        for idx, row in enumerate(delivery_data.get('data', []), 1):
-            mds_id = str(row.get('mds_fam_id', ''))[:10]
-            batching_info = row.get('batching_info', {})
-            batch_count = str(batching_info.get('record_count', 0))
-            po_nbr = str(row.get('po_nbr', ''))[:8]
-            vendor_stock = str(row.get('vendor_stock_id', ''))[:10]
-            order_qty = str(row.get('whpk_order_qty', ''))
-            max_rcv = str(row.get('whpk_max_rcv_qty', ''))
+        # Step 2: Fetch MDM data for problematic items
+        problematic_items_data = []
+        if problematic_mds_ids:
+            api_key = os.getenv("MDM_API_KEY", "")
+            facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+            facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+            wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
             
-            pdf.cell(col_w[0], 4, str(idx)[:3], border=1)
-            pdf.cell(col_w[1], 4, mds_id, border=1)
-            pdf.cell(col_w[2], 4, po_nbr, border=1)
-            pdf.cell(col_w[3], 4, str(row.get('po_line_nbr', '')), border=1)
-            pdf.cell(col_w[4], 4, vendor_stock, border=1)
-            pdf.cell(col_w[5], 4, batch_count, border=1)
-            pdf.cell(col_w[6], 4, order_qty, border=1)
-            pdf.cell(col_w[7], 4, max_rcv, border=1)
-            pdf.ln()
+            mdm_headers = {
+                "Api-Key": api_key,
+                "Facilitynum": facility_num,
+                "Facilitycountrycode": facility_country,
+                "Wmt-Userid": wmt_userid
+            }
+            
+            async def fetch_mdm():
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                    for mds_id in problematic_mds_ids:
+                        try:
+                            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
+                            response = await client.get(api_url, headers=mdm_headers)
+                            response.raise_for_status()
+                            mdm_data = response.json()
+                            item_data = extract_item_data(mdm_data)
+                            item_data["mds_fam_id"] = str(mds_id)
+                            problematic_items_data.append(item_data)
+                        except Exception as e:
+                            print(f"[DELIVERY-PDF-MDM] Error fetching MDS {mds_id}: {str(e)}")
+                            problematic_items_data.append({
+                                "mds_fam_id": str(mds_id),
+                                "item_name": f"MDS {mds_id}",
+                                "image_url": ""
+                            })
+            
+            try:
+                asyncio.run(fetch_mdm())
+            except:
+                import nest_asyncio
+                nest_asyncio.apply()
+                asyncio.run(fetch_mdm())
         
-        pdf_bytes = bytes(pdf.output())
+        # Step 3: Use generate_batch_pdf() to create full report with images and charts
+        if problematic_items_data:
+            pdf_bytes = generate_batch_pdf(problematic_items_data)
+        else:
+            # No problematic items - create summary-only PDF
+            pdf = FPDF(orientation='L', unit='in', format='Letter')
+            pdf.add_page()
+            pdf.set_font('Helvetica', 'B', 18)
+            pdf.set_text_color(0, 128, 0)
+            pdf.cell(0, 0.3, f"Delivery {delivery_number} - All Items ACL APPROVED", new_x=0, new_y=0.5)
+            pdf.set_font('Helvetica', '', 12)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(0, 0.2, f"No problematic items found. All {len(mds_fam_ids)} items have ACL APPROVED status.", new_x=0, new_y=0.2)
+            pdf_bytes = bytes(pdf.output())
+        
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
@@ -3567,6 +3651,48 @@ async def delivery_analysis_pdf(delivery_number: str):
     
     except Exception as e:
         print(f"[DELIVERY-PDF] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/delivery-analysis/pdf-item")
+async def delivery_pdf_single_item(mds_id: str):
+    """Generate PDF for a single problematic item with full details."""
+    try:
+        # Fetch MDM data for single item
+        api_key = os.getenv("MDM_API_KEY", "")
+        facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+        facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+        wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+        
+        mdm_headers = {
+            "Api-Key": api_key,
+            "Facilitynum": facility_num,
+            "Facilitycountrycode": facility_country,
+            "Wmt-Userid": wmt_userid
+        }
+        
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
+            response = await client.get(api_url, headers=mdm_headers)
+            response.raise_for_status()
+            mdm_data = response.json()
+        
+        item_data = extract_item_data(mdm_data)
+        item_data["mds_fam_id"] = str(mds_id)
+        
+        # Generate single-item PDF using batch function
+        pdf_bytes = generate_batch_pdf([item_data])
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="mds_{mds_id}_detail.pdf"'}
+        )
+    
+    except Exception as e:
+        print(f"[DELIVERY-PDF-ITEM] Error: {str(e)}")
         import traceback
         traceback.print_exc()
         return JSONResponse({"error": str(e)}, status_code=500)
