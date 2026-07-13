@@ -2934,6 +2934,12 @@ async def delivery_analysis_page():
         .pulse {{
             animation: pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }}
+        #loading.htmx-request {{
+            display: flex !important;
+        }}
+        #loading:not(.htmx-request) {{
+            display: none !important;
+        }}
     </style>
 </head>
 <body class="bg-gray-50">
@@ -2962,7 +2968,7 @@ async def delivery_analysis_page():
         </div>
         
         <!-- Loading Indicator with Progress -->
-        <div id="loading" class="htmx-request:flex hidden flex-col items-center justify-center mt-12 space-y-8">
+        <div id="loading" class="flex-col items-center justify-center mt-12 space-y-8">
             <div class="space-y-4 w-full max-w-2xl">
                 <!-- Spinner Header -->
                 <div class="flex items-center justify-center space-x-3">
@@ -3107,6 +3113,9 @@ async def delivery_analysis_search(delivery_number: str):
             </details>'''
         
         progress.log("HTML", f"Building HTML response for {record_count} rows")
+        
+        # Initialize problematic_items_data (will be populated later)
+        problematic_items_data = []
         
         # Load read rates cache first (used in calculations)
         read_rates_cache = load_read_rates()
