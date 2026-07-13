@@ -2958,32 +2958,90 @@ async def delivery_analysis_page():
             </form>
         </div>
         
-        <!-- Loading Indicator -->
-        <div id="loading" class="htmx-request:flex hidden flex-col items-center justify-center mt-12 space-y-6">
-            <div class="space-y-2">
-                <div class="flex items-center justify-center space-x-2">
-                    <svg class="spinner h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <!-- Loading Indicator with Progress -->
+        <div id="loading" class="htmx-request:flex hidden flex-col items-center justify-center mt-12 space-y-8">
+            <div class="space-y-4 w-full max-w-2xl">
+                <!-- Spinner Header -->
+                <div class="flex items-center justify-center space-x-3">
+                    <svg class="spinner h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span class="text-lg font-semibold text-gray-700">Analyzing delivery...</span>
+                    <div>
+                        <div class="text-xl font-bold text-gray-800">Analyzing Delivery...</div>
+                        <div class="text-sm text-gray-600">This may take 10-45 seconds depending on data volume</div>
+                    </div>
                 </div>
-                <p class="text-sm text-gray-600 text-center">Querying Informix, loading batching data, building results...</p>
-            </div>
-            
-            <!-- Progress steps -->
-            <div class="w-full max-w-md space-y-2">
-                <div class="pulse bg-blue-100 border border-blue-300 rounded p-3 text-sm text-blue-700 font-mono">
-                    [QUERY] Connecting to Informix...
+                
+                <!-- Progress Bar -->
+                <div class="bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div id="progressBar" class="bg-blue-600 h-full" style="width: 0%; transition: width 0.3s ease;"></div>
                 </div>
-                <div class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
-                    [BATCH] Loading read rate data...
+                <div class="text-center text-sm text-gray-600">
+                    <span id="progressPercent">Starting...</span>
                 </div>
-                <div class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
-                    [BUILD] Building HTML response...
+                
+                <!-- Current Status -->
+                <div id="currentStatus" class="bg-blue-50 border-l-4 border-blue-600 p-4 rounded">
+                    <div class="text-sm text-blue-800 font-mono">
+                        [QUERY] Connecting to Informix...
+                    </div>
+                </div>
+                
+                <!-- Steps Progress -->
+                <div class="space-y-2">
+                    <div id="step1" class="pulse bg-blue-100 border border-blue-300 rounded p-3 text-sm text-blue-700 font-mono">
+                        ✓ [QUERY] Connected to Informix
+                    </div>
+                    <div id="step2" class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
+                        [BATCH] Loading read rate data...
+                    </div>
+                    <div id="step3" class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
+                        [ANALYZE] Analyzing ACL status...
+                    </div>
+                    <div id="step4" class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
+                        [BUILD] Building HTML response...
+                    </div>
+                </div>
+                
+                <!-- Tips -->
+                <div class="bg-yellow-50 border border-yellow-200 rounded p-3 text-xs text-yellow-700">
+                    <strong>Tip:</strong> Open browser console (F12) to see detailed progress logs in real-time
                 </div>
             </div>
         </div>
+        
+        <script>
+        // Simulate progress based on time elapsed
+        let startTime = null;
+        let progressInterval = null;
+        
+        document.addEventListener('htmx:xhr:beforeSend', function(evt) {{
+            startTime = Date.now();
+            progressInterval = setInterval(function() {{
+                let elapsed = (Date.now() - startTime) / 1000;
+                let percent = Math.min(80, Math.floor((elapsed / 35) * 100));
+                
+                document.getElementById('progressBar').style.width = percent + '%';
+                
+                if (percent < 20) {{
+                    document.getElementById('progressPercent').textContent = 'Querying Informix... (' + percent + '%)';
+                }} else if (percent < 50) {{
+                    document.getElementById('progressPercent').textContent = 'Loading batching data... (' + percent + '%)';
+                }} else {{
+                    document.getElementById('progressPercent').textContent = 'Analyzing and building report... (' + percent + '%)';
+                }}
+            }}, 200);
+        }});
+        
+        document.addEventListener('htmx:afterRequest', function(evt) {{
+            if (progressInterval) clearInterval(progressInterval);
+            if (evt.detail.xhr.status === 200) {{
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressPercent').textContent = 'Complete! (100%)';
+            }}
+        }});
+        </script>
         
         <div id="results" class="mt-8"></div>
         
@@ -3185,36 +3243,43 @@ async def delivery_analysis_search(delivery_number: str):
         read_rates_cache = load_read_rates()
         problematic_count = 0
         approved_count = 0
+        total_items = len(mds_fam_ids)
+        
+        progress.log("ANALYZE", f"Analyzing {total_items} items for ACL status")
         
         for idx, mds_id in enumerate(sorted(mds_fam_ids), 1):
+            # Log progress every 5 items
+            if idx % 5 == 0 or idx == total_items:
+                progress.log("ANALYZE", f"Processed {idx}/{total_items} items")
+            
             rate_data = read_rates_cache.get(str(mds_id), [])
             if rate_data:
                 avg_perf = get_avg_performance(rate_data)
                 trend = get_trend_status(rate_data)
-                recommendation, acl_status = get_recommendation(avg_perf, trend)
+                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
+                
+                # Determine ACL status from average performance
+                if avg_perf >= 85:
+                    acl_status_name = "ACL APPROVED"
+                    is_problematic = False
+                elif avg_perf < 50:
+                    acl_status_name = "FAILING"
+                    is_problematic = True
+                elif "Improving" in trend:
+                    acl_status_name = "ADEQUATE PERFORMANCE"
+                    is_problematic = True
+                else:
+                    acl_status_name = "REQUIRES MANUAL INSPECTION"
+                    is_problematic = True
                 
                 # Only show cards for problematic items (not ACL APPROVED)
-                if acl_status != "ACL APPROVED":
+                if is_problematic:
                     problematic_count += 1
                     
                     # Get chart
                     chart_html = get_read_rate_chart(str(mds_id))
                     
-                    # Color coding
-                    if avg_perf >= 85:
-                        status_color = "#10b981"
-                        status_bg = "bg-green-50"
-                        status_text = "ACL APPROVED"
-                    elif avg_perf >= 50 and "Improving" in trend:
-                        status_color = "#eab308"
-                        status_bg = "bg-yellow-50"
-                        status_text = "ADEQUATE"
-                    else:
-                        status_color = "#ef4444"
-                        status_bg = "bg-red-50"
-                        status_text = acl_status.upper()
-                    
-                    cards_html += f'''<div class="bg-white p-6 rounded-lg shadow-md mb-6 border-l-4" style="border-color: {status_color};">
+                    cards_html += f'''<div class="bg-white p-6 rounded-lg shadow-md mb-6 border-l-4" style="border-color: {color_hex};">
                         <h3 class="text-xl font-bold text-blue-600 mb-4">Item {idx}: MDS {mds_id}</h3>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                             <div>
@@ -3222,13 +3287,13 @@ async def delivery_analysis_search(delivery_number: str):
                                 <div class="text-sm text-gray-600 mb-2"><strong>Records:</strong> {len(rate_data)}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-3xl font-bold" style="color: {status_color};">{avg_perf:.1f}%</div>
-                                <div class="text-sm font-semibold" style="color: {status_color};">{status_text}</div>
+                                <div class="text-3xl font-bold" style="color: {color_hex};">{avg_perf:.1f}%</div>
+                                <div class="text-sm font-semibold" style="color: {color_hex};">{acl_status_name}</div>
                                 <div class="text-xs text-gray-600 mt-1">{trend}</div>
                             </div>
                         </div>
-                        <div class="{status_bg} border border-gray-200 p-4 rounded mb-4">
-                            <div class="font-bold" style="color: {status_color};">{acl_status.upper()}</div>
+                        <div class="{gradient_class} p-4 rounded mb-4">
+                            <div class="font-bold" style="color: {color_hex};">{acl_status_name}</div>
                             <div class="text-sm text-gray-700 mt-1">{recommendation}</div>
                         </div>
                         <div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200">
@@ -3237,6 +3302,8 @@ async def delivery_analysis_search(delivery_number: str):
                     </div>'''
                 else:
                     approved_count += 1
+        
+        progress.log("ANALYZE", f"Analysis complete: {problematic_count} problematic, {approved_count} approved")
         
         if cards_html:
             cards_section = f'''{ruleset_html}
