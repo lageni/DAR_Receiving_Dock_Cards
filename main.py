@@ -3549,9 +3549,11 @@ async def delivery_analysis_search(delivery_number: str):
 
 
 @app.get("/api/delivery-analysis/pdf")
-def delivery_analysis_pdf(delivery_number: str):
+def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false"):
     """Generate PDF batch report for delivery analysis - FULL batch-style report with images and charts."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
+    
+    include_approved_bool = include_approved.lower() == "true"
     
     try:
         # Query and batch the data
@@ -3631,7 +3633,7 @@ def delivery_analysis_pdf(delivery_number: str):
                             "image_url": ""
                         })
         
-        # Step 3: Use generate_batch_pdf() to create full report with images and charts
+        # Step 3: Generate PDF with only problematic items (include_approved parameter reserved for future)
         if problematic_items_data:
             pdf_bytes = generate_batch_pdf(problematic_items_data)
         else:
