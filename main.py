@@ -3153,40 +3153,107 @@ async def delivery_analysis_search(delivery_number: str):
         # Get progress logs
         progress_logs = progress.get_logs()
         
-        # Build read rate cards for each item
+        # ACL Directive Actions Ruleset
+        ruleset_html = '''<details class="bg-blue-50 border-l-4 border-blue-600 p-4 mb-6 rounded cursor-pointer">
+            <summary class="font-bold text-blue-700 select-none">ACL Directive Actions Ruleset (Click to expand)</summary>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div class="bg-green-50 border border-green-300 p-3 rounded">
+                    <div class="font-bold text-green-700">ACL APPROVED</div>
+                    <div class="text-green-600">Performance >= 85%</div>
+                    <div class="text-xs text-gray-600 mt-1">No action needed</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-300 p-3 rounded">
+                    <div class="font-bold text-yellow-700">ADEQUATE PERFORMANCE</div>
+                    <div class="text-yellow-600">Performance < 85% & Improving</div>
+                    <div class="text-xs text-gray-600 mt-1">Monitor closely</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-300 p-3 rounded">
+                    <div class="font-bold text-yellow-700">REQUIRES MANUAL INSPECTION</div>
+                    <div class="text-yellow-600">Fluctuating or Declining</div>
+                    <div class="text-xs text-gray-600 mt-1">Review data quality</div>
+                </div>
+                <div class="bg-red-50 border border-red-300 p-3 rounded">
+                    <div class="font-bold text-red-700">FAILING</div>
+                    <div class="text-red-600">Performance < 50% & Declining</div>
+                    <div class="text-xs text-gray-600 mt-1">Immediate action required</div>
+                </div>
+            </div>
+        </details>'''
+        
+        # Build read rate cards for ONLY problematic items
         cards_html = ""
         read_rates_cache = load_read_rates()
+        problematic_count = 0
+        approved_count = 0
         
-        for idx, mds_id in enumerate(sorted(mds_fam_ids)[:10], 1):  # Show first 10 items with cards
+        for idx, mds_id in enumerate(sorted(mds_fam_ids), 1):
             rate_data = read_rates_cache.get(str(mds_id), [])
             if rate_data:
-                # Get performance metrics
-                if rate_data:
-                    avg_perf = get_avg_performance(rate_data)
-                    trend = get_trend_status(rate_data)
-                    color = get_color_for_performance(avg_perf)
+                avg_perf = get_avg_performance(rate_data)
+                trend = get_trend_status(rate_data)
+                recommendation, acl_status = get_recommendation(avg_perf, trend)
+                
+                # Only show cards for problematic items (not ACL APPROVED)
+                if acl_status != "ACL APPROVED":
+                    problematic_count += 1
                     
-                    cards_html += f'''<div class="bg-white p-4 rounded-lg border-l-4 mb-3" style="border-color: {color};">
-                        <div class="flex justify-between items-start">
+                    # Get chart
+                    chart_html = get_read_rate_chart(str(mds_id))
+                    
+                    # Color coding
+                    if avg_perf >= 85:
+                        status_color = "#10b981"
+                        status_bg = "bg-green-50"
+                        status_text = "ACL APPROVED"
+                    elif avg_perf >= 50 and "Improving" in trend:
+                        status_color = "#eab308"
+                        status_bg = "bg-yellow-50"
+                        status_text = "ADEQUATE"
+                    else:
+                        status_color = "#ef4444"
+                        status_bg = "bg-red-50"
+                        status_text = acl_status.upper()
+                    
+                    cards_html += f'''<div class="bg-white p-6 rounded-lg shadow-md mb-6 border-l-4" style="border-color: {status_color};">
+                        <h3 class="text-xl font-bold text-blue-600 mb-4">Item {idx}: MDS {mds_id}</h3>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <h4 class="font-bold text-gray-800">MDS {mds_id}</h4>
-                                <p class="text-sm text-gray-600">{len(rate_data)} data points</p>
+                                <div class="text-sm text-gray-600 mb-2"><strong>MDS Family ID:</strong> {mds_id}</div>
+                                <div class="text-sm text-gray-600 mb-2"><strong>Records:</strong> {len(rate_data)}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-2xl font-bold" style="color: {color};">{avg_perf:.1f}%</div>
-                                <div class="text-xs font-semibold" style="color: {color};">{trend}</div>
+                                <div class="text-3xl font-bold" style="color: {status_color};">{avg_perf:.1f}%</div>
+                                <div class="text-sm font-semibold" style="color: {status_color};">{status_text}</div>
+                                <div class="text-xs text-gray-600 mt-1">{trend}</div>
                             </div>
                         </div>
+                        <div class="{status_bg} border border-gray-200 p-4 rounded mb-4">
+                            <div class="font-bold" style="color: {status_color};">{acl_status.upper()}</div>
+                            <div class="text-sm text-gray-700 mt-1">{recommendation}</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200">
+                            {chart_html}
+                        </div>
                     </div>'''
+                else:
+                    approved_count += 1
         
         if cards_html:
-            cards_section = f'''<div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                <h3 class="text-xl font-bold text-gray-800 mb-4">Read Rate Performance (First 10 Items)</h3>
+            cards_section = f'''{ruleset_html}
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Performance Review - Problematic Items Only</h3>
+                <p class="text-sm text-gray-600 mb-6">
+                    Showing {problematic_count} items requiring attention. 
+                    <strong>{approved_count} items</strong> are ACL APPROVED (hidden).
+                </p>
                 {cards_html}
-                <p class="text-xs text-gray-500 mt-4">Showing performance summary for first 10 items. Expand logs to see all data.</p>
             </div>'''
         else:
-            cards_section = ''
+            cards_section = f'''{ruleset_html}
+            <div class="bg-green-50 border border-green-300 p-6 rounded-lg mb-6">
+                <h3 class="text-xl font-bold text-green-700">All Items ACL Approved</h3>
+                <p class="text-green-700">All {len(mds_fam_ids)} items have performance >= 85%. No action required.</p>
+            </div>'''
         
         # Full JSON download button
         # Strip out the progress tracker from JSON (not serializable)
@@ -3200,7 +3267,7 @@ async def delivery_analysis_search(delivery_number: str):
         buttons_html = f'''<div class="flex gap-3 mb-6 flex-wrap">
             <a href="/delivery-analysis" class="px-6 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">New Search</a>
             <button onclick="downloadJSON()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Download JSON</button>
-            <a href="/api/delivery-analysis/pdf?delivery_number={delivery_number}" class="px-6 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Download PDF</a>
+            <a href="/api/delivery-analysis/pdf?delivery_number={delivery_number}" class="px-6 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">Batch PDF Report</a>
             <a href="/" class="px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back</a>
         </div>
         
@@ -3273,7 +3340,7 @@ async def delivery_analysis_search(delivery_number: str):
 
 @app.get("/api/delivery-analysis/pdf")
 async def delivery_analysis_pdf(delivery_number: str):
-    """Generate PDF report for delivery analysis."""
+    """Generate PDF batch report for delivery analysis - shows all items with ACL status."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
     
     try:
@@ -3285,64 +3352,121 @@ async def delivery_analysis_pdf(delivery_number: str):
         delivery_data = apply_batching_to_delivery(delivery_data)
         
         # Create PDF
-        pdf = FPDF(orientation='L', unit='mm', format='A4')
+        pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
         pdf.set_font('Arial', 'B', 16)
-        pdf.cell(0, 10, f"Delivery Analysis Report - {delivery_number}", ln=True)
+        pdf.cell(0, 10, f"Delivery Analysis - {delivery_number}", ln=True)
+        pdf.ln(2)
         
         # Summary
-        pdf.set_font('Arial', 'B', 12)
-        pdf.cell(0, 8, f"Summary", ln=True)
-        pdf.set_font('Arial', '', 10)
-        pdf.cell(0, 6, f"Total PO Lines: {len(delivery_data.get('data', []))}", ln=True)
-        pdf.cell(0, 6, f"Unique MDS Items: {len(delivery_data.get('mds_fam_ids', []))}", ln=True)
-        pdf.ln(4)
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(0, 6, "SUMMARY", ln=True)
+        pdf.set_font('Arial', '', 9)
+        po_count = len(delivery_data.get('data', []))
+        mds_count = len(delivery_data.get('mds_fam_ids', []))
+        pdf.cell(0, 5, f"Total PO Lines: {po_count}", ln=True)
+        pdf.cell(0, 5, f"Unique MDS Items: {mds_count}", ln=True)
+        pdf.ln(3)
+        
+        # ACL Status breakdown
+        read_rates_cache = load_read_rates()
+        approved_items = []
+        problematic_items = []
+        
+        for mds_id in delivery_data.get('mds_fam_ids', []):
+            rate_data = read_rates_cache.get(str(mds_id), [])
+            if rate_data:
+                avg_perf = get_avg_performance(rate_data)
+                trend = get_trend_status(rate_data)
+                _, acl_status = get_recommendation(avg_perf, trend)
+                
+                if acl_status == "ACL APPROVED":
+                    approved_items.append((mds_id, avg_perf))
+                else:
+                    problematic_items.append((mds_id, avg_perf, acl_status, trend))
+        
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(0, 6, f"ACL STATUS: {len(approved_items)} Approved | {len(problematic_items)} Problematic", ln=True)
+        pdf.ln(2)
+        
+        # Problematic items table
+        if problematic_items:
+            pdf.set_font('Arial', 'B', 9)
+            pdf.cell(0, 6, "ITEMS REQUIRING ATTENTION", ln=True)
+            
+            # Table header
+            pdf.set_font('Arial', 'B', 8)
+            pdf.cell(30, 5, 'MDS_FAM_ID', border=1)
+            pdf.cell(30, 5, 'Performance', border=1)
+            pdf.cell(30, 5, 'Status', border=1)
+            pdf.cell(40, 5, 'Trend', border=1)
+            pdf.ln()
+            
+            # Table rows
+            pdf.set_font('Arial', '', 8)
+            for mds_id, perf, status, trend in problematic_items:
+                pdf.cell(30, 5, str(mds_id)[:15], border=1)
+                pdf.cell(30, 5, f"{perf:.1f}%", border=1)
+                pdf.cell(30, 5, status[:15], border=1)
+                pdf.cell(40, 5, trend[:20], border=1)
+                pdf.ln()
+        
+        # Approved items summary
+        if approved_items:
+            pdf.ln(2)
+            pdf.set_font('Arial', 'B', 9)
+            pdf.cell(0, 6, f"ACL APPROVED ITEMS ({len(approved_items)} items) - See attached detailed report for chart view", ln=True)
+        
+        # PO Lines summary table
+        pdf.ln(3)
+        pdf.set_font('Arial', 'B', 9)
+        pdf.cell(0, 6, f"PO LINES DETAIL (All {po_count} rows)", ln=True)
         
         # Table header
-        pdf.set_font('Arial', 'B', 9)
-        col_widths = [15, 30, 20, 15, 25, 25, 20, 25]
-        headers = ['#', 'MDS_FAM_ID', 'PO #', 'Line#', 'Vendor Stock ID', 'Read Rate Records', 'Order Qty', 'Max Rcv Qty']
-        for i, header in enumerate(headers):
-            pdf.cell(col_widths[i], 7, header, border=1)
+        pdf.set_font('Arial', 'B', 7)
+        col_w = [8, 22, 18, 10, 20, 18, 15, 15]
+        pdf.cell(col_w[0], 4, '#', border=1)
+        pdf.cell(col_w[1], 4, 'MDS_FAM_ID', border=1)
+        pdf.cell(col_w[2], 4, 'PO #', border=1)
+        pdf.cell(col_w[3], 4, 'Line', border=1)
+        pdf.cell(col_w[4], 4, 'Vendor Stock', border=1)
+        pdf.cell(col_w[5], 4, 'RR Records', border=1)
+        pdf.cell(col_w[6], 4, 'Order Qty', border=1)
+        pdf.cell(col_w[7], 4, 'Max Rcv', border=1)
         pdf.ln()
         
         # Table rows
-        pdf.set_font('Arial', '', 8)
-        for idx, row in enumerate(delivery_data.get('data', [])[:100], 1):  # First 100 rows
-            mds_id = str(row.get('mds_fam_id', ''))
+        pdf.set_font('Arial', '', 6)
+        for idx, row in enumerate(delivery_data.get('data', []), 1):
+            mds_id = str(row.get('mds_fam_id', ''))[:10]
             batching_info = row.get('batching_info', {})
-            batch_count = batching_info.get('record_count', 0)
+            batch_count = str(batching_info.get('record_count', 0))
+            po_nbr = str(row.get('po_nbr', ''))[:8]
+            vendor_stock = str(row.get('vendor_stock_id', ''))[:10]
+            order_qty = str(row.get('whpk_order_qty', ''))
+            max_rcv = str(row.get('whpk_max_rcv_qty', ''))
             
-            row_data = [
-                str(idx),
-                mds_id[:10],
-                str(row.get('po_nbr', ''))[:10],
-                str(row.get('po_line_nbr', '')),
-                str(row.get('vendor_stock_id', ''))[:15],
-                str(batch_count),
-                str(row.get('whpk_order_qty', '')),
-                str(row.get('whpk_max_rcv_qty', ''))
-            ]
-            
-            for i, cell_data in enumerate(row_data):
-                pdf.cell(col_widths[i], 6, cell_data, border=1)
+            pdf.cell(col_w[0], 4, str(idx)[:3], border=1)
+            pdf.cell(col_w[1], 4, mds_id, border=1)
+            pdf.cell(col_w[2], 4, po_nbr, border=1)
+            pdf.cell(col_w[3], 4, str(row.get('po_line_nbr', '')), border=1)
+            pdf.cell(col_w[4], 4, vendor_stock, border=1)
+            pdf.cell(col_w[5], 4, batch_count, border=1)
+            pdf.cell(col_w[6], 4, order_qty, border=1)
+            pdf.cell(col_w[7], 4, max_rcv, border=1)
             pdf.ln()
-        
-        # Footer note
-        total_rows = len(delivery_data.get('data', []))
-        if total_rows > 100:
-            pdf.set_font('Arial', 'I', 8)
-            pdf.cell(0, 6, f"Showing first 100 of {total_rows} rows", ln=True)
         
         pdf_bytes = bytes(pdf.output())
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="delivery_{delivery_number}_analysis.pdf"'}
+            headers={"Content-Disposition": f'attachment; filename="delivery_{delivery_number}_batch_report.pdf"'}
         )
     
     except Exception as e:
         print(f"[DELIVERY-PDF] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
