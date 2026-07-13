@@ -3337,42 +3337,30 @@ async def delivery_analysis_search(delivery_number: str):
                 "Wmt-Userid": wmt_userid
             }
             
-            import asyncio
-            
-            async def fetch_mdm_for_mds_ids():
-                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-                    for mds_id in problematic_mds_ids:
-                        try:
-                            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
-                            response = await client.get(api_url, headers=mdm_headers)
-                            response.raise_for_status()
-                            mdm_data = response.json()
-                            
-                            item_data = extract_item_data(mdm_data)
-                            item_data["mds_fam_id"] = str(mds_id)
-                            item_data["acl_details"] = problematic_details.get(str(mds_id), {})
-                            problematic_items_data.append(item_data)
-                            
-                            progress.log("MDM", f"Fetched MDM data for MDS {mds_id}")
-                        except Exception as e:
-                            progress.log("MDM", f"Error fetching MDS {mds_id}: {str(e)}")
-                            problematic_items_data.append({
-                                "mds_fam_id": str(mds_id),
-                                "item_name": f"MDS {mds_id}",
-                                "image_url": "",
-                                "error": str(e),
-                                "acl_details": problematic_details.get(str(mds_id), {})
-                            })
-            
-            # Run async fetch
-            import asyncio
-            try:
-                asyncio.run(fetch_mdm_for_mds_ids())
-            except:
-                # Fallback if event loop already running
-                import nest_asyncio
-                nest_asyncio.apply()
-                asyncio.run(fetch_mdm_for_mds_ids())
+            # Use synchronous HTTP client (no asyncio issues)
+            with httpx.Client(verify=False, timeout=30.0) as client:
+                for mds_id in problematic_mds_ids:
+                    try:
+                        api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
+                        response = client.get(api_url, headers=mdm_headers)
+                        response.raise_for_status()
+                        mdm_data = response.json()
+                        
+                        item_data = extract_item_data(mdm_data)
+                        item_data["mds_fam_id"] = str(mds_id)
+                        item_data["acl_details"] = problematic_details.get(str(mds_id), {})
+                        problematic_items_data.append(item_data)
+                        
+                        progress.log("MDM", f"Fetched MDM data for MDS {mds_id}")
+                    except Exception as e:
+                        progress.log("MDM", f"Error fetching MDS {mds_id}: {str(e)}")
+                        problematic_items_data.append({
+                            "mds_fam_id": str(mds_id),
+                            "item_name": f"MDS {mds_id}",
+                            "image_url": "",
+                            "error": str(e),
+                            "acl_details": problematic_details.get(str(mds_id), {})
+                        })
         
         # Step 3: Build cards HTML with images and details
         cards_html = ""
@@ -3539,7 +3527,7 @@ async def delivery_analysis_search(delivery_number: str):
 
 
 @app.get("/api/delivery-analysis/pdf")
-async def delivery_analysis_pdf(delivery_number: str):
+def delivery_analysis_pdf(delivery_number: str):
     """Generate PDF batch report for delivery analysis - FULL batch-style report with images and charts."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
     
@@ -3602,31 +3590,24 @@ async def delivery_analysis_pdf(delivery_number: str):
                 "Wmt-Userid": wmt_userid
             }
             
-            async def fetch_mdm():
-                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-                    for mds_id in problematic_mds_ids:
-                        try:
-                            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
-                            response = await client.get(api_url, headers=mdm_headers)
-                            response.raise_for_status()
-                            mdm_data = response.json()
-                            item_data = extract_item_data(mdm_data)
-                            item_data["mds_fam_id"] = str(mds_id)
-                            problematic_items_data.append(item_data)
-                        except Exception as e:
-                            print(f"[DELIVERY-PDF-MDM] Error fetching MDS {mds_id}: {str(e)}")
-                            problematic_items_data.append({
-                                "mds_fam_id": str(mds_id),
-                                "item_name": f"MDS {mds_id}",
-                                "image_url": ""
-                            })
-            
-            try:
-                asyncio.run(fetch_mdm())
-            except:
-                import nest_asyncio
-                nest_asyncio.apply()
-                asyncio.run(fetch_mdm())
+            # Use synchronous HTTP client
+            with httpx.Client(verify=False, timeout=30.0) as client:
+                for mds_id in problematic_mds_ids:
+                    try:
+                        api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
+                        response = client.get(api_url, headers=mdm_headers)
+                        response.raise_for_status()
+                        mdm_data = response.json()
+                        item_data = extract_item_data(mdm_data)
+                        item_data["mds_fam_id"] = str(mds_id)
+                        problematic_items_data.append(item_data)
+                    except Exception as e:
+                        print(f"[DELIVERY-PDF-MDM] Error fetching MDS {mds_id}: {str(e)}")
+                        problematic_items_data.append({
+                            "mds_fam_id": str(mds_id),
+                            "item_name": f"MDS {mds_id}",
+                            "image_url": ""
+                        })
         
         # Step 3: Use generate_batch_pdf() to create full report with images and charts
         if problematic_items_data:
@@ -3657,7 +3638,7 @@ async def delivery_analysis_pdf(delivery_number: str):
 
 
 @app.get("/api/delivery-analysis/pdf-item")
-async def delivery_pdf_single_item(mds_id: str):
+def delivery_pdf_single_item(mds_id: str):
     """Generate PDF for a single problematic item with full details."""
     try:
         # Fetch MDM data for single item
@@ -3673,9 +3654,9 @@ async def delivery_pdf_single_item(mds_id: str):
             "Wmt-Userid": wmt_userid
         }
         
-        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+        with httpx.Client(verify=False, timeout=30.0) as client:
             api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
-            response = await client.get(api_url, headers=mdm_headers)
+            response = client.get(api_url, headers=mdm_headers)
             response.raise_for_status()
             mdm_data = response.json()
         
