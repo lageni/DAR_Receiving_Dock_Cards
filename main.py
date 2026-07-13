@@ -2916,10 +2916,26 @@ async def delivery_analysis_page():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Delivery Analysis</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org"></script>
+    <style>
+        @keyframes spin {{
+            to {{ transform: rotate(360deg); }}
+        }}
+        @keyframes pulse-glow {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.5; }}
+        }}
+        .spinner {{
+            animation: spin 0.8s linear infinite;
+        }}
+        .pulse {{
+            animation: pulse-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }}
+    </style>
 </head>
 <body class="bg-gray-50">
     <div class="max-w-6xl mx-auto p-6">
-        <h1 class="text-4xl font-bold text-blue-600 mb-2"> Delivery Analysis</h1>
+        <h1 class="text-4xl font-bold text-blue-600 mb-2">Delivery Analysis</h1>
         <p class="text-gray-700 mb-6">Enter a delivery number to analyze purchase order data, batching, and item performance.</p>
         
         <div class="bg-white p-8 rounded-lg shadow-lg border-2 border-blue-200">
@@ -2936,20 +2952,43 @@ async def delivery_analysis_page():
                     <p class="text-xs text-gray-500 mt-1">Corresponds to rcv.appointment_nbr in the Informix query</p>
                 </div>
                 
-                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-3 rounded hover:bg-blue-700 transition">
-                     Search
+                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-3 rounded hover:bg-blue-700 transition flex items-center justify-center">
+                    <span>Search</span>
                 </button>
             </form>
         </div>
         
-        <div id="loading" class="htmx-request:block hidden text-center mt-8">
-            <p class="text-gray-600 font-semibold">Loading...</p>
+        <!-- Loading Indicator -->
+        <div id="loading" class="htmx-request:flex hidden flex-col items-center justify-center mt-12 space-y-6">
+            <div class="space-y-2">
+                <div class="flex items-center justify-center space-x-2">
+                    <svg class="spinner h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-lg font-semibold text-gray-700">Analyzing delivery...</span>
+                </div>
+                <p class="text-sm text-gray-600 text-center">Querying Informix, loading batching data, building results...</p>
+            </div>
+            
+            <!-- Progress steps -->
+            <div class="w-full max-w-md space-y-2">
+                <div class="pulse bg-blue-100 border border-blue-300 rounded p-3 text-sm text-blue-700 font-mono">
+                    [QUERY] Connecting to Informix...
+                </div>
+                <div class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
+                    [BATCH] Loading read rate data...
+                </div>
+                <div class="bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-700 font-mono opacity-50">
+                    [BUILD] Building HTML response...
+                </div>
+            </div>
         </div>
         
         <div id="results" class="mt-8"></div>
         
         <div class="mt-6">
-            <a href="/" class="inline-block px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">← Back to Home</a>
+            <a href="/" class="inline-block px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back to Home</a>
         </div>
     </div>
 </body>
@@ -2960,33 +2999,59 @@ async def delivery_analysis_page():
 async def delivery_analysis_search(delivery_number: str):
     """Search for delivery data and apply batching to all mds_fam_ids."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
+    import time
+    
+    overall_start = time.time()
     
     try:
         # Step 1: Query Informix
         delivery_data = get_delivery_po_data(delivery_number)
+        progress = delivery_data.get("progress")
         
         if not delivery_data["success"]:
+            progress.log("ERROR", "Query failed, returning error")
+            progress_logs = progress.get_logs()
             return f'''<div class="bg-red-50 border-l-4 border-red-600 p-4 rounded text-red-700">
                 <strong>Error:</strong> {delivery_data["error"]}
-            </div>'''
+            </div>
+            <details class="bg-gray-50 border border-gray-300 p-4 rounded mt-4">
+                <summary class="cursor-pointer font-semibold text-gray-700">Progress Logs</summary>
+                <pre class="text-xs mt-3 bg-black text-green-400 p-3 rounded overflow-x-auto">{progress_logs}</pre>
+            </details>
+            <script>
+                console.group("Delivery Analysis - Error");
+                console.log({json.dumps(progress_logs)});
+                console.groupEnd();
+            </script>'''
         
         # Step 2: Apply batching to all mds_fam_ids
         delivery_data = apply_batching_to_delivery(delivery_data)
+        progress = delivery_data.get("progress")
         
         # Step 3: Build HTML response
         po_rows = delivery_data.get("data", [])
         record_count = delivery_data.get("record_count", 0)
         mds_fam_ids = delivery_data.get("mds_fam_ids", [])
+        batching_data = delivery_data.get("batching_data", {})
         
         if record_count == 0:
+            progress.log("RESULT", "No PO lines found for this delivery")
+            progress_logs = progress.get_logs()
             return f'''<div class="bg-yellow-50 border-l-4 border-yellow-600 p-4 rounded text-yellow-700">
                 <strong>No Results:</strong> Delivery {delivery_number} returned no PO lines.
-            </div>'''
+            </div>
+            <details class="bg-gray-50 border border-gray-300 p-4 rounded mt-4">
+                <summary class="cursor-pointer font-semibold text-gray-700">Progress Logs</summary>
+                <pre class="text-xs mt-3 bg-black text-green-400 p-3 rounded overflow-x-auto">{progress_logs}</pre>
+            </details>'''
         
-        # Build summary section
+        progress.log("HTML", f"Building HTML response for {record_count} rows")
+        
+        # Build summary section with timing
+        overall_elapsed = time.time() - overall_start
         summary_html = f'''<div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-6">
-            <h2 class="text-2xl font-bold text-blue-700 mb-4"> Delivery Summary</h2>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <h2 class="text-2xl font-bold text-blue-700 mb-4">Delivery Summary</h2>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                 <div class="bg-white p-4 rounded border border-blue-200">
                     <div class="text-3xl font-bold text-blue-600">{record_count}</div>
                     <div class="text-xs text-gray-600 mt-1">PO Lines</div>
@@ -2996,12 +3061,16 @@ async def delivery_analysis_search(delivery_number: str):
                     <div class="text-xs text-gray-600 mt-1">Unique MDS Items</div>
                 </div>
                 <div class="bg-white p-4 rounded border border-blue-200">
-                    <div class="text-3xl font-bold text-blue-600">{delivery_number}</div>
+                    <div class="text-3xl font-bold text-blue-600 font-mono text-lg">{delivery_number}</div>
                     <div class="text-xs text-gray-600 mt-1">Delivery #</div>
                 </div>
                 <div class="bg-white p-4 rounded border border-blue-200">
-                    <div class="text-3xl font-bold text-blue-600 font-mono text-lg"></div>
-                    <div class="text-xs text-gray-600 mt-1">Query OK</div>
+                    <div class="text-3xl font-bold text-green-600">{overall_elapsed:.2f}s</div>
+                    <div class="text-xs text-gray-600 mt-1">Total Time</div>
+                </div>
+                <div class="bg-white p-4 rounded border border-green-200">
+                    <div class="text-2xl font-bold text-green-600">OK</div>
+                    <div class="text-xs text-gray-600 mt-1">Status</div>
                 </div>
             </div>
         </div>'''
@@ -3016,23 +3085,23 @@ async def delivery_analysis_search(delivery_number: str):
             bg_class = "bg-white" if idx % 2 == 0 else "bg-gray-50"
             
             table_rows += f'''<tr class="{bg_class} border-b hover:bg-blue-50 transition">
-                <td class="px-4 py-3 text-sm font-mono">{idx}</td>
+                <td class="px-4 py-3 text-sm font-mono text-gray-600">{idx}</td>
                 <td class="px-4 py-3 text-sm font-bold text-blue-600">{mds_fam_id}</td>
                 <td class="px-4 py-3 text-sm">{row.get("po_nbr", "—")}</td>
                 <td class="px-4 py-3 text-sm">{row.get("po_line_nbr", "—")}</td>
                 <td class="px-4 py-3 text-sm text-center">
                     <span class="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
-                        {batch_record_count} records
+                        {batch_record_count}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm">{row.get("vendor_stock_id", "—")}</td>
-                <td class="px-4 py-3 text-sm text-right">{row.get("whpk_order_qty", "—")}</td>
-                <td class="px-4 py-3 text-sm text-right">{row.get("whpk_max_rcv_qty", "—")}</td>
+                <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_order_qty", "—")}</td>
+                <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_max_rcv_qty", "—")}</td>
             </tr>'''
         
         table_html = f'''<div class="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
             <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
-                <h3 class="text-xl font-bold text-gray-800"> Purchase Order Lines</h3>
+                <h3 class="text-xl font-bold text-gray-800">Purchase Order Lines ({record_count})</h3>
                 <p class="text-xs text-gray-600 mt-1">All rows for delivery {delivery_number} with batching data applied</p>
             </div>
             <div class="overflow-x-auto">
@@ -3059,40 +3128,54 @@ async def delivery_analysis_search(delivery_number: str):
         # Build batching summary (unique items)
         batching_summary = ""
         for mds_id in sorted(mds_fam_ids):
-            item_batch_data = delivery_data["batching_data"].get(mds_id, {})
-            record_count = item_batch_data.get("record_count", 0)
+            item_batch_data = batching_data.get(mds_id, {})
+            record_count_item = item_batch_data.get("record_count", 0)
             error = item_batch_data.get("error", "")
             
             if error:
                 batching_summary += f'''<div class="bg-red-50 border border-red-200 p-3 rounded text-sm mb-2">
-                    <strong class="text-red-700">MDS {mds_id}:</strong> Error - {error}
+                    <strong class="text-red-700">MDS {mds_id}:</strong> <span class="text-red-600">Error - {error}</span>
                 </div>'''
             else:
-                batching_summary += f'''<div class="bg-green-50 border border-green-200 p-3 rounded text-sm mb-2">
-                    <strong class="text-green-700">MDS {mds_id}:</strong> {record_count} read rate records loaded 
+                batching_summary += f'''<div class="bg-green-50 border border-green-200 p-3 rounded text-sm mb-2 flex justify-between">
+                    <strong class="text-green-700">MDS {mds_id}</strong>
+                    <span class="text-green-600 font-semibold">{record_count_item} records</span>
                 </div>'''
         
         batching_html = f'''<div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h3 class="text-xl font-bold text-gray-800 mb-4"> Batching Summary</h3>
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Batching Summary</h3>
             <p class="text-sm text-gray-600 mb-4">Read rate data loaded for {len(mds_fam_ids)} unique MDS items:</p>
             <div class="max-h-64 overflow-y-auto">
                 {batching_summary}
             </div>
         </div>'''
         
-        # Full JSON download button
-        json_data = json.dumps(delivery_data, indent=2, default=str)
-        json_b64 = json_data.encode().hex()
+        # Get progress logs
+        progress_logs = progress.get_logs()
         
-        buttons_html = f'''<div class="flex gap-3 mb-6">
-            <a href="/delivery-analysis" class="px-6 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"> New Search</a>
-            <button onclick="downloadJSON()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700"> Download JSON</button>
-            <a href="/" class="px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">← Back</a>
+        # Full JSON download button
+        # Strip out the progress tracker from JSON (not serializable)
+        json_export = dict(delivery_data)
+        json_export.pop("progress", None)
+        json_data = json.dumps(json_export, indent=2, default=str)
+        
+        buttons_html = f'''<div class="flex gap-3 mb-6 flex-wrap">
+            <a href="/delivery-analysis" class="px-6 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700">New Search</a>
+            <button onclick="downloadJSON()" class="px-6 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">Download JSON</button>
+            <a href="/" class="px-6 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back</a>
         </div>
+        
+        <details class="bg-gray-900 border-2 border-green-400 rounded-lg p-6 mb-6 cursor-pointer">
+            <summary class="font-mono text-green-400 font-bold select-none hover:text-green-300">
+                > Show Analysis Logs ({len(progress.stages)} stages)
+            </summary>
+            <pre class="text-xs mt-4 bg-black text-green-400 p-4 rounded overflow-x-auto font-mono">{progress_logs}</pre>
+            <p class="text-xs text-gray-400 mt-3">Also check browser console (F12) for additional details</p>
+        </details>
         
         <script>
         function downloadJSON() {{
-            const data = {json_data.replace(chr(39), "&#39;")};
+            const data = {json.dumps(json_data)};
             const blob = new Blob([data], {{type: 'application/json'}});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -3101,7 +3184,18 @@ async def delivery_analysis_search(delivery_number: str):
             a.click();
             URL.revokeObjectURL(url);
         }}
+        
+        // Log to browser console
+        console.group('%c Delivery Analysis Complete', 'color: green; font-weight: bold; font-size: 14px;');
+        console.log('%c{progress_logs}', 'color: #0f0; font-family: monospace; white-space: pre;');
+        console.log('Delivery Number:', '{delivery_number}');
+        console.log('Total Rows:', {record_count});
+        console.log('Unique Items:', {len(mds_fam_ids)});
+        console.log('Total Time:', {overall_elapsed:.2f}, 'seconds');
+        console.groupEnd();
         </script>'''
+        
+        progress.log("COMPLETE", f"Response ready ({overall_elapsed:.2f}s total)")
         
         return f'''{summary_html}
 {table_html}
@@ -3111,12 +3205,22 @@ async def delivery_analysis_search(delivery_number: str):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f"[DELIVERY-ANALYSIS] Error: {str(e)}")
+        overall_elapsed = time.time() - overall_start
+        print(f"[DELIVERY-ANALYSIS] Error: {str(e)} ({overall_elapsed:.2f}s)")
         print(error_details)
-        return f'''<div class="bg-red-50 border-l-4 border-red-600 p-4 rounded text-red-700">
-            <strong>Error:</strong> {str(e)}
-            <pre class="text-xs mt-2 bg-red-100 p-2 rounded overflow-x-auto">{error_details}</pre>
-        </div>'''
+        return f'''<div class="bg-red-50 border-l-4 border-red-600 p-6 rounded">
+            <h3 class="text-xl font-bold text-red-700 mb-2">Error</h3>
+            <p class="text-red-700 mb-4">{str(e)}</p>
+            <details class="bg-red-100 border border-red-300 rounded p-3">
+                <summary class="cursor-pointer font-semibold text-red-700">Stack Trace</summary>
+                <pre class="text-xs mt-2 overflow-x-auto font-mono">{error_details}</pre>
+            </details>
+            <p class="text-xs text-gray-600 mt-4">Completed in {overall_elapsed:.2f}s</p>
+        </div>
+        <script>
+        console.error('Delivery Analysis Error:', {json.dumps(str(e))});
+        console.error('Stack:', {json.dumps(error_details)});
+        </script>'''
 
 
 if __name__ == "__main__":
