@@ -3159,7 +3159,7 @@ async def delivery_analysis_search(delivery_number: str):
             <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
                 <div class="bg-white p-3 rounded border border-blue-200"><div class="text-2xl font-bold text-blue-600">{record_count}</div><div class="text-xs text-gray-600 mt-1">PO Lines</div></div>
                 <div class="bg-white p-3 rounded border border-blue-200"><div class="text-2xl font-bold text-blue-600">{len(mds_fam_ids)}</div><div class="text-xs text-gray-600 mt-1">Items</div></div>
-                <div class="bg-white p-3 rounded border border-orange-300"><div class="text-2xl font-bold text-orange-600">{no_history}</div><div class="text-xs text-gray-600 mt-1">No History</div></div>
+                <div class="bg-white p-3 rounded border border-orange-300"><div class="text-2xl font-bold text-orange-600">{no_history_qty:,}</div><div class="text-xs text-gray-600 mt-1">No History Cases</div></div>
                 <div class="bg-white p-3 rounded border border-green-300"><div class="text-2xl font-bold text-green-600">{estimated_good:,}</div><div class="text-xs text-gray-600 mt-1">Est. Good</div></div>
                 <div class="bg-white p-3 rounded border border-red-300"><div class="text-2xl font-bold text-red-600">{estimated_bad:,}</div><div class="text-xs text-gray-600 mt-1">Est. Bad</div></div>
                 <div class="bg-white p-3 rounded border border-purple-300"><div class="text-2xl font-bold text-purple-600">{avg_read_rate:.0f}%</div><div class="text-xs text-gray-600 mt-1">Avg Rate</div></div>
@@ -3272,12 +3272,15 @@ async def delivery_analysis_search(delivery_number: str):
         </details>'''
         
         # Build read rate cards for ONLY problematic items
-        # Step 1: First pass - identify problematic items
+        # Step 1: First pass - identify problematic items (ONLY if they have history)
         read_rates_cache = load_read_rates()
         problematic_mds_ids = []
         problematic_details = {}  # Store ACL details
         approved_count = 0
+        no_history_count = 0
+        no_history_qty = 0
         total_items = len(mds_fam_ids)
+        items_with_history = set()
         
         progress.log("ANALYZE", f"Analyzing {total_items} items for ACL status")
         
@@ -3286,11 +3289,28 @@ async def delivery_analysis_search(delivery_number: str):
                 progress.log("ANALYZE", f"Processed {idx}/{total_items} items")
             
             rate_data = read_rates_cache.get(str(mds_id), [])
-            avg_perf = get_avg_performance(rate_data) if rate_data else 0
-            trend = get_trend_status(rate_data) if rate_data else "No Data"
+            
+            # SKIP items with NO history - don't mark as problematic
+            if not rate_data:
+                no_history_count += 1
+                # Sum quantities for items with no history
+                for row in po_rows:
+                    if str(row.get('mds_fam_id', '')) == str(mds_id):
+                        qty = row.get('whpk_order_qty', 0)
+                        if qty:
+                            try:
+                                no_history_qty += int(qty) if isinstance(qty, str) else qty
+                            except:
+                                pass
+                continue
+            
+            # Item HAS history - process it
+            items_with_history.add(str(mds_id))
+            avg_perf = get_avg_performance(rate_data)
+            trend = get_trend_status(rate_data)
             recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
             
-            # Determine ACL status
+            # Determine ACL status (only for items WITH history)
             if avg_perf >= 85:
                 acl_status_name = "ACL APPROVED"
                 is_problematic = False
