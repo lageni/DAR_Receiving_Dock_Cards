@@ -3403,40 +3403,22 @@ async def delivery_analysis_search(delivery_number: str):
             vnpk_height = item_data.get("vnpk_height", "")
             casepack = item_data.get("casepack_type", "")
             
-            image_html = f'<img src="{image_url}" class="w-full h-64 object-cover rounded border mb-2">'
-            if not image_url:
-                image_html = '<div class="w-full h-64 bg-gray-200 rounded border mb-2 flex items-center justify-center"><p class="text-gray-500">No Image</p></div>'
-            
             chart_html = get_read_rate_chart(str(mds_id))
             
-            cards_html += f'''<div class="bg-white p-6 rounded-lg shadow-md mb-6 border-l-4" style="border-color: {color_hex};">
-                <h3 class="text-xl font-bold text-blue-600 mb-4">{item_name}</h3>
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-                    <div>
-                        {image_html}
-                        <div class="text-xs text-gray-600 mt-2 space-y-1">
-                            <p><strong>MDS:</strong> {mds_id}</p>
-                            <p><strong>GTIN:</strong> {gtin if gtin else "N/A"}</p>
-                            <p><strong>Dept:</strong> {vendor_dept if vendor_dept else "N/A"}</p>
-                            <p><strong>Pack:</strong> {casepack if casepack else "N/A"}</p>
-                            <p><strong>Dims:</strong> {vnpk_length}x{vnpk_width}x{vnpk_height}</p>
-                            <p><strong>Records:</strong> {len(rate_data)}</p>
-                        </div>
-                    </div>
-                    <div class="flex flex-col justify-center">
-                        <div class="text-5xl font-bold" style="color: {color_hex};">{avg_perf:.1f}%</div>
-                        <div class="text-sm font-semibold" style="color: {color_hex};">{acl_status_name}</div>
-                        <div class="text-xs text-gray-600 mt-2">{trend}</div>
-                        <a href="/api/delivery-analysis/pdf-item?mds_id={mds_id}" class="mt-4 px-4 py-2 bg-green-600 text-white rounded text-sm font-semibold hover:bg-green-700 text-center">Download PDF</a>
-                    </div>
-                    <div class="bg-gray-50 p-4 rounded border border-gray-200">
-                        {chart_html}
-                    </div>
+            image_display = f'<img src="{image_url}" class="w-full h-40 object-cover rounded mb-2 border">'
+            if not image_url:
+                image_display = '<div class="w-full h-40 bg-gray-200 rounded mb-2 flex items-center justify-center"><p class="text-xs text-gray-500">No Image</p></div>'
+            
+            cards_html += f'''<div class="bg-white p-4 rounded-lg shadow border-l-4 h-full flex flex-col" style="border-color: {color_hex};">
+                {image_display}
+                <h4 class="font-bold text-sm text-blue-600 mb-2 line-clamp-2">{item_name}</h4>
+                <div class="text-xs text-gray-600 space-y-0.5 mb-3 flex-grow">
+                    <p><strong>MDS:</strong> {mds_id[:8]}</p>
+                    <p><strong>Perf:</strong> <span style="color: {color_hex}; font-weight: bold;">{avg_perf:.0f}%</span></p>
+                    <p><strong>Status:</strong> {acl_status_name[:15]}</p>
+                    <p class="text-xs text-gray-500">{trend}</p>
                 </div>
-                <div class="{acl_details.get('gradient_class', 'from-red-50 to-red-100')} p-4 rounded">
-                    <div class="font-bold" style="color: {color_hex};">{acl_status_name}</div>
-                    <div class="text-sm text-gray-700 mt-1">{recommendation}</div>
-                </div>
+                <a href="/api/delivery-analysis/pdf-item?mds_id={mds_id}" class="block w-full px-2 py-1 bg-green-600 text-white rounded text-xs font-semibold hover:bg-green-700 text-center">PDF</a>
             </div>'''
         
         problematic_count = len(problematic_items_data)
@@ -3445,13 +3427,14 @@ async def delivery_analysis_search(delivery_number: str):
         
         if cards_html:
             cards_section = f'''{ruleset_html}
-            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                <h3 class="text-xl font-bold text-gray-800 mb-4">Performance Review - Problematic Items Only</h3>
-                <p class="text-sm text-gray-600 mb-6">
-                    Showing {problematic_count} items requiring attention. 
-                    <strong>{approved_count} items</strong> are ACL APPROVED (hidden).
+            <div class="mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-3">Performance Review - Problematic Items ({problematic_count})</h3>
+                <p class="text-sm text-gray-600 mb-4">
+                    {approved_count} items are ACL APPROVED (not shown)
                 </p>
-                {cards_html}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {cards_html}
+                </div>
             </div>'''
         else:
             cards_section = f'''{ruleset_html}
