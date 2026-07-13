@@ -3136,6 +3136,22 @@ async def delivery_analysis_search(delivery_number: str):
         estimated_bad = int(total_po_qty * ((100 - avg_read_rate) / 100))
         no_history = len(mds_fam_ids) - items_with_data
         
+        # Calculate no history cases (sum of quantities for items with no read rate data)
+        no_history_qty = 0
+        items_with_history = set()
+        for mds_id in mds_fam_ids:
+            if read_rates_cache.get(str(mds_id), []):
+                items_with_history.add(str(mds_id))
+        
+        for row in po_rows:
+            if str(row.get('mds_fam_id', '')) not in items_with_history:
+                qty = row.get('whpk_order_qty', 0)
+                if qty:
+                    try:
+                        no_history_qty += int(qty) if isinstance(qty, str) else qty
+                    except:
+                        pass
+        
         # Build summary section with timing
         overall_elapsed = time.time() - overall_start
         summary_html = f'''<div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-6">
