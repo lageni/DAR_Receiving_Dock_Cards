@@ -3572,8 +3572,13 @@ def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false")
         
         for mds_id in mds_fam_ids:
             rate_data = read_rates_cache.get(str(mds_id), [])
-            avg_perf = get_avg_performance(rate_data) if rate_data else 0
-            trend = get_trend_status(rate_data) if rate_data else "No Data"
+            
+            # SKIP items with NO history (same as web page)
+            if not rate_data:
+                continue
+            
+            avg_perf = get_avg_performance(rate_data)
+            trend = get_trend_status(rate_data)
             recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
             
             if avg_perf >= 85:
