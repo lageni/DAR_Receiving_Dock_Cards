@@ -3400,6 +3400,18 @@ async def delivery_analysis_search(delivery_number: str):
                             "acl_details": problematic_details.get(str(mds_id), {})
                         })
         
+        # Cache the analysis result (problematic_items_data + metadata) for PDF endpoint
+        # This lets PDF generation skip re-analyzing if called shortly after web search
+        analysis_cache = {
+            "mds_fam_ids": mds_fam_ids,
+            "po_rows": po_rows,
+            "problematic_items_data": problematic_items_data,
+            "problematic_details": problematic_details,
+            "approved_count": approved_count,
+            "no_history_count": no_history_count
+        }
+        cache.set(f"pdf_analysis_{delivery_number}", analysis_cache, category="deliveries")
+        
         # Step 3: Build cards HTML with images and details
         cards_html = ""
         for item_data in problematic_items_data:
