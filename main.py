@@ -3123,50 +3123,48 @@ async def delivery_analysis_search(delivery_number: str):
         # Load read rates cache first (used in calculations)
         read_rates_cache = load_read_rates()
         
-        # Calculate delivery case summary
-        total_po_qty = 0
+        # Calculate delivery case summary using freight_bill_qty (handles split POs correctly)
+        freight_bill_qty = po_rows[0].get('freight_bill_qty', 0) if po_rows else 0
+        if freight_bill_qty:
+            try:
+                total_po_qty = int(freight_bill_qty) if isinstance(freight_bill_qty, str) else freight_bill_qty
+            except:
+                total_po_qty = 0
+        else:
+            # Fallback if freight_bill_qty missing
+            total_po_qty = sum([int(row.get('whpk_order_qty', 0)) if isinstance(row.get('whpk_order_qty'), (int, str)) else 0 for row in po_rows])
+        
+        trailer = po_rows[0].get('trailer', 'Unknown') if po_rows else 'Unknown'
+        
+        # Calculate performance metrics
         total_perf = 0
         items_with_data = 0
+        items_without_data = 0
         
-        for row in po_rows:
-            qty = row.get('whpk_order_qty', 0)
-            if qty:
-                try:
-                    total_po_qty += int(qty) if isinstance(qty, str) else qty
-                except:
-                    pass
-            
-            mds_id = str(row.get('mds_fam_id', ''))
-            rate_data = read_rates_cache.get(mds_id, [])
+        for mds_id in mds_fam_ids:
+            rate_data = read_rates_cache.get(str(mds_id), [])
             if rate_data:
                 avg_perf = get_avg_performance(rate_data)
                 total_perf += avg_perf
                 items_with_data += 1
+            else:
+                items_without_data += 1
         
         avg_read_rate = (total_perf / items_with_data) if items_with_data > 0 else 0
-        estimated_good = int(total_po_qty * (avg_read_rate / 100))
-        estimated_bad = int(total_po_qty * ((100 - avg_read_rate) / 100))
-        no_history = len(mds_fam_ids) - items_with_data
+        no_history = items_without_data
         
-        # Calculate no history cases (sum of quantities for items with no read rate data)
-        no_history_qty = 0
-        items_with_history = set()
-        for mds_id in mds_fam_ids:
-            if read_rates_cache.get(str(mds_id), []):
-                items_with_history.add(str(mds_id))
+        # Proportionally adjust estimates based on no-history ratio
+        no_history_ratio = no_history / len(mds_fam_ids) if mds_fam_ids else 0
+        data_ratio = 1 - no_history_ratio
         
-        for row in po_rows:
-            if str(row.get('mds_fam_id', '')) not in items_with_history:
-                qty = row.get('whpk_order_qty', 0)
-                if qty:
-                    try:
-                        no_history_qty += int(qty) if isinstance(qty, str) else qty
-                    except:
-                        pass
+        estimated_good = int(total_po_qty * (avg_read_rate / 100) * data_ratio)
+        estimated_bad = int(total_po_qty * ((100 - avg_read_rate) / 100) * data_ratio)
+        no_history_qty = int(total_po_qty * no_history_ratio)
         
         # Build summary section with timing
         overall_elapsed = time.time() - overall_start
-        summary_html = f'''<div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-6">
+        split_po_notice = f"<div class='bg-purple-50 border-l-4 border-purple-600 p-4 rounded-lg mb-6'><strong class='text-purple-700'>Note: Split POs & Pure Loads</strong><p class='text-sm text-purple-600 mt-1'>Quantities based on freight_bill_qty ({total_po_qty:,} cases) for trailer {trailer}. Projected cases proportionally adjusted.</p></div>"
+        summary_html = split_po_notice + f'''<div class="bg-blue-50 border-l-4 border-blue-600 p-6 rounded-lg mb-6">
             <h2 class="text-2xl font-bold text-blue-700 mb-4">Delivery Summary</h2>
             <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
                 <div class="bg-white p-3 rounded border border-blue-200"><div class="text-2xl font-bold text-blue-600">{record_count}</div><div class="text-xs text-gray-600 mt-1">PO Lines</div></div>
