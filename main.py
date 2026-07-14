@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, Response, JSONResponse
 import httpx
 from fpdf import FPDF
 from dotenv import load_dotenv
+from cache_manager import get_cache_manager
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
@@ -3350,9 +3351,19 @@ async def delivery_analysis_search(delivery_number: str):
                 "Wmt-Userid": wmt_userid
             }
             
+            # Use cache for MDM results (2-day TTL)
+            cache = get_cache_manager()
+            
             # Use synchronous HTTP client (no asyncio issues)
             with httpx.Client(verify=False, timeout=30.0) as client:
                 for mds_id in problematic_mds_ids:
+                    # Check cache first
+                    cached_mdm = cache.get(f"mdm_{mds_id}", category="items")
+                    if cached_mdm:
+                        cached_mdm["acl_details"] = problematic_details.get(str(mds_id), {})
+                        problematic_items_data.append(cached_mdm)
+                        progress.log("MDM", f"Cache hit for MDS {mds_id}")
+                        continue
                     try:
                         api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
                         response = client.get(api_url, headers=mdm_headers)
@@ -3363,6 +3374,10 @@ async def delivery_analysis_search(delivery_number: str):
                         item_data["mds_fam_id"] = str(mds_id)
                         item_data["acl_details"] = problematic_details.get(str(mds_id), {})
                         problematic_items_data.append(item_data)
+                        
+                        # Cache MDM data (without acl_details which is delivery-specific)
+                        mdm_cache_data = {k: v for k, v in item_data.items() if k != "acl_details"}
+                        cache.set(f"mdm_{mds_id}", mdm_cache_data, category="items")
                         
                         progress.log("MDM", f"Fetched MDM data for MDS {mds_id}")
                     except Exception as e:
@@ -3396,7 +3411,7 @@ async def delivery_analysis_search(delivery_number: str):
             vnpk_height = item_data.get("vnpk_height", "")
             casepack = item_data.get("casepack_type", "")
             
-            chart_html = get_read_rate_chart(str(mds_id))
+            # SKIP: chart_html = get_read_rate_chart(str(mds_id))  # Disabled - too slow for card display
             
             image_display = f'<img src="{image_url}" class="w-full h-40 object-cover rounded mb-2 border">'
             if not image_url:
