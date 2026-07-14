@@ -3123,17 +3123,13 @@ async def delivery_analysis_search(delivery_number: str):
         # Load read rates cache first (used in calculations)
         read_rates_cache = load_read_rates()
         
-        # Calculate delivery case summary using freight_bill_qty (handles split POs correctly)
-        freight_bill_qty = po_rows[0].get('freight_bill_qty', 0) if po_rows else 0
-        if freight_bill_qty:
-            try:
-                total_po_qty = int(freight_bill_qty) if isinstance(freight_bill_qty, str) else freight_bill_qty
-            except:
-                total_po_qty = 0
-        else:
-            # Fallback if freight_bill_qty missing
-            total_po_qty = sum([int(row.get('whpk_order_qty', 0)) if isinstance(row.get('whpk_order_qty'), (int, str)) else 0 for row in po_rows])
+        # Calculate delivery case summary using adjusted quantities
+        # adjusted quantities account for split POs
+        total_po_qty = sum([int(row.get('whpk_adjusted_qty', row.get('whpk_order_qty', 0))) 
+                           if isinstance(row.get('whpk_adjusted_qty', row.get('whpk_order_qty')), (int, str)) 
+                           else 0 for row in po_rows])
         
+        # Get trailer info
         trailer = po_rows[0].get('trailer', 'Unknown') if po_rows else 'Unknown'
         
         # Calculate performance metrics
@@ -3218,7 +3214,7 @@ async def delivery_analysis_search(delivery_number: str):
                     </span>
                 </td>
                 <td class="px-4 py-3 text-sm">{row.get("vendor_stock_id", "—")}</td>
-                <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_order_qty", "—")}</td>
+                <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_adjusted_qty", row.get("whpk_order_qty", "—"))}</td>
                 <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_max_rcv_qty", "—")}</td>
             </tr>'''
         

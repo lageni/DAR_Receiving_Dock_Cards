@@ -156,11 +156,50 @@ def batch_get_read_rates(mds_fam_ids: list, progress: ProgressTracker) -> dict:
     return batching_data
 
 
-def apply_batching_to_delivery(delivery_data: dict) -> dict:
-    """Take delivery query results and apply batching to all mds_fam_ids.
+
+def apply_freight_proportions(data: list) -> list:
+    """Adjust whpk_order_qty based on freight_bill_qty proportions.
     
-    Augments the delivery_data with read rate data for each mds_fam_id.
+    When a PO is split, each line shows full PO qty, but freight_bill_qty 
+    shows only THIS delivery's share. Calculates adjusted qty per delivery.
     """
+    if not data:
+        return data
+    
+    # Group by po_nbr
+    po_groups = {}
+    for row in data:
+        po_nbr = row.get('po_nbr')
+        if po_nbr not in po_groups:
+            po_groups[po_nbr] = {'lines': [], 'freight': 0, 'total_whpk': 0}
+        po_groups[po_nbr]['lines'].append(row)
+        po_groups[po_nbr]['freight'] = row.get('freight_bill_qty', 0)
+        try:
+            whpk = int(row.get('whpk_order_qty', 0)) if isinstance(row.get('whpk_order_qty'), (int, str)) else 0
+            po_groups[po_nbr]['total_whpk'] += whpk
+        except:
+            pass
+    
+    # Apply adjustment
+    for row in data:
+        po_nbr = row.get('po_nbr')
+        group = po_groups.get(po_nbr, {})
+        freight = group.get('freight', 0)
+        total_whpk = group.get('total_whpk', 1)
+        try:
+            original_qty = int(row.get('whpk_order_qty', 0)) if isinstance(row.get('whpk_order_qty'), (int, str)) else 0
+            if total_whpk > 0 and original_qty > 0:
+                row['whpk_adjusted_qty'] = int(original_qty * freight / total_whpk)
+            else:
+                row['whpk_adjusted_qty'] = original_qty
+        except:
+            row['whpk_adjusted_qty'] = row.get('whpk_order_qty', 0)
+    
+    return data
+
+
+def apply_batching_to_delivery(delivery_data: dict) -> dict:
+    """Apply batching and freight proportions to delivery data."""
     
     progress = delivery_data.get("progress", ProgressTracker())
     
@@ -168,14 +207,18 @@ def apply_batching_to_delivery(delivery_data: dict) -> dict:
         progress.log("ERROR", "Skipping batching due to query failure")
         return delivery_data
     
-    # Build a mapping: mds_fam_id -> read rate data (efficiently)
+    # Apply freight proportions first
+    progress.log("FREIGHT", "Applying freight proportions to line quantities")
+    delivery_data["data"] = apply_freight_proportions(delivery_data.get("data", []))
+    
+    # Then load batching data
     progress.log("BATCH", "Starting batch load of read rate data")
     batching_data = batch_get_read_rates(delivery_data.get("mds_fam_ids", []), progress)
     
-    # Augment each row in delivery data with batching info
+    # Augment rows
     progress.log("AUGMENT", f"Augmenting {len(delivery_data['data'])} rows with batching data")
     enriched_data = []
-    for idx, row in enumerate(delivery_data["data"], 1):
+    for row in delivery_data["data"]:
         mds_fam_id = str(row.get("mds_fam_id", ""))
         row["batching_info"] = batching_data.get(mds_fam_id, {})
         enriched_data.append(row)
