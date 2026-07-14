@@ -3077,9 +3077,13 @@ async def delivery_analysis_search(delivery_number: str):
     try:
         # Check if full HTML page is cached (skip all analysis if so)
         cache = get_cache_manager()
-        cached_html = cache.get(f"html_{delivery_number}", category="deliveries")
+        cache_key = f"html_{delivery_number}"
+        cached_html = cache.get(cache_key, category="deliveries")
         if cached_html:
+            print(f"[CACHE-HIT] HTML cache hit for delivery {delivery_number} ({len(cached_html)} bytes)")
             return cached_html
+        else:
+            print(f"[CACHE-MISS] No HTML cache for delivery {delivery_number}")
         
         # Step 1: Query Informix
         delivery_data = get_delivery_po_data(delivery_number)
