@@ -3412,7 +3412,11 @@ async def delivery_analysis_search(delivery_number: str):
             "approved_count": approved_count,
             "no_history_count": no_history_count
         }
-        cache.set(f"pdf_analysis_{delivery_number}", analysis_cache, category="deliveries")
+        try:
+            cache.set(f"pdf_analysis_{delivery_number}", analysis_cache, category="deliveries")
+            print(f"[ANALYSIS-CACHE-WRITE] Cached analysis for {delivery_number} ({len(problematic_items_data)} problematic items)")
+        except Exception as e:
+            print(f"[ANALYSIS-CACHE-WRITE-ERROR] Failed to cache analysis: {e}")
         
         # Step 3: Build cards HTML with images and details
         cards_html = ""
@@ -3584,7 +3588,9 @@ def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false")
     try:
         # === CACHE CHECK: Skip analysis if just done on web page ===
         cache = get_cache_manager()
-        cached_analysis = cache.get(f"pdf_analysis_{delivery_number}", category="deliveries")
+        cache_key = f"pdf_analysis_{delivery_number}"
+        print(f"[PDF-CACHE-CHECK] Looking for key: {cache_key}")
+        cached_analysis = cache.get(cache_key, category="deliveries")
         
         if cached_analysis:
             print(f"[PDF-CACHE-HIT] Using cached analysis (saving ~15 seconds)")
