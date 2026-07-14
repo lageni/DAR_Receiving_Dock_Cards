@@ -3178,45 +3178,30 @@ async def delivery_analysis_search(delivery_number: str):
             mds_id = item.get("mds_fam_id", "")
             mdm_data_lookup[str(mds_id)] = item
         
-        # Build detailed table with MDM columns
-        table_rows = ""
+        # Build detailed table with MDM columns (optimized with list)
+        table_rows_list = []
         for idx, row in enumerate(po_rows, 1):
-            mds_fam_id = row.get("mds_fam_id", "")
+            mds_fam_id = str(row.get("mds_fam_id", ""))
             batching_info = row.get("batching_info", {})
             batch_record_count = batching_info.get("record_count", 0)
             
             # Get MDM data if available
-            mdm_item = mdm_data_lookup.get(str(mds_fam_id), {})
+            mdm_item = mdm_data_lookup.get(mds_fam_id, {})
             item_name = mdm_item.get("item_name", "—")
             gtin = mdm_item.get("gtin", "—")
-            if gtin and len(gtin) > 15:
+            if isinstance(gtin, str) and len(gtin) > 15:
                 gtin = gtin[:12] + "..."
-            vnpk_length = mdm_item.get("vnpk_length", "")
-            vnpk_width = mdm_item.get("vnpk_width", "")
-            vnpk_height = mdm_item.get("vnpk_height", "")
-            dimensions = f"{vnpk_length}x{vnpk_width}x{vnpk_height}" if any([vnpk_length, vnpk_width, vnpk_height]) else "—"
+            
+            # Build dimensions from MDM
+            dims = [str(mdm_item.get(k, "")) for k in ["vnpk_length", "vnpk_width", "vnpk_height"]]
+            dimensions = "x".join(d for d in dims if d) if any(dims) else "—"
             casepack = mdm_item.get("casepack_type", "—")
             
-            bg_class = "bg-white" if idx % 2 == 0 else "bg-gray-50"
+            bg_class = "bg-gray-50" if idx % 2 else "bg-white"
             
-            table_rows += f'''<tr class="{bg_class} border-b hover:bg-blue-50 transition">
-                <td class="px-4 py-3 text-sm font-mono text-gray-600">{idx}</td>
-                <td class="px-4 py-3 text-sm font-bold text-blue-600">{mds_fam_id}</td>
-                <td class="px-4 py-3 text-sm text-gray-700">{item_name}</td>
-                <td class="px-4 py-3 text-sm text-gray-700 font-mono text-xs">{gtin}</td>
-                <td class="px-4 py-3 text-sm text-gray-700">{dimensions}</td>
-                <td class="px-4 py-3 text-sm text-gray-700">{casepack}</td>
-                <td class="px-4 py-3 text-sm">{row.get("po_nbr", "—")}</td>
-                <td class="px-4 py-3 text-sm">{row.get("po_line_nbr", "—")}</td>
-                <td class="px-4 py-3 text-sm text-center">
-                    <span class="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
-                        {batch_record_count}
-                    </span>
-                </td>
-                <td class="px-4 py-3 text-sm">{row.get("vendor_stock_id", "—")}</td>
-                <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_adjusted_qty", row.get("whpk_order_qty", "—"))}</td>
-                <td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_max_rcv_qty", "—")}</td>
-            </tr>'''
+            table_rows_list.append(f'<tr class="{bg_class} border-b hover:bg-blue-50 transition"><td class="px-4 py-3 text-sm font-mono text-gray-600">{idx}</td><td class="px-4 py-3 text-sm font-bold text-blue-600">{mds_fam_id}</td><td class="px-4 py-3 text-sm text-gray-700">{item_name}</td><td class="px-4 py-3 text-sm text-gray-700 font-mono text-xs">{gtin}</td><td class="px-4 py-3 text-sm text-gray-700">{dimensions}</td><td class="px-4 py-3 text-sm text-gray-700">{casepack}</td><td class="px-4 py-3 text-sm">{row.get("po_nbr", "—")}</td><td class="px-4 py-3 text-sm">{row.get("po_line_nbr", "—")}</td><td class="px-4 py-3 text-sm text-center"><span class="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">{batch_record_count}</span></td><td class="px-4 py-3 text-sm">{row.get("vendor_stock_id", "—")}</td><td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_adjusted_qty", row.get("whpk_order_qty", "—"))}</td><td class="px-4 py-3 text-sm text-right text-gray-700">{row.get("whpk_max_rcv_qty", "—")}</td></tr>')
+        
+        table_rows = "".join(table_rows_list)
         
         table_html = f'''<div class="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
             <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">

@@ -4,10 +4,22 @@ SQLite Database initialization and migration from read_rates.csv
 """
 import sqlite3
 import csv
+import os
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
 
-DB_PATH = Path(__file__).parent / "read_rates.db"
+load_dotenv()
+
+# Use DATABASE_PATH from .env if set, otherwise default to local
+db_path_env = os.getenv('DATABASE_PATH', '')
+if db_path_env:
+    DB_PATH = Path(db_path_env)
+else:
+    DB_PATH = Path(__file__).parent / "read_rates.db"
+
+# Create parent directories if they don't exist
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 def create_database():
     """Create SQLite database schema for read_rates"""

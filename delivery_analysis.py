@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 from informix_connect import InformixConnection
 from batch_report import get_item_read_rate_data
+from cache_manager import get_cache_manager
 
 
 class ProgressTracker:
@@ -47,7 +48,19 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
     if not progress:
         progress = ProgressTracker()
     
-    progress.log("QUERY", "Starting Informix query for delivery: " + str(delivery_number))
+    progress.log("QUERY", "Starting delivery analysis for: " + str(delivery_number))
+    
+    # Check cache first
+    cache = get_cache_manager()
+    cache_key = f"delivery_{delivery_number}"
+    cached_result = cache.get(cache_key, category="deliveries")
+    
+    if cached_result:
+        progress.log("QUERY", "Using cached data (2 days fresh)")
+        cached_result['progress'] = progress
+        return cached_result
+    
+    progress.log("QUERY", "Cache miss - querying Informix")
     
     # Build the query (updated to include freight_bill_qty and trailer info)
     query = f"""
@@ -99,7 +112,7 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
         mds_fam_ids = list(set(str(row['mds_fam_id']) for row in results if row.get('mds_fam_id')))
         progress.log("EXTRACT", f"Found {len(mds_fam_ids)} unique mds_fam_ids")
         
-        return {
+        result = {
             "success": True,
             "data": results,
             "record_count": len(results),
@@ -107,6 +120,13 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
             "error": None,
             "progress": progress
         }
+        
+        # Cache the result (without progress object)
+        cache_data = {k: v for k, v in result.items() if k != 'progress'}
+        cache.set(cache_key, cache_data, category="deliveries")
+        progress.log("CACHE", "Data cached for 2 days")
+        
+        return result
     
     except Exception as e:
         progress.log("ERROR", f"Informix query failed: {str(e)}")
