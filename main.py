@@ -1,6 +1,7 @@
 import os
 import json
 import csv
+import io
 import sqlite3
 import uuid
 from pathlib import Path
@@ -9,7 +10,7 @@ from io import BytesIO
 from collections import defaultdict
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, Response, JSONResponse
+from fastapi.responses import HTMLResponse, Response, JSONResponse, FileResponse
 import httpx
 from fpdf import FPDF
 from dotenv import load_dotenv
@@ -3577,8 +3578,34 @@ def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false")
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
     
     include_approved_bool = include_approved.lower() == "true"
+    import time
+    pdf_start = time.time()
     
     try:
+        # === CACHE CHECK: Skip analysis if just done on web page ===
+        cache = get_cache_manager()
+        cached_analysis = cache.get(f"pdf_analysis_{delivery_number}", category="deliveries")
+        
+        if cached_analysis:
+            print(f"[PDF-CACHE-HIT] Using cached analysis (saving ~15 seconds)")
+            problematic_items_data = cached_analysis.get('problematic_items_data', [])
+            # Jump directly to PDF generation
+            if problematic_items_data:
+                pdf_bytes = generate_batch_pdf(problematic_items_data)
+            else:
+                # No problematic items - create summary-only PDF
+                pdf = FPDF(orientation='L', unit='in', format='Letter')
+                pdf.add_page()
+                pdf.set_font('Helvetica', 'B', 18)
+                pdf.set_text_color(0, 128, 0)
+                pdf.cell(0, 0.3, f"Delivery {delivery_number} - All Items ACL APPROVED", new_x=0, new_y=0.5)
+                pdf_bytes = pdf.output()
+            
+            elapsed = time.time() - pdf_start
+            print(f"[PDF-CACHE-HIT] Generated in {elapsed:.2f}s")
+            return FileResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", filename=f"delivery_{delivery_number}_analysis.pdf")
+        
+        print(f"[PDF-CACHE-MISS] Cache miss - running full analysis")
         # Query and batch the data
         delivery_data = get_delivery_po_data(delivery_number)
         if not delivery_data["success"]:
