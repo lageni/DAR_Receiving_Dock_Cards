@@ -3075,6 +3075,12 @@ async def delivery_analysis_search(delivery_number: str):
     overall_start = time.time()
     
     try:
+        # Check if full HTML page is cached (skip all analysis if so)
+        cache = get_cache_manager()
+        cached_html = cache.get(f"html_{delivery_number}", category="deliveries")
+        if cached_html:
+            return cached_html
+        
         # Step 1: Query Informix
         delivery_data = get_delivery_po_data(delivery_number)
         progress = delivery_data.get("progress")
@@ -3515,11 +3521,17 @@ async def delivery_analysis_search(delivery_number: str):
             <p class="text-xs text-gray-400 mt-3">Also check browser console (F12) for additional details</p>
         </details>'''
         
-        return f'''{top_buttons_html}
+        html_response = f'''{top_buttons_html}
 {summary_html}
 {cards_section}
 {table_html}
 {footer_html}'''
+        
+        # Cache the full HTML response for 2 days
+        cache.set(f"html_{delivery_number}", html_response, category="deliveries")
+        progress.log("CACHE", "Full HTML response cached")
+        
+        return html_response
     
     except Exception as e:
         import traceback
