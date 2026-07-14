@@ -49,10 +49,12 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
     
     progress.log("QUERY", "Starting Informix query for delivery: " + str(delivery_number))
     
-    # Build the query (replace rcv.appointment_nbr with the delivery number)
+    # Build the query (updated to include freight_bill_qty and trailer info)
     query = f"""
     select
         rcv.appointment_nbr as delivery_nbr,
+        bill.freight_bill_qty,
+        bill.tr_visual_trailer as trailer,
         po.po_type_code,
         po.po_dept_nbr,
         po.po_order_date,
@@ -74,6 +76,8 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
     inner join dc_common:informix.po_line line on po.pur_ord_id = line.pur_ord_id
     left join rdc_db:informix.dc_receiver rcv on po.po_nbr = rcv.po_nbr
         and po.pur_ord_id = rcv.pur_ord_id
+    left join dc_common:informix.dc_freight_bill bill on bill.appointment_nbr = rcv.appointment_nbr
+        and bill.frt_bill_nbr = rcv.frt_bill_nbr
     where po.must_arrive_by_dt > today - 60
     and mod(po.po_type_code, 2) = 1
     and rcv.appointment_nbr = {delivery_number}
