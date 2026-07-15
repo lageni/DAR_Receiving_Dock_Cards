@@ -3279,7 +3279,6 @@ async def delivery_analysis_search(delivery_number: str):
         
         # Build read rate cards for ONLY problematic items
         # Step 1: First pass - identify problematic items (ONLY if they have history)
-        read_rates_cache = load_read_rates()
         problematic_mds_ids = []
         problematic_details = {}  # Store ACL details
         approved_count = 0
@@ -3287,6 +3286,14 @@ async def delivery_analysis_search(delivery_number: str):
         no_history_qty = 0
         total_items = len(mds_fam_ids)
         items_with_history = set()
+        
+        # BUILD LOOKUP DICT ONCE (O(n) instead of O(n²) nested loop)
+        po_rows_by_mds_id = {}
+        for row in po_rows:
+            mds_id = str(row.get('mds_fam_id', ''))
+            if mds_id not in po_rows_by_mds_id:
+                po_rows_by_mds_id[mds_id] = []
+            po_rows_by_mds_id[mds_id].append(row)
         
         progress.log("ANALYZE", f"Analyzing {total_items} items for ACL status")
         
@@ -3299,15 +3306,14 @@ async def delivery_analysis_search(delivery_number: str):
             # SKIP items with NO history - don't mark as problematic
             if not rate_data:
                 no_history_count += 1
-                # Sum quantities for items with no history
-                for row in po_rows:
-                    if str(row.get('mds_fam_id', '')) == str(mds_id):
-                        qty = row.get('whpk_order_qty', 0)
-                        if qty:
-                            try:
-                                no_history_qty += int(qty) if isinstance(qty, str) else qty
-                            except:
-                                pass
+                # Sum quantities for items with no history using lookup dict (FAST!)
+                for row in po_rows_by_mds_id.get(str(mds_id), []):
+                    qty = row.get('whpk_order_qty', 0)
+                    if qty:
+                        try:
+                            no_history_qty += int(qty) if isinstance(qty, str) else qty
+                        except:
+                            pass
                 continue
             
             # Item HAS history - process it
@@ -3546,7 +3552,6 @@ async def delivery_analysis_search(delivery_number: str):
         html_response = f'''{top_buttons_html}
 {summary_html}
 {cards_section}
-{table_html}
 {footer_html}'''
         
         # Cache the full HTML response for 2 days
@@ -3576,147 +3581,112 @@ async def delivery_analysis_search(delivery_number: str):
         </script>'''
 
 
+
+
+
 @app.get("/api/delivery-analysis/pdf")
 def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false"):
-    """Generate PDF batch report for delivery analysis - FULL batch-style report with images and charts."""
+    """Generate PDF with summary, priority ranking, and caching."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
-    
-    include_approved_bool = include_approved.lower() == "true"
     import time
     pdf_start = time.time()
-    
     try:
-        # === CACHE CHECK: Skip analysis if just done on web page ===
         cache = get_cache_manager()
-        cache_key = f"pdf_analysis_{delivery_number}"
-        print(f"[PDF-CACHE-CHECK] Looking for key: {cache_key}")
-        cached_analysis = cache.get(cache_key, category="deliveries")
-        
-        if cached_analysis:
-            print(f"[PDF-CACHE-HIT] Using cached analysis (saving ~15 seconds)")
-            problematic_items_data = cached_analysis.get('problematic_items_data', [])
-            # Jump directly to PDF generation
-            if problematic_items_data:
-                pdf_bytes = generate_batch_pdf(problematic_items_data)
-            else:
-                # No problematic items - create summary-only PDF
-                pdf = FPDF(orientation='L', unit='in', format='Letter')
-                pdf.add_page()
-                pdf.set_font('Helvetica', 'B', 18)
-                pdf.set_text_color(0, 128, 0)
-                pdf.cell(0, 0.3, f"Delivery {delivery_number} - All Items ACL APPROVED", new_x=0, new_y=0.5)
-                pdf_bytes = pdf.output()
-            
-            elapsed = time.time() - pdf_start
-            print(f"[PDF-CACHE-HIT] Generated in {elapsed:.2f}s")
-            return FileResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", filename=f"delivery_{delivery_number}_analysis.pdf")
-        
-        print(f"[PDF-CACHE-MISS] Cache miss - running full analysis")
-        # Query and batch the data
+        cache_key = f"pdf_summary_{delivery_number}"
+        cached_pdf = cache.get(cache_key, category="deliveries")
+        if cached_pdf:
+            print(f"[PDF-CACHE-HIT] Using cached PDF")
+            pdf_bytes = cached_pdf.get('pdf_bytes')
+            return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="delivery_{delivery_number}_report.pdf"'})
+        print(f"[PDF-CACHE-MISS] Running analysis")
         delivery_data = get_delivery_po_data(delivery_number)
         if not delivery_data["success"]:
             return JSONResponse({"error": "Query failed"}, status_code=400)
-        
         delivery_data = apply_batching_to_delivery(delivery_data)
         mds_fam_ids = delivery_data.get('mds_fam_ids', [])
         po_rows = delivery_data.get('data', [])
-        
-        # Step 1: Identify problematic items (SAME LOGIC AS WEB PAGE)
         read_rates_cache = load_read_rates()
         problematic_mds_ids = []
         problematic_details = {}
-        
+        total_delivery_qty = 0
+        po_rows_by_mds_id = {}
+        for row in po_rows:
+            mds_id = str(row.get('mds_fam_id', ''))
+            if mds_id not in po_rows_by_mds_id:
+                po_rows_by_mds_id[mds_id] = []
+            po_rows_by_mds_id[mds_id].append(row)
+            qty = int(row.get('whpk_adjusted_qty', row.get('whpk_order_qty', 0))) if isinstance(row.get('whpk_adjusted_qty', row.get('whpk_order_qty')), (int, str)) else 0
+            total_delivery_qty += qty
         for mds_id in mds_fam_ids:
             rate_data = read_rates_cache.get(str(mds_id), [])
-            
-            # SKIP items with NO history (same as web page)
             if not rate_data:
                 continue
-            
             avg_perf = get_avg_performance(rate_data)
             trend = get_trend_status(rate_data)
-            recommendation, color_hex, gradient_class = get_recommendation(avg_perf, trend)
-            
-            if avg_perf >= 85:
-                acl_status_name = "ACL APPROVED"
-                is_problematic = False
-            elif avg_perf < 50:
-                acl_status_name = "FAILING"
-                is_problematic = True
-            elif "Improving" in trend:
-                acl_status_name = "ADEQUATE PERFORMANCE"
-                is_problematic = True
-            else:
-                acl_status_name = "REQUIRES MANUAL INSPECTION"
-                is_problematic = True
-            
+            is_problematic = not (avg_perf >= 85)
             if is_problematic:
+                item_qty = sum([int(row.get('whpk_adjusted_qty', row.get('whpk_order_qty', 0))) if isinstance(row.get('whpk_adjusted_qty', row.get('whpk_order_qty')), (int, str)) else 0 for row in po_rows_by_mds_id.get(str(mds_id), [])])
+                bad_cases = int(item_qty * (100 - avg_perf) / 100)
+                priority_score = (100 - avg_perf) * bad_cases
                 problematic_mds_ids.append(mds_id)
-                problematic_details[str(mds_id)] = {
-                    "avg_perf": avg_perf,
-                    "trend": trend,
-                    "acl_status": acl_status_name,
-                    "recommendation": recommendation,
-                    "rate_data": rate_data
-                }
-        
-        # Step 2: Fetch MDM data for problematic items
+                problematic_details[str(mds_id)] = {"avg_perf": avg_perf, "trend": trend, "item_qty": item_qty, "bad_cases": bad_cases, "priority_score": priority_score}
+        problematic_mds_ids.sort(key=lambda mds_id: problematic_details[str(mds_id)]['priority_score'], reverse=True)
         problematic_items_data = []
         if problematic_mds_ids:
             api_key = os.getenv("MDM_API_KEY", "")
-            facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
-            facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
-            wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
-            
-            mdm_headers = {
-                "Api-Key": api_key,
-                "Facilitynum": facility_num,
-                "Facilitycountrycode": facility_country,
-                "Wmt-Userid": wmt_userid
-            }
-            
-            # Use synchronous HTTP client
+            mdm_headers = {"Api-Key": api_key, "Facilitynum": os.getenv("MDM_FACILITY_NUM", "6068"), "Facilitycountrycode": os.getenv("MDM_FACILITY_COUNTRY_CODE", "US"), "Wmt-Userid": os.getenv("MDM_WMT_USERID", "mdm-ui")}
             with httpx.Client(verify=False, timeout=30.0) as client:
                 for mds_id in problematic_mds_ids:
                     try:
                         api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
                         response = client.get(api_url, headers=mdm_headers)
-                        response.raise_for_status()
                         mdm_data = response.json()
                         item_data = extract_item_data(mdm_data)
                         item_data["mds_fam_id"] = str(mds_id)
+                        item_data["acl_details"] = problematic_details.get(str(mds_id), {})
                         problematic_items_data.append(item_data)
                     except Exception as e:
-                        print(f"[DELIVERY-PDF-MDM] Error fetching MDS {mds_id}: {str(e)}")
-                        problematic_items_data.append({
-                            "mds_fam_id": str(mds_id),
-                            "item_name": f"MDS {mds_id}",
-                            "image_url": ""
-                        })
-        
-        # Step 3: Generate PDF with only problematic items (include_approved parameter reserved for future)
+                        problematic_items_data.append({"mds_fam_id": str(mds_id), "item_name": f"MDS {mds_id}", "image_url": "", "acl_details": problematic_details.get(str(mds_id), {})})
+        pdf = FPDF(orientation='L', unit='in', format='Letter')
+        pdf.add_page()
+        pdf.set_font('Helvetica', 'B', 22)
+        pdf.set_text_color(0, 51, 102)
+        pdf.cell(0, 0.4, f"Delivery {delivery_number} - Analysis Report", new_x=0, new_y=0.5)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.set_text_color(0, 0, 0)
+        total_bad_cases = sum([d.get('bad_cases', 0) for d in problematic_details.values()])
+        avg_perf = sum([d.get('avg_perf', 0) for d in problematic_details.values()]) / len(problematic_details) if problematic_details else 0
+        pdf.cell(0, 0.2, f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}", new_x=0, new_y=0.2)
+        pdf.cell(0, 0.2, f"Total Items: {len(mds_fam_ids)} | Problematic: {len(problematic_details)} | Qty: {total_delivery_qty:,}", new_x=0, new_y=0.2)
+        pdf.cell(0, 0.2, f"Projected Bad Cases: {total_bad_cases:,} | Avg Perf: {avg_perf:.0f}%", new_x=0, new_y=0.3)
         if problematic_items_data:
-            pdf_bytes = generate_batch_pdf(problematic_items_data)
+            pdf.cell(0, 0.2, f"Priority-Ranked Items (WORST FIRST):", new_x=0, new_y=0.3)
+            col_widths = [0.8, 3.5, 0.8, 1.0, 1.0, 1.0]
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.set_fill_color(200, 220, 255)
+            headers = ["Rank", "Item Name", "MDS", "Perf %", "Qty", "Bad Cases"]
+            for i, h in enumerate(headers):
+                pdf.cell(col_widths[i], 0.25, h, border=1, align='C' if i in [0,2,3] else 'L', fill=True, new_x=0)
+            pdf.ln(0.25)
+            pdf.set_font('Helvetica', '', 9)
+            for idx, item in enumerate(problematic_items_data, 1):
+                acl = item.get('acl_details', {})
+                name = (item.get('item_name', 'N/A')[:25] + '...') if len(item.get('item_name', '')) > 25 else item.get('item_name', 'N/A')
+                pdf.cell(col_widths[0], 0.22, str(idx), border=1, align='C', new_x=0)
+                pdf.cell(col_widths[1], 0.22, name, border=1, align='L', new_x=0)
+                pdf.cell(col_widths[2], 0.22, item.get('mds_fam_id', '')[:8], border=1, align='C', new_x=0)
+                pdf.cell(col_widths[3], 0.22, f"{acl.get('avg_perf', 0):.0f}%", border=1, align='C', new_x=0)
+                pdf.cell(col_widths[4], 0.22, f"{acl.get('item_qty', 0)}", border=1, align='R', new_x=0)
+                pdf.cell(col_widths[5], 0.22, f"{acl.get('bad_cases', 0)}", border=1, align='R', new_y=0.22)
         else:
-            # No problematic items - create summary-only PDF
-            pdf = FPDF(orientation='L', unit='in', format='Letter')
-            pdf.add_page()
-            pdf.set_font('Helvetica', 'B', 18)
             pdf.set_text_color(0, 128, 0)
-            pdf.cell(0, 0.3, f"Delivery {delivery_number} - All Items ACL APPROVED", new_x=0, new_y=0.5)
-            pdf.set_font('Helvetica', '', 12)
-            pdf.set_text_color(0, 0, 0)
-            pdf.cell(0, 0.2, f"No problematic items found. All {len(mds_fam_ids)} items have ACL APPROVED status.", new_x=0, new_y=0.2)
-            pdf_bytes = bytes(pdf.output())
-        
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="delivery_{delivery_number}_batch_report.pdf"'}
-        )
-    
+            pdf.set_font('Helvetica', 'B', 14)
+            pdf.cell(0, 0.4, "All Items ACL APPROVED!", new_x=0, new_y=0.5)
+        pdf_bytes = bytes(pdf.output())
+        cache.set(cache_key, {'pdf_bytes': pdf_bytes}, category="deliveries")
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="delivery_{delivery_number}_report.pdf"'})
     except Exception as e:
-        print(f"[DELIVERY-PDF] Error: {str(e)}")
+        print(f"[PDF-ERROR] {str(e)}")
         import traceback
         traceback.print_exc()
         return JSONResponse({"error": str(e)}, status_code=500)
