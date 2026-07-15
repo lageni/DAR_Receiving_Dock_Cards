@@ -99,6 +99,66 @@ def load_read_rates():
     return _read_rates_cache
 
 
+def load_read_rates_for_items(mds_fam_ids: list) -> dict:
+    """Load read rates ONLY for specific mds_fam_ids (SQL filtering - MUCH FASTER!).
+    
+    This avoids loading all 131k items when we only need a few hundred.
+    
+    Args:
+        mds_fam_ids: List of mds_fam_id values to query
+        
+    Returns:
+        dict[mds_fam_id] -> list of rate records
+    """
+    if not mds_fam_ids:
+        return {}
+    
+    db_path = get_database_path()
+    
+    if not Path(db_path).exists():
+        print(f"[WARNING] Database not found at {db_path}")
+        return {}
+    
+    rates_by_family = defaultdict(list)
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create placeholders for SQL IN clause
+        placeholders = ','.join('?' * len(mds_fam_ids))
+        
+        # Query ONLY the items we need (SQL-level filtering!)
+        query = f"""
+            SELECT mds_fam_id, acl_insert_date, acl_event_cnt, acl_null_cnt
+            FROM read_rates
+            WHERE mds_fam_id IN ({placeholders})
+            ORDER BY mds_fam_id, acl_insert_date
+        """
+        
+        cursor.execute(query, mds_fam_ids)
+        
+        for row in cursor.fetchall():
+            mds_fam_id, insert_date, event_cnt, null_cnt = row
+            if mds_fam_id and event_cnt and event_cnt > 0:
+                null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
+                rates_by_family[str(mds_fam_id)].append({
+                    "date": str(insert_date),
+                    "null_pct": null_pct,
+                    "event_cnt": event_cnt,
+                    "null_cnt": null_cnt
+                })
+        
+        conn.close()
+        print(f"[OPTIMIZED] Loaded {len(rates_by_family)} items (queried only {len(mds_fam_ids)} specific items from DB)")
+        
+    except Exception as e:
+        print(f"[ERROR] Loading read rates for items: {e}")
+        return {}
+    
+    return rates_by_family
+
+
 def format_date_for_chart(date_str: str) -> str:
     """Convert YYYY-MM-DD to abbreviated month+year (e.g., 'Dec 2025')."""
     try:
@@ -3381,8 +3441,8 @@ async def delivery_analysis_search(delivery_number: str):
         # Initialize problematic_items_data (will be populated later)
         problematic_items_data = []
         
-        # Load read rates cache first (used in calculations)
-        read_rates_cache = load_read_rates()
+        # Load read rates ONLY for items in THIS delivery (SQL filtering - FAST!)
+        read_rates_cache = load_read_rates_for_items(mds_fam_ids)
         
         # Calculate delivery case summary using adjusted quantities
         # adjusted quantities account for split POs
@@ -3526,8 +3586,21 @@ async def delivery_analysis_search(delivery_number: str):
         </details>'''
         
         # Build read rate cards for ONLY problematic items
-        # Step 1: First pass - identify problematic items (ONLY if they have history)
-        problematic_mds_ids = []
+        # CHECK CACHE FIRST - avoid re-analyzing every time!
+        analysis_cache_key = f"analysis_{delivery_number}"
+        cached_analysis = cache.get(analysis_cache_key, category="deliveries")
+        
+        if cached_analysis:
+            print(f"[ANALYSIS-CACHE-HIT] Using cached analysis for delivery {delivery_number}")
+            progress.log("ANALYZE", "Using cached problematic items analysis")
+            problematic_mds_ids = cached_analysis.get('problematic_mds_ids', [])
+            problematic_details = cached_analysis.get('problematic_details', {})
+            problematic_items_data = cached_analysis.get('problematic_items_data', [])
+            approved_count = cached_analysis.get('approved_count', 0)
+        else:
+            print(f"[ANALYSIS-CACHE-MISS] Running full problematic items analysis")
+            # Step 1: First pass - identify problematic items (ONLY if they have history)
+            problematic_mds_ids = []
         problematic_details = {}  # Store ACL details
         approved_count = 0
         no_history_count = 0
@@ -3655,6 +3728,16 @@ async def delivery_analysis_search(delivery_number: str):
                             "error": str(e),
                             "acl_details": problematic_details.get(str(mds_id), {})
                         })
+            
+            # Cache the analysis results
+            analysis_cache_data = {
+                'problematic_mds_ids': problematic_mds_ids,
+                'problematic_details': problematic_details,
+                'problematic_items_data': problematic_items_data,
+                'approved_count': approved_count
+            }
+            cache.set(analysis_cache_key, analysis_cache_data, category="deliveries")
+            print(f"[ANALYSIS-CACHE-WRITE] Cached analysis for {delivery_number} ({len(problematic_items_data)} problematic)")
         
         # Cache the analysis result (problematic_items_data + metadata) for PDF endpoint
         # This lets PDF generation skip re-analyzing if called shortly after web search
@@ -3863,7 +3946,9 @@ def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false")
         delivery_data = apply_batching_to_delivery(delivery_data)
         mds_fam_ids = delivery_data.get('mds_fam_ids', [])
         po_rows = delivery_data.get('data', [])
-        read_rates_cache = load_read_rates()
+        
+        # Use optimized version - only query items in THIS delivery
+        read_rates_cache = load_read_rates_for_items(mds_fam_ids)
         
         problematic_mds_ids = []
         problematic_details = {}
