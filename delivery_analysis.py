@@ -141,37 +141,88 @@ def get_delivery_po_data(delivery_number: str, progress: ProgressTracker = None)
 
 
 def batch_get_read_rates(mds_fam_ids: list, progress: ProgressTracker) -> dict:
-    """Efficiently batch-load read rate data for multiple mds_fam_ids.
+    """Efficiently batch-load read rate data - SQL FILTERING (FAST!)
     
-    This is faster than calling get_item_read_rate_data() individually.
+    Pre-filters at SQL level to only load items with avg performance < 85%.
+    This avoids loading data for ACL-approved items.
     """
     batching_data = {}
     
-    progress.log("BATCH", f"Loading read rate data for {len(mds_fam_ids)} items")
+    if not mds_fam_ids:
+        return batching_data
+    
+    progress.log("BATCH", f"Loading read rate data for {len(mds_fam_ids)} items (SQL-optimized)")
     batch_start = time.time()
     
-    for idx, mds_fam_id in enumerate(mds_fam_ids, 1):
-        try:
-            # Use the existing function
-            rate_data = get_item_read_rate_data(mds_fam_id)
-            batching_data[mds_fam_id] = rate_data
-            
-            # Log progress every 5 items
-            if idx % 5 == 0 or idx == len(mds_fam_ids):
-                elapsed = time.time() - batch_start
-                progress.log("BATCH", f"Loaded {idx}/{len(mds_fam_ids)} items ({elapsed:.2f}s)")
+    try:
+        import sqlite3
+        from pathlib import Path
         
-        except Exception as e:
-            batching_data[mds_fam_id] = {
-                "mds_fam_id": mds_fam_id,
-                "record_count": 0,
-                "records": [],
-                "error": str(e)
+        db_path = Path("L:\\Engineering\\DAR Docktag Cards\\read_rates.db")
+        if not db_path.exists():
+            progress.log("BATCH", "Database not found - skipping read rates")
+            return batching_data
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create placeholders for SQL IN clause
+        placeholders = ','.join('?' * len(mds_fam_ids))
+        
+        # Query with PERFORMANCE PRE-FILTERING at SQL level!
+        # Only loads items where avg(null_pct) < 85 (problematic items)
+        query = f"""
+            WITH item_performance AS (
+                SELECT 
+                    mds_fam_id,
+                    AVG(CAST(acl_null_cnt AS FLOAT) / CAST(acl_event_cnt AS FLOAT) * 100) as avg_performance
+                FROM read_rates
+                WHERE mds_fam_id IN ({placeholders})
+                  AND acl_event_cnt > 0
+                GROUP BY mds_fam_id
+                HAVING avg_performance < 85  -- Only load problematic items!
+            )
+            SELECT r.mds_fam_id, r.acl_insert_date, r.acl_event_cnt, r.acl_null_cnt
+            FROM read_rates r
+            INNER JOIN item_performance p ON r.mds_fam_id = p.mds_fam_id
+            WHERE r.acl_event_cnt > 0
+            ORDER BY r.mds_fam_id, r.acl_insert_date
+        """
+        
+        cursor.execute(query, mds_fam_ids)
+        
+        # Group results by mds_fam_id
+        from collections import defaultdict
+        rates_by_id = defaultdict(list)
+        
+        for row in cursor.fetchall():
+            mds_fam_id, insert_date, event_cnt, null_cnt = row
+            if event_cnt and event_cnt > 0:
+                null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
+                rates_by_id[str(mds_fam_id)].append({
+                    "date": str(insert_date),
+                    "null_pct": null_pct,
+                    "event_cnt": event_cnt,
+                    "null_cnt": null_cnt
+                })
+        
+        conn.close()
+        
+        # Build batching_data structure
+        for mds_id, records in rates_by_id.items():
+            batching_data[mds_id] = {
+                "mds_fam_id": mds_id,
+                "record_count": len(records),
+                "records": records
             }
-            progress.log("BATCH", f"Error loading {mds_fam_id}: {str(e)}")
-    
-    batch_elapsed = time.time() - batch_start
-    progress.log("BATCH", f"All read rate data loaded in {batch_elapsed:.2f}s")
+        
+        batch_elapsed = time.time() - batch_start
+        progress.log("BATCH", f"SQL-optimized: Loaded {len(batching_data)} problematic items (< 85% perf) in {batch_elapsed:.2f}s")
+        progress.log("BATCH", f"Skipped {len(mds_fam_ids) - len(batching_data)} ACL-approved items (no DB query!)")
+        
+    except Exception as e:
+        progress.log("BATCH", f"Error in SQL batch load: {str(e)}")
+        # Fall back to empty data
     
     return batching_data
 
