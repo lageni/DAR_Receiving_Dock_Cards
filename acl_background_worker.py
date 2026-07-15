@@ -1,1 +1,218 @@
-"""ACL Background Worker""" 
+"""ACL Background Worker
+
+Continuously monitors ACL 1, 2, and 3 for active deliveries.
+Pre-caches delivery analysis data for instant page loads.
+
+Runs every 120 seconds (2 minutes) in the background.
+"""
+
+import asyncio
+import httpx
+from datetime import datetime
+from typing import Dict, List, Optional
+from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
+
+
+class ACLMonitor:
+    """Background worker that monitors ACLs and pre-caches delivery analysis"""
+    
+    def __init__(self):
+        """Initialize the ACL monitor with empty cache"""
+        self.cache: Dict[str, Dict] = {
+            "acl1": {"deliveries": [], "analyzed": [], "last_update": None, "status": "idle"},
+            "acl2": {"deliveries": [], "analyzed": [], "last_update": None, "status": "idle"},
+            "acl3": {"deliveries": [], "analyzed": [], "last_update": None, "status": "idle"},
+        }
+        self._running = False
+        self._task: Optional[asyncio.Task] = None
+    
+    async def fetch_acl_deliveries(self, acl: str) -> List[Dict]:
+        """Fetch active deliveries from ABIA API for specified ACL
+        
+        Args:
+            acl: ACL identifier (acl1, acl2, or acl3)
+            
+        Returns:
+            List of delivery dictionaries with 'delivery' and 'station' keys
+        """
+        try:
+            api_url = f"https://abia.wal-mart.com/aclaware/fetchData/?dc=6068&acl={acl}"
+            
+            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+                response = await client.get(api_url)
+                response.raise_for_status()
+                data = response.json()
+            
+            deliveries = data.get('data', [])
+            print(f"[ACL-WORKER] {acl.upper()}: Fetched {len(deliveries)} active deliveries")
+            return deliveries
+            
+        except Exception as e:
+            print(f"[ACL-WORKER] Error fetching {acl.upper()} deliveries: {e}")
+            return []
+    
+    def analyze_delivery_sync(self, delivery_number: str) -> Optional[Dict]:
+        """Synchronously analyze a delivery and return enriched data
+        
+        Args:
+            delivery_number: Delivery number to analyze
+            
+        Returns:
+            Enriched delivery data with batching performance, or None on error
+        """
+        try:
+            # Fetch raw delivery data (uses cache if available)
+            delivery_data = get_delivery_po_data(delivery_number)
+            
+            if not delivery_data.get('success'):
+                print(f"[ACL-WORKER] Failed to fetch delivery {delivery_number}: {delivery_data.get('error')}")
+                return None
+            
+            # Apply batching analysis to get performance metrics
+            enriched = apply_batching_to_delivery(delivery_data)
+            
+            return enriched
+            
+        except Exception as e:
+            print(f"[ACL-WORKER] Error analyzing delivery {delivery_number}: {e}")
+            return None
+    
+    async def analyze_acl(self, acl: str):
+        """Fetch and analyze all deliveries for an ACL
+        
+        Args:
+            acl: ACL identifier (acl1, acl2, or acl3)
+        """
+        print(f"[ACL-WORKER] Starting analysis for {acl.upper()}...")
+        self.cache[acl]["status"] = "analyzing"
+        
+        # Fetch active deliveries from ABIA API
+        deliveries = await self.fetch_acl_deliveries(acl)
+        self.cache[acl]["deliveries"] = deliveries
+        
+        # Analyze each delivery synchronously
+        analyzed = []
+        for item in deliveries:
+            delivery_number = item.get('delivery', '')
+            if not delivery_number:
+                continue
+            
+            print(f"[ACL-WORKER] {acl.upper()}: Analyzing delivery {delivery_number}...")
+            enriched = self.analyze_delivery_sync(delivery_number)
+            
+            if enriched:
+                # Extract problematic items (performance < 90%)
+                problematic = []
+                for po_item in enriched.get('po_items', []):
+                    perf = po_item.get('batch_perf', 100)
+                    if perf < 90:
+                        problematic.append({
+                            'item_number': po_item.get('item_number'),
+                            'description': po_item.get('description', ''),
+                            'performance': perf,
+                            'bad_cases': po_item.get('bad_cases_projected', 0),
+                            'total_cases': po_item.get('total_freight_qty', 0),
+                        })
+                
+                # Sort by worst performance first
+                problematic.sort(key=lambda x: x['performance'])
+                
+                analyzed.append({
+                    'delivery': delivery_number,
+                    'station': item.get('station', 'Unknown'),
+                    'total_items': len(enriched.get('po_items', [])),
+                    'problematic_count': len(problematic),
+                    'problematic_items': problematic[:10],  # Top 10 worst
+                })
+        
+        # Update cache
+        self.cache[acl]["analyzed"] = analyzed
+        self.cache[acl]["last_update"] = datetime.now().isoformat()
+        self.cache[acl]["status"] = "ready"
+        
+        print(f"[ACL-WORKER] {acl.upper()}: Analysis complete! {len(analyzed)} deliveries cached.")
+    
+    async def monitor_loop(self):
+        """Continuously monitor all ACLs every 120 seconds"""
+        while self._running:
+            try:
+                print(f"\n[ACL-WORKER] Starting monitoring cycle at {datetime.now().strftime('%H:%M:%S')}")
+                
+                # Analyze all three ACLs
+                await asyncio.gather(
+                    self.analyze_acl("acl1"),
+                    self.analyze_acl("acl2"),
+                    self.analyze_acl("acl3"),
+                    return_exceptions=True  # Don't fail entire cycle if one ACL fails
+                )
+                
+                print(f"[ACL-WORKER] Monitoring cycle complete. Next run in 120 seconds.\n")
+                
+                # Wait 120 seconds before next cycle
+                await asyncio.sleep(120)
+                
+            except Exception as e:
+                print(f"[ACL-WORKER] Error in monitor loop: {e}")
+                await asyncio.sleep(120)  # Still wait before retrying
+    
+    async def start(self):
+        """Start the background monitoring loop
+        
+        Runs initial analysis immediately, then starts continuous monitoring.
+        """
+        if self._running:
+            print("[ACL-WORKER] Already running!")
+            return
+        
+        print("[ACL-WORKER] Starting ACL background monitor...")
+        self._running = True
+        
+        # Run initial analysis immediately
+        print("[ACL-WORKER] Running initial analysis for all ACLs...")
+        await asyncio.gather(
+            self.analyze_acl("acl1"),
+            self.analyze_acl("acl2"),
+            self.analyze_acl("acl3"),
+            return_exceptions=True
+        )
+        
+        # Start background loop
+        print("[ACL-WORKER] Initial analysis complete. Starting continuous monitoring loop...")
+        self._task = asyncio.create_task(self.monitor_loop())
+    
+    async def stop(self):
+        """Stop the background monitoring loop"""
+        if not self._running:
+            return
+        
+        print("[ACL-WORKER] Stopping monitor...")
+        self._running = False
+        
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+        
+        print("[ACL-WORKER] Monitor stopped.")
+    
+    def get_acl_data(self, acl: str) -> Dict:
+        """Get cached analysis data for an ACL
+        
+        Args:
+            acl: ACL identifier (acl1, acl2, or acl3)
+            
+        Returns:
+            Dictionary with deliveries, analyzed data, status, and last_update
+        """
+        return self.cache.get(acl, {
+            "deliveries": [],
+            "analyzed": [],
+            "last_update": None,
+            "status": "not_initialized"
+        })
+
+
+# Global instance - imported by main.py
+acl_monitor = ACLMonitor()
