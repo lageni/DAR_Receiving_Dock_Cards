@@ -8,19 +8,24 @@ from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
 from collections import defaultdict
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, Response, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, Response, JSONResponse, FileResponse, RedirectResponse
 import httpx
 from fpdf import FPDF
 from dotenv import load_dotenv
 from cache_manager import get_cache_manager
+from acl_background_worker import acl_monitor
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 app = FastAPI(title="CodePuppy DAR")
 
-
+@app.on_event("startup")
+async def startup_event():
+    print("[STARTUP] Starting ACL background monitor...")
+    await acl_monitor.start()
+    print("[STARTUP] ACL monitor running")
 
 # Get database path from .env or default to local
 def get_database_path():
@@ -334,8 +339,8 @@ def get_read_rate_chart(mds_fam_id: str, length: str = "", width: str = "", heig
     </div>'''
 
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
+@app.get("/item-analysis", response_class=HTMLResponse)
+async def item_analysis_page():
     return """<!DOCTYPE html>
 <html>
 <head>
@@ -2910,16 +2915,25 @@ async def batch_pdf(items: str = ""):
         return JSONResponse({"error": f"PDF generation failed: {str(e)}"}, status_code=500)
     
 # ============================================================
-# ACL FREIGHT AWARENESS - Monitor Active Deliveries Across 3 ACLs
+# ACL FREIGHT AWARENESS REDESIGN - Instant Load from Background Worker
 # ============================================================
 
-@app.get("/acl-freight-awareness", response_class=HTMLResponse)
-async def acl_freight_awareness_page(acl: str = "acl1"):
-    """ACL Freight Awareness - Monitor active deliveries and problematic items"""
+@app.get("/")
+async def root():
+    """Redirect home to ACL1"""
+    return RedirectResponse(url="/acl1")
 
+
+@app.get("/{acl}", response_class=HTMLResponse)
+async def acl_page(acl: str):
+    """ACL Freight Awareness - Grid layout with instant loads from background cache"""
+    
+    if acl not in ["acl1", "acl2", "acl3"]:
+        raise HTTPException(status_code=404, detail="ACL must be acl1, acl2, or acl3")
+    
     def tab_class(tab_acl):
         if tab_acl == acl:
-            return "px-6 py-3 bg-teal-600 text-white font-bold rounded-t border-b-4 border-teal-800"
+            return "px-6 py-3 bg-blue-600 text-white font-bold rounded-t border-b-4 border-blue-800"
         return "px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-t hover:bg-gray-300 cursor-pointer"
 
     return f"""<!DOCTYPE html>
@@ -2930,54 +2944,65 @@ async def acl_freight_awareness_page(acl: str = "acl1"):
     <title>ACL Freight Awareness - {acl.upper()}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        /* Edge-to-edge grid layout */
+        .delivery-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }}
+        
+        @media (min-width: 1024px) {{
+            .delivery-grid {{
+                grid-template-columns: repeat(4, 1fr);
+            }}
+        }}
+        
+        @media (min-width: 768px) and (max-width: 1023px) {{
+            .delivery-grid {{
+                grid-template-columns: repeat(2, 1fr);
+            }}
+        }}
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
-    <main class="max-w-7xl mx-auto p-6">
+    <main class="container mx-auto p-4">
         <!-- Header -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h1 class="text-3xl font-bold text-teal-700 mb-2">ACL Freight Awareness</h1>
-            <p class="text-gray-600">Real-time monitoring of active deliveries and problematic items across all ACLs</p>
+        <div class="bg-white rounded-lg shadow-md p-6 mb-4">
+            <h1 class="text-3xl font-bold text-blue-700 mb-2"> ACL Freight Awareness</h1>
+            <p class="text-gray-600">Real-time monitoring • Background analysis every 2 minutes • Instant page loads</p>
         </div>
 
         <!-- ACL Tabs -->
-        <div class="flex gap-2 mb-6">
-            <a href="/acl-freight-awareness?acl=acl1" class="{tab_class('acl1')}">ACL 1</a>
-            <a href="/acl-freight-awareness?acl=acl2" class="{tab_class('acl2')}">ACL 2</a>
-            <a href="/acl-freight-awareness?acl=acl3" class="{tab_class('acl3')}">ACL 3</a>
+        <div class="flex gap-2 mb-4">
+            <a href="/acl1" class="{tab_class('acl1')}">ACL 1</a>
+            <a href="/acl2" class="{tab_class('acl2')}">ACL 2</a>
+            <a href="/acl3" class="{tab_class('acl3')}">ACL 3</a>
         </div>
 
-        <!-- Active ACL Content -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-bold text-gray-800">{acl.upper()} - Active Deliveries</h2>
-                <button
-                    hx-get="/api/acl/deliveries?acl={acl}"
-                    hx-target="#delivery-list"
-                    hx-indicator="#loading"
-                    class="px-4 py-2 bg-teal-600 text-white rounded font-semibold hover:bg-teal-700"
-                >
-                    <span id="loading" class="htmx-indicator">Loading...</span>
-                    <span>Refresh Deliveries</span>
-                </button>
-            </div>
-
-            <!-- Auto-load deliveries on page load -->
-            <div
-                id="delivery-list"
-                hx-get="/api/acl/deliveries?acl={acl}"
-                hx-trigger="load"
-                class="space-y-4"
-            >
-                <div class="text-center text-gray-500 py-8">
-                    <div class="animate-spin inline-block w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full"></div>
-                    <p class="mt-2">Loading active deliveries from ABIA...</p>
-                </div>
+        <!-- Delivery Grid - Auto-refresh every 60s -->
+        <div 
+            id="delivery-grid" 
+            class="delivery-grid"
+            hx-get="/api/acl-rendered/{acl}"
+            hx-trigger="load, every 60s"
+            hx-swap="innerHTML"
+        >
+            <!-- Loading spinner -->
+            <div class="col-span-full text-center py-12">
+                <div class="animate-spin inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+                <p class="mt-4 text-gray-600 font-semibold">Loading {acl.upper()} deliveries from cache...</p>
             </div>
         </div>
 
-        <!-- Back Button -->
-        <div class="mt-6">
-            <a href="/" class="inline-block px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">Back to Home</a>
+        <!-- Navigation -->
+        <div class="mt-6 flex gap-4">
+            <a href="/item-analysis" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">
+                 Item Analysis
+            </a>
+            <a href="/delivery-analysis" class="px-4 py-2 bg-gray-600 text-white rounded font-semibold hover:bg-gray-700">
+                 Delivery Analysis
+            </a>
         </div>
     </main>
 </body>
@@ -2985,204 +3010,148 @@ async def acl_freight_awareness_page(acl: str = "acl1"):
 """
 
 
-@app.get("/api/acl/deliveries", response_class=HTMLResponse)
-async def get_acl_deliveries(acl: str):
-    """Fetch active deliveries from ABIA API for specified ACL"""
+@app.get("/api/acl-rendered/{acl}", response_class=HTMLResponse)
+async def get_acl_rendered(acl: str):
+    """Return pre-analyzed HTML from background worker cache - INSTANT load!"""
     try:
-        # Fetch from ABIA API
-        api_url = f"https://abia.wal-mart.com/aclaware/fetchData/?dc=6068&acl={acl}"
-
-        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
-            response = await client.get(api_url)
-            response.raise_for_status()
-            data = response.json()
-
-        deliveries = data.get('data', [])
-
+        # Get cached data from background worker
+        cached_data = acl_monitor.get_acl_data(acl)
+        
+        if not cached_data:
+            return f"""
+            <div class="col-span-full bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6 text-center">
+                <p class="text-yellow-800 font-bold text-lg"> No cached data available for {acl.upper()}</p>
+                <p class="text-yellow-700 mt-2">Background worker may still be initializing. Please wait 2 minutes.</p>
+            </div>
+            """
+        
+        deliveries = cached_data.get('deliveries', [])
+        last_updated = cached_data.get('last_updated', 'Unknown')
+        
         if not deliveries:
             return f"""
-            <div class="bg-yellow-50 border border-yellow-300 rounded p-4 text-center">
-                <p class="text-yellow-700 font-semibold">No active deliveries found for {acl.upper()}</p>
-                <p class="text-yellow-600 text-sm mt-1">All deliveries may be completed or ACL is idle</p>
+            <div class="col-span-full bg-green-50 border-2 border-green-400 rounded-lg p-6 text-center">
+                <p class="text-green-800 font-bold text-lg"> No active deliveries in {acl.upper()}</p>
+                <p class="text-green-700 mt-2">All clear! Updated: {last_updated}</p>
             </div>
             """
-
-        # Build HTML cards for each delivery
+        
+        # Build delivery cards
         cards_html = []
-        for idx, item in enumerate(deliveries, 1):
-            delivery = item.get('delivery', 'Unknown')
-            station = item.get('station', 'Unknown')
-
-            card_html = f"""
-            <div class="border border-gray-300 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                <!-- Delivery Header -->
-                <div class="bg-gradient-to-r from-teal-600 to-teal-700 p-4 text-white">
+        for delivery in deliveries:
+            delivery_num = delivery.get('delivery_number', 'Unknown')
+            station = delivery.get('station', 'Unknown')
+            problematic_count = delivery.get('problematic_count', 0)
+            problematic_items = delivery.get('problematic_items', [])[:10]  # Top 10
+            
+            # Color coding based on issue count
+            if problematic_count == 0:
+                border_color = "border-green-500"
+                header_color = "bg-gradient-to-r from-green-600 to-green-700"
+                badge_color = "bg-green-100 text-green-800"
+                status_emoji = ""
+            elif problematic_count < 5:
+                border_color = "border-yellow-500"
+                header_color = "bg-gradient-to-r from-yellow-600 to-yellow-700"
+                badge_color = "bg-yellow-100 text-yellow-800"
+                status_emoji = ""
+            else:
+                border_color = "border-red-500"
+                header_color = "bg-gradient-to-r from-red-600 to-red-700"
+                badge_color = "bg-red-100 text-red-800"
+                status_emoji = ""
+            
+            # Build item list HTML
+            items_html = []
+            if problematic_items:
+                for item in problematic_items:
+                    perf = item.get('performance', 0)
+                    if perf < 50:
+                        perf_badge = f"<span class='bg-red-200 text-red-900 px-2 py-1 rounded text-xs font-bold'>{perf:.1f}%</span>"
+                    elif perf < 70:
+                        perf_badge = f"<span class='bg-orange-200 text-orange-900 px-2 py-1 rounded text-xs font-bold'>{perf:.1f}%</span>"
+                    else:
+                        perf_badge = f"<span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded text-xs font-bold'>{perf:.1f}%</span>"
+                    
+                    items_html.append(f"""
+                    <div class="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                        <div class="flex-1">
+                            <a href="/item-analysis?item_id={item.get('mds_fam_id', '')}" 
+                               target="_blank"
+                               class="text-blue-600 hover:text-blue-800 font-mono text-sm font-semibold underline">
+                                {item.get('mds_fam_id', 'N/A')}
+                            </a>
+                            <p class="text-xs text-gray-500">Qty: {item.get('qty', 0)} • Dept: {item.get('dept', 'N/A')}</p>
+                        </div>
+                        <div>
+                            {perf_badge}
+                        </div>
+                    </div>
+                    """)
+            else:
+                items_html.append("""
+                <div class="text-center py-4 text-green-700 font-semibold">
+                     All items performing well!
+                </div>
+                """)
+            
+            card = f"""
+            <div class="border-2 {border_color} rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
+                <!-- Header -->
+                <div class="{header_color} p-4 text-white">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h3 class="text-xl font-bold">Delivery #{delivery}</h3>
-                            <p class="text-teal-100 text-sm">{station}</p>
+                            <h3 class="text-xl font-bold">{status_emoji} Delivery #{delivery_num}</h3>
+                            <p class="text-sm opacity-90">{station}</p>
                         </div>
-                        <div class="text-right">
-                            <span class="bg-white text-teal-700 px-3 py-1 rounded-full font-semibold text-sm">#{idx}</span>
+                        <div class="{badge_color} px-3 py-1 rounded-full font-bold text-sm">
+                            {problematic_count} issues
                         </div>
                     </div>
                 </div>
-
-                <!-- Expandable Details -->
-                <div class="p-4">
-                    <button
-                        hx-get="/api/acl/delivery-details?delivery={delivery}"
-                        hx-target="#details-{delivery}"
-                        hx-swap="innerHTML"
-                        hx-indicator="#loading-{delivery}"
-                        class="w-full px-4 py-2 bg-teal-600 text-white rounded font-semibold hover:bg-teal-700 flex items-center justify-center gap-2"
-                    >
-                        <span id="loading-{delivery}" class="htmx-indicator">Analyzing...</span>
-                        <span>Show Problematic Items</span>
-                    </button>
-
-                    <!-- Details Container -->
-                    <div id="details-{delivery}" class="mt-4">
-                        <!-- Content loads here on demand -->
+                
+                <!-- Problematic Items -->
+                <div class="p-4 bg-white">
+                    <h4 class="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wide">
+                        Top Problematic Items (Performance &lt; 90%)
+                    </h4>
+                    <div class="space-y-1">
+                        {''.join(items_html)}
                     </div>
+                    
+                    {f'<p class="text-xs text-gray-500 mt-3 text-center">+ {problematic_count - 10} more items</p>' if problematic_count > 10 else ''}
                 </div>
-            </div>
-            """
-            cards_html.append(card_html)
-
-        return '\n'.join(cards_html)
-
-    except Exception as e:
-        return f"""
-        <div class="bg-red-50 border border-red-300 rounded p-4">
-            <p class="text-red-700 font-semibold">Error loading deliveries from ABIA API</p>
-            <p class="text-red-600 text-sm mt-1">{str(e)}</p>
-        </div>
-        """
-
-
-@app.get("/api/acl/delivery-details", response_class=HTMLResponse)
-async def get_acl_delivery_details(delivery: str):
-    """Get problematic items for a delivery using cached or fresh analysis"""
-    try:
-        from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
-
-        # Run delivery analysis (uses cache if available)
-        delivery_data = get_delivery_po_data(delivery)
-
-        if not delivery_data.get('success'):
-            return f"""
-            <div class="bg-red-50 border border-red-300 rounded p-3">
-                <p class="text-red-700 font-semibold">Failed to fetch delivery data</p>
-                <p class="text-red-600 text-sm">{delivery_data.get('error', 'Unknown error')}</p>
-            </div>
-            """
-
-        # Apply batching to get performance data
-        enriched = apply_batching_to_delivery(delivery_data)
-
-        # Filter to problematic items only (performance < 90%)
-        problematic_items = []
-        for row in enriched.get('data', []):
-            batching = row.get('batching_info', {})
-            perf = batching.get('avg_performance', 100)
-
-            if perf < 90:  # Problematic threshold
-                problematic_items.append({
-                    'mds_fam_id': row.get('mds_fam_id'),
-                    'po_nbr': row.get('po_nbr'),
-                    'po_dept_nbr': row.get('po_dept_nbr'),
-                    'vendor_stock_id': row.get('vendor_stock_id'),
-                    'whpk_order_qty': row.get('whpk_adjusted_qty', row.get('whpk_order_qty', 0)),
-                    'performance': perf,
-                    'record_count': batching.get('record_count', 0)
-                })
-
-        if not problematic_items:
-            return f"""
-            <div class="bg-green-50 border border-green-300 rounded p-3">
-                <p class="text-green-700 font-semibold">No problematic items found!</p>
-                <p class="text-green-600 text-sm">All items in delivery #{delivery} have ACL performance >= 90%</p>
-            </div>
-            """
-
-        # Sort by worst performance first
-        problematic_items.sort(key=lambda x: x['performance'])
-
-        # Build table
-        rows_html = []
-        for item in problematic_items:
-            perf = item['performance']
-
-            # Color coding
-            if perf < 50:
-                perf_class = "bg-red-100 text-red-800"
-                perf_label = "CRITICAL"
-            elif perf < 70:
-                perf_class = "bg-orange-100 text-orange-800"
-                perf_label = "HIGH"
-            else:
-                perf_class = "bg-yellow-100 text-yellow-800"
-                perf_label = "MEDIUM"
-
-            row = f"""
-            <tr class="border-b hover:bg-gray-50">
-                <td class="px-3 py-2 text-sm">{item['mds_fam_id']}</td>
-                <td class="px-3 py-2 text-sm">{item['po_nbr']}</td>
-                <td class="px-3 py-2 text-sm text-center">{item['po_dept_nbr']}</td>
-                <td class="px-3 py-2 text-sm text-center">{item['whpk_order_qty']}</td>
-                <td class="px-3 py-2 text-center">
-                    <div class="inline-block {perf_class} px-2 py-1 rounded font-semibold text-xs">
-                        {perf:.1f}% ({perf_label})
-                    </div>
-                </td>
-                <td class="px-3 py-2 text-sm text-center">{item['record_count']}</td>
-                <td class="px-3 py-2 text-center">
-                    <a href="/?item_id={item['mds_fam_id']}"
-                       class="text-blue-600 hover:text-blue-800 text-xs font-semibold underline"
-                       target="_blank">
-                        View Details
+                
+                <!-- Footer -->
+                <div class="bg-gray-50 px-4 py-2 border-t border-gray-200">
+                    <a href="/delivery-analysis?delivery={delivery_num}" 
+                       target="_blank"
+                       class="text-blue-600 hover:text-blue-800 text-sm font-semibold">
+                         Full Analysis →
                     </a>
-                </td>
-            </tr>
+                </div>
+            </div>
             """
-            rows_html.append(row)
-
-        return f"""
-        <div class="bg-gray-50 border border-gray-300 rounded p-4 mt-2">
-            <div class="mb-3 flex items-center justify-between">
-                <h4 class="font-bold text-gray-800">Problematic Items ({len(problematic_items)} found)</h4>
-                <span class="text-xs text-gray-600">Performance &lt; 90%</span>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full bg-white rounded shadow-sm">
-                    <thead class="bg-gray-200 text-gray-700">
-                        <tr>
-                            <th class="px-3 py-2 text-left text-xs font-semibold">MDS Fam ID</th>
-                            <th class="px-3 py-2 text-left text-xs font-semibold">PO #</th>
-                            <th class="px-3 py-2 text-center text-xs font-semibold">Dept</th>
-                            <th class="px-3 py-2 text-center text-xs font-semibold">Qty</th>
-                            <th class="px-3 py-2 text-center text-xs font-semibold">Performance</th>
-                            <th class="px-3 py-2 text-center text-xs font-semibold">Records</th>
-                            <th class="px-3 py-2 text-center text-xs font-semibold">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {''.join(rows_html)}
-                    </tbody>
-                </table>
-            </div>
+            cards_html.append(card)
+        
+        # Add last updated footer
+        footer = f"""
+        <div class="col-span-full bg-blue-50 border border-blue-300 rounded p-3 text-center">
+            <p class="text-blue-800 text-sm font-semibold">
+                 Last updated: {last_updated} • Auto-refreshes every 60 seconds
+            </p>
         </div>
         """
-
+        
+        return '\n'.join(cards_html) + footer
+    
     except Exception as e:
         import traceback
         return f"""
-        <div class="bg-red-50 border border-red-300 rounded p-3">
-            <p class="text-red-700 font-semibold">Error analyzing delivery</p>
-            <p class="text-red-600 text-sm">{str(e)}</p>
-            <pre class="text-xs text-gray-600 mt-2 overflow-auto">{traceback.format_exc()}</pre>
+        <div class="col-span-full bg-red-50 border-2 border-red-400 rounded-lg p-6">
+            <p class="text-red-800 font-bold text-lg"> Error loading {acl.upper()} data</p>
+            <p class="text-red-700 mt-2">{str(e)}</p>
+            <pre class="text-xs text-gray-600 mt-3 overflow-auto bg-white p-3 rounded">{traceback.format_exc()}</pre>
         </div>
         """
 
