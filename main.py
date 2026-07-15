@@ -24,8 +24,8 @@ app = FastAPI(title="CodePuppy DAR")
 @app.on_event("startup")
 async def startup_event():
     print("[STARTUP] Starting ACL background monitor...")
-    await acl_monitor.start()
-    print("[STARTUP] ACL monitor running")
+    asyncio.create_task(acl_monitor.start())  # Don't block server startup!
+    print("[STARTUP] ACL monitor running in background")
 
 # Get database path from .env or default to local
 def get_database_path():
@@ -3041,8 +3041,11 @@ async def get_acl_rendered(acl: str):
         for delivery in deliveries:
             delivery_num = delivery.get('delivery_number', 'Unknown')
             station = delivery.get('station', 'Unknown')
-            problematic_count = delivery.get('problematic_count', 0)
-            problematic_items = delivery.get('problematic_items', [])[:10]  # Top 10
+            
+            # Access nested analysis data
+            analysis = delivery.get('analysis', {})
+            problematic_count = analysis.get('problematic_count', 0)
+            problematic_items = analysis.get('problematic_items', [])[:10]  # Top 10
             
             # Color coding based on issue count
             if problematic_count == 0:

@@ -102,27 +102,33 @@ class ACLMonitor:
             
             if enriched:
                 # Extract problematic items (performance < 90%)
+                # Use 'data' array, not 'po_items', and extract batching_info
                 problematic = []
-                for po_item in enriched.get('po_items', []):
-                    perf = po_item.get('batch_perf', 100)
+                for po_item in enriched.get('data', []):
+                    batching = po_item.get('batching_info', {})
+                    perf = batching.get('performance', 100)
+                    
                     if perf < 90:
                         problematic.append({
-                            'item_number': po_item.get('item_number'),
-                            'description': po_item.get('description', ''),
+                            'mds_fam_id': po_item.get('mds_fam_id'),
+                            'dept': po_item.get('dept', ''),
+                            'qty': po_item.get('total_freight_qty', 0),
                             'performance': perf,
-                            'bad_cases': po_item.get('bad_cases_projected', 0),
-                            'total_cases': po_item.get('total_freight_qty', 0),
+                            'bad_cases': batching.get('bad_cases_projected', 0),
                         })
                 
                 # Sort by worst performance first
                 problematic.sort(key=lambda x: x['performance'])
                 
+                # Nest analysis data under 'analysis' key
                 analyzed.append({
-                    'delivery': delivery_number,
+                    'delivery_number': delivery_number,  # Changed from 'delivery'
                     'station': item.get('station', 'Unknown'),
-                    'total_items': len(enriched.get('po_items', [])),
-                    'problematic_count': len(problematic),
-                    'problematic_items': problematic[:10],  # Top 10 worst
+                    'analysis': {  # Nest under 'analysis'
+                        'total_items': len(enriched.get('data', [])),
+                        'problematic_count': len(problematic),
+                        'problematic_items': problematic[:10],  # Top 10 worst
+                    }
                 })
         
         # Update cache
@@ -204,14 +210,21 @@ class ACLMonitor:
             acl: ACL identifier (acl1, acl2, or acl3)
             
         Returns:
-            Dictionary with deliveries, analyzed data, status, and last_update
+            Dictionary with deliveries (analyzed data), status, and last_update
         """
-        return self.cache.get(acl, {
+        cache = self.cache.get(acl, {
             "deliveries": [],
             "analyzed": [],
             "last_update": None,
             "status": "not_initialized"
         })
+        
+        # Return 'analyzed' array as 'deliveries' for frontend consumption
+        return {
+            "deliveries": cache.get("analyzed", []),  # Use analyzed data!
+            "last_update": cache.get("last_update"),
+            "status": cache.get("status")
+        }
 
 
 # Global instance - imported by main.py
