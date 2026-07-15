@@ -263,9 +263,13 @@ class ACLMonitor:
             "status": "not_initialized"
         })
         
+        analyzed = cache.get("analyzed", [])
+        print(f"[ACL-WORKER-DEBUG] get_acl_data({acl}): Returning {len(analyzed)} deliveries")
+        print(f"[ACL-WORKER-DEBUG] Status: {cache.get('status')}, Last update: {cache.get('last_update')}")
+        
         # Return 'analyzed' array as 'deliveries' for frontend consumption
         return {
-            "deliveries": cache.get("analyzed", []),  # Use analyzed data!
+            "deliveries": analyzed,  # Use analyzed data!
             "last_update": cache.get("last_update"),
             "status": cache.get("status")
         }

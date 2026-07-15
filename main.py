@@ -3078,22 +3078,31 @@ async def get_acl_rendered(acl: str):
         # Get cached data from background worker
         cached_data = acl_monitor.get_acl_data(acl)
         
+        print(f"[ACL-ENDPOINT-DEBUG] {acl}: Received cached_data: {cached_data is not None}")
+        
         if not cached_data:
+            print(f"[ACL-ENDPOINT-DEBUG] {acl}: No cached_data! Returning initialization message")
             return f"""
             <div class="col-span-full bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6 text-center">
-                <p class="text-yellow-800 font-bold text-lg"> No cached data available for {acl.upper()}</p>
+                <p class="text-yellow-800 font-bold text-lg">No cached data available for {acl.upper()}</p>
                 <p class="text-yellow-700 mt-2">Background worker may still be initializing. Please wait 2 minutes.</p>
+                <p class="text-xs text-gray-600 mt-2">Status: {cached_data.get('status') if cached_data else 'null'}</p>
             </div>
             """
         
         deliveries = cached_data.get('deliveries', [])
-        last_updated = cached_data.get('last_updated', 'Unknown')
+        last_updated = cached_data.get('last_update', 'Unknown')
+        status = cached_data.get('status', 'unknown')
+        
+        print(f"[ACL-ENDPOINT-DEBUG] {acl}: Found {len(deliveries)} deliveries, status={status}, last_update={last_updated}")
         
         if not deliveries:
+            print(f"[ACL-ENDPOINT-DEBUG] {acl}: No deliveries in list! Status={status}")
             return f"""
             <div class="col-span-full bg-green-50 border-2 border-green-400 rounded-lg p-6 text-center">
-                <p class="text-green-800 font-bold text-lg"> No active deliveries in {acl.upper()}</p>
+                <p class="text-green-800 font-bold text-lg">No active deliveries in {acl.upper()}</p>
                 <p class="text-green-700 mt-2">All clear! Updated: {last_updated}</p>
+                <p class="text-xs text-gray-600 mt-2">Status: {status}</p>
             </div>
             """
         
