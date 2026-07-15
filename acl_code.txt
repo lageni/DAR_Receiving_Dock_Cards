@@ -1,0 +1,37 @@
+import os
+import json
+import csv
+import io
+import sqlite3
+import uuid
+from pathlib import Path
+from urllib.parse import urlencode
+from io import BytesIO
+from collections import defaultdict
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from fastapi.responses import HTMLResponse, Response, JSONResponse, FileResponse
+import httpx
+from fpdf import FPDF
+from dotenv import load_dotenv
+from cache_manager import get_cache_manager
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
+app = FastAPI(title="CodePuppy DAR")
+
+
+
+# Get database path from .env or default to local
+def get_database_path():
+    """Get read_rates.db path from .env (DATABASE_PATH) or use default.
+    
+    Priority:
+    1. DATABASE_PATH from .env (absolute or relative)
+    2. Default: read_rates.db in same directory as app
+    """
+    db_path = os.getenv("DATABASE_PATH", "").strip()
+    
+    if not db_path:
+        # Default to local directory
+        db_path = str(Path(__file__).parent / "read_rate
