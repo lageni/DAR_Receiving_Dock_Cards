@@ -4,6 +4,7 @@ import csv
 import io
 import sqlite3
 import uuid
+import asyncio
 from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
