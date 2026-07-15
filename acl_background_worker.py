@@ -61,7 +61,27 @@ class ACLMonitor:
             Enriched delivery data with batching performance, or None on error
         """
         try:
-            # Fetch raw delivery data (uses cache if available)
+            # CHECK ANALYSIS CACHE FIRST - avoid re-analyzing!
+            from cache_manager import get_cache_manager
+            cache = get_cache_manager()
+            analysis_cache_key = f"analysis_{delivery_number}"
+            
+            cached_analysis = cache.get(analysis_cache_key, category="deliveries")
+            if cached_analysis:
+                print(f"[ACL-WORKER] Delivery {delivery_number}: Using CACHED analysis (skipping full analysis)")
+                # Return minimal structure with cached data
+                return {
+                    'success': True,
+                    'delivery_number': delivery_number,
+                    'data': [],  # Not needed for ACL display
+                    'cached': True,
+                    'problematic_items_data': cached_analysis.get('problematic_items_data', []),
+                    'problematic_details': cached_analysis.get('problematic_details', {}),
+                }
+            
+            print(f"[ACL-WORKER] Delivery {delivery_number}: No cache found, running FULL analysis")
+            
+            # Fetch raw delivery data (uses Informix cache if available)
             delivery_data = get_delivery_po_data(delivery_number)
             
             if not delivery_data.get('success'):
@@ -69,6 +89,8 @@ class ACLMonitor:
                 return None
             
             # Apply batching analysis to get performance metrics
+            # WARNING: This still uses old batch_get_read_rates() - slow!
+            # TODO: Replace with optimized version
             enriched = apply_batching_to_delivery(delivery_data)
             
             return enriched
@@ -101,35 +123,65 @@ class ACLMonitor:
             enriched = self.analyze_delivery_sync(delivery_number)
             
             if enriched:
-                # Extract problematic items (performance < 90%)
-                # Use 'data' array, not 'po_items', and extract batching_info
-                problematic = []
-                for po_item in enriched.get('data', []):
-                    batching = po_item.get('batching_info', {})
-                    perf = batching.get('performance', 100)
+                # Check if this was from cache (different structure)
+                if enriched.get('cached'):
+                    # Use cached problematic items
+                    problematic_items = enriched.get('problematic_items_data', [])
+                    problematic_details = enriched.get('problematic_details', {})
                     
-                    if perf < 90:
+                    problematic = []
+                    for item in problematic_items[:10]:  # Top 10
+                        mds_id = item.get('mds_fam_id', '')
+                        acl_details = item.get('acl_details', problematic_details.get(str(mds_id), {}))
+                        
                         problematic.append({
-                            'mds_fam_id': po_item.get('mds_fam_id'),
-                            'dept': po_item.get('dept', ''),
-                            'qty': po_item.get('total_freight_qty', 0),
-                            'performance': perf,
-                            'bad_cases': batching.get('bad_cases_projected', 0),
+                            'mds_fam_id': mds_id,
+                            'item_name': item.get('item_name', ''),
+                            'performance': acl_details.get('avg_perf', 0),
+                            'bad_cases': acl_details.get('bad_cases', 0),
                         })
-                
-                # Sort by worst performance first
-                problematic.sort(key=lambda x: x['performance'])
-                
-                # Nest analysis data under 'analysis' key
-                analyzed.append({
-                    'delivery_number': delivery_number,  # Changed from 'delivery'
-                    'station': item.get('station', 'Unknown'),
-                    'analysis': {  # Nest under 'analysis'
-                        'total_items': len(enriched.get('data', [])),
-                        'problematic_count': len(problematic),
-                        'problematic_items': problematic[:10],  # Top 10 worst
-                    }
-                })
+                    
+                    analyzed.append({
+                        'delivery_number': delivery_number,
+                        'station': item.get('station', 'Unknown'),
+                        'analysis': {
+                            'total_items': len(problematic_items),
+                            'problematic_count': len(problematic_items),
+                            'problematic_items': problematic,
+                            'cached': True
+                        }
+                    })
+                else:
+                    # Extract problematic items from fresh analysis (performance < 90%)
+                    # Use 'data' array and extract batching_info
+                    problematic = []
+                    for po_item in enriched.get('data', []):
+                        batching = po_item.get('batching_info', {})
+                        perf = batching.get('performance', 100)
+                        
+                        if perf < 90:
+                            problematic.append({
+                                'mds_fam_id': po_item.get('mds_fam_id'),
+                                'dept': po_item.get('dept', ''),
+                                'qty': po_item.get('total_freight_qty', 0),
+                                'performance': perf,
+                                'bad_cases': batching.get('bad_cases_projected', 0),
+                            })
+                    
+                    # Sort by worst performance first
+                    problematic.sort(key=lambda x: x['performance'])
+                    
+                    # Nest analysis data under 'analysis' key
+                    analyzed.append({
+                        'delivery_number': delivery_number,
+                        'station': item.get('station', 'Unknown'),
+                        'analysis': {
+                            'total_items': len(enriched.get('data', [])),
+                            'problematic_count': len(problematic),
+                            'problematic_items': problematic[:10],  # Top 10 worst
+                            'cached': False
+                        }
+                    })
         
         # Update cache
         self.cache[acl]["analyzed"] = analyzed
