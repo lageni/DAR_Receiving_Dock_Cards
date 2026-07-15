@@ -214,9 +214,9 @@ class ACLMonitor:
                 await asyncio.sleep(120)  # Still wait before retrying
     
     async def start(self):
-        """Start the background monitoring loop
+        """Start the background monitoring loop (NON-BLOCKING)
         
-        Runs initial analysis immediately, then starts continuous monitoring.
+        Server starts immediately, analysis runs in background.
         """
         if self._running:
             print("[ACL-WORKER] Already running!")
@@ -225,18 +225,10 @@ class ACLMonitor:
         print("[ACL-WORKER] Starting ACL background monitor...")
         self._running = True
         
-        # Run initial analysis immediately
-        print("[ACL-WORKER] Running initial analysis for all ACLs...")
-        await asyncio.gather(
-            self.analyze_acl("acl1"),
-            self.analyze_acl("acl2"),
-            self.analyze_acl("acl3"),
-            return_exceptions=True
-        )
-        
-        # Start background loop
-        print("[ACL-WORKER] Initial analysis complete. Starting continuous monitoring loop...")
+        # Start background loop immediately (don't block startup!)
+        print("[ACL-WORKER] Background analysis starting... (server will be ready immediately)")
         self._task = asyncio.create_task(self.monitor_loop())
+        print("[ACL-WORKER] Monitor task created - running in background")
     
     async def stop(self):
         """Stop the background monitoring loop"""
