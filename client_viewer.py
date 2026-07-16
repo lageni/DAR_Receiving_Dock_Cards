@@ -14,9 +14,19 @@ from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from cache_manager import get_cache_manager
 
 app = FastAPI(title="ACL Viewer Client")
+
+# Add CORS middleware to allow access from network IPs
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Shared cache location
 CACHE_DIR = Path(r"L:\Engineering\DAR Docktag Cards\cache_data")
@@ -79,7 +89,8 @@ async def home():
     </div>
 
     <script>
-        const CLIENT_URL = 'http://localhost:8001';
+        // Use current host dynamically (works for localhost or network IP)
+        const BASE_URL = window.location.origin;
         let currentACL = 'acl1';
         let refreshInterval = null;
         let secondsUntilRefresh = 30;
@@ -97,7 +108,7 @@ async def home():
 
         async function loadACLData(acl) {
             try {
-                const response = await fetch(`${CLIENT_URL}/api/cache/${acl}`);
+                                const response = await fetch(`${BASE_URL}/api/cache/${acl}`);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 renderACLData(acl, data);
