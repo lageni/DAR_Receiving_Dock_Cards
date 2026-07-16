@@ -812,13 +812,17 @@ def extract_item_data(data: dict) -> dict:
         if "number" in data:
             item_data["item_id"] = str(data["number"])
         
-        # Image URL - use IMAGE_SIZE_450
+        # Image URL - use first available image size
         if "productDefinition" in data:
             prod_def = data["productDefinition"]
             if isinstance(prod_def, dict) and "imageDimension" in prod_def:
                 img_dim = prod_def["imageDimension"]
                 if isinstance(img_dim, dict):
-                    item_data["image_url"] = img_dim.get("IMAGE_SIZE_450", "")
+                    # Try different sizes in order of preference
+                    for size in ["IMAGE_SIZE_450", "IMAGE_SIZE_200", "IMAGE_SIZE_100", "IMAGE_SIZE_60"]:
+                        if size in img_dim and img_dim[size]:
+                            item_data["image_url"] = img_dim[size]
+                            break
         
         # GTIN - use orderableGTIN (not consumableGTIN which is UPC)
         if "orderableGTIN" in data:

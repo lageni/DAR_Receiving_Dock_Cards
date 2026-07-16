@@ -192,39 +192,39 @@ async def home():
                     `;
                     
                     if (problematicItems.length > 0) {
-                        html += '<div class="space-y-1.5">';
+                        html += '<div class="space-y-2">';
                         problematicItems.slice(0, 5).forEach(item => {
                             const perf = item.performance || 0;
-                            const perfColor = perf < 50 ? 'text-red-600' : perf < 70 ? 'text-yellow-600' : 'text-orange-600';
                             const badCases = item.bad_cases || 0;
                             const imageUrl = item.image_url || '';
                             const recommendation = item.recommendation || '';
+                            const colorHex = item.color_hex || '#6b7280';
                             const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
                                 `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
                             
                             html += `
-                                <div class="text-xs bg-gray-50 p-1.5 rounded border">
-                                    <div class="flex gap-2">
-                                        ${imageUrl ? `<img src="${imageUrl}" class="w-12 h-12 object-cover rounded" />` : '<div class="w-12 h-12 bg-gray-200 rounded flex items-center justify-center"><span class="text-xs text-gray-400">No Img</span></div>'}
+                                <div class="bg-white p-2 rounded border-2" style="border-color: ${colorHex};">
+                                    <div class="flex gap-2 items-center">
+                                        ${imageUrl ? `<img src="${imageUrl}" class="w-16 h-16 object-cover rounded" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center"><span class="text-xs text-gray-400">No Img</span></div>'}
                                         <div class="flex-1 min-w-0">
-                                            <div class="flex justify-between items-center">
-                                                <span class="font-mono text-xs truncate">${item.mds_fam_id || 'N/A'}</span>
-                                                <span class="${perfColor} font-bold text-xs">${perf.toFixed(0)}%</span>
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span class="font-mono text-sm font-semibold">${item.mds_fam_id || 'N/A'}</span>
+                                                <span class="text-2xl font-bold text-center px-2" style="color: ${colorHex};">${perf.toFixed(0)}%</span>
                                             </div>
-                                            ${item.item_name ? `<div class="text-gray-700 text-xs font-semibold truncate">${item.item_name}</div>` : ''}
-                                            <div class="text-gray-600 text-xs mt-0.5">
-                                                ${badCases > 0 ? `<span class="text-red-600 font-semibold">${badCases} bad cases</span>` : ''}
-                                                ${dimensions ? `<span class="ml-2">${dimensions}</span>` : ''}
+                                            ${item.item_name ? `<div class="text-gray-800 text-sm font-bold truncate">${item.item_name}</div>` : ''}
+                                            <div class="text-sm mt-1">
+                                                ${badCases > 0 ? `<span class="text-red-600 font-bold">${badCases} bad cases</span>` : ''}
+                                                ${dimensions ? `<span class="ml-2 text-gray-600">${dimensions}</span>` : ''}
                                             </div>
-                                            ${recommendation ? `<div class="text-xs text-blue-600 italic mt-0.5">${recommendation}</div>` : ''}
                                         </div>
                                     </div>
+                                    ${recommendation ? `<div class="mt-2 text-sm font-bold text-center px-2 py-1 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
                                 </div>
                             `;
                         });
                         html += '</div>';
                         if (problematicItems.length > 5) {
-                            html += `<p class="text-xs text-gray-500 mt-1">+ ${problematicItems.length - 5} more</p>`;
+                            html += `<p class="text-xs text-gray-500 mt-2">+ ${problematicItems.length - 5} more</p>`;
                         }
                     } else {
                         html += '<p class="text-xs text-gray-500 italic text-center py-3">All items OK</p>';
@@ -321,13 +321,14 @@ async def get_acl_cache(acl: str):
                         'performance': acl_details.get('avg_perf', 0),
                         'bad_cases': acl_details.get('bad_cases', 0),
                         'recommendation': acl_details.get('recommendation', ''),
+                        'color_hex': acl_details.get('color_hex', '#6b7280'),
                         'image_url': prob_item.get('image_url', ''),
                         'vnpk_length': prob_item.get('vnpk_length', ''),
                         'vnpk_width': prob_item.get('vnpk_width', ''),
                         'vnpk_height': prob_item.get('vnpk_height', '')
                     }
                     display_items.append(display_item)
-                    print(f"[CLIENT-DEBUG]   Item {mds_id}: perf={display_item['performance']}%, bad_cases={display_item['bad_cases']}")
+                    print(f"[CLIENT-DEBUG]   Item {mds_id}: perf={display_item['performance']}%, bad_cases={display_item['bad_cases']}, img={bool(display_item['image_url'])}")
                 
                 enriched_deliveries.append({
                     'delivery_number': delivery_number,
