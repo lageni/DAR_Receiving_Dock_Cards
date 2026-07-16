@@ -1,37 +1,71 @@
-# CodePuppy DAR - Delivery Analysis & Reporting
+# ACL Freight Awareness - CodePuppy DAR
 
-## Quick Start
+Client/Server architecture for real-time ACL monitoring and delivery analysis.
 
+---
+
+## QUICK START
+
+### Server (Analysis Engine)
 ```bash
-# Run the server
-python main.py
-# OR use the batch file
 RUN.bat
 ```
+**Port:** 8000  
+**See:** [SERVER_README.md](SERVER_README.md)
 
-Navigate to: http://localhost:8000
+### Client (Viewer)
+```bash
+RUN_CLIENT.bat
+```
+**Port:** 8001  
+**See:** [CLIENT_README.md](CLIENT_README.md)
 
-## Features
+---
 
-- **Item Lookup**: Search by MDS Family ID with ACL performance data
-- **Delivery Analysis**: Full PO analysis with batching and performance metrics
-- **ACL Freight Awareness**: Monitor active deliveries across ACL 1, 2, and 3
-- **Batch PDF Reports**: Generate PDFs for problematic items
+## ARCHITECTURE
 
-## Core Files
+- **Server:** Analyzes deliveries, writes to shared cache (L: drive)
+- **Client:** Reads cache, displays data, auto-refreshes
+- **Cache:** Shared JSON files on L:\Engineering\DAR Docktag Cards\cache_data
 
-- `main.py` - FastAPI application
-- `delivery_analysis.py` - Informix queries and batching logic
-- `batch_report.py` - Read rate calculations
-- `cache_manager.py` - 2-day delivery cache
-- `informix_connect.py` - Database connection
-- `db.py` - SQLite operations
+---
 
-## Documentation
+## DOCUMENTATION
 
-See `_docs/` folder for detailed documentation and changelog.
+- **[SERVER_README.md](SERVER_README.md)** - Server setup, endpoints, optimizations
+- **[CLIENT_README.md](CLIENT_README.md)** - Client setup, features, troubleshooting
+- **[docs/](docs/)** - Archived documentation and technical details
+- **[scripts/](scripts/)** - Diagnostic and helper scripts
 
-## Archive
+---
 
-- `_archive/` - Old scripts and backups
-- `_installers/` - Feature installers and utilities
+## FILES
+
+### Core
+- `main.py` - Server application
+- `client_viewer.py` - Client application
+- `acl_background_worker.py` - Background ACL monitor
+- `cache_manager.py` - Shared cache module
+- `delivery_analysis.py` - Analysis logic
+
+### Config
+- `.env` - Environment variables
+- `pyproject.toml` - Dependencies
+
+### Startup
+- `RUN.bat` - Start server
+- `RUN_CLIENT.bat` - Start client
+
+---
+
+## SUPPORT
+
+**Issues?** Check the troubleshooting sections in:
+- [SERVER_README.md](SERVER_README.md#troubleshooting)
+- [CLIENT_README.md](CLIENT_README.md#troubleshooting)
+
+**Diagnostics:** Run `python scripts/diagnose_acl_cache.py`
+
+---
+
+Last Updated: 2026-07-15

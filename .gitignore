@@ -1,13 +1,24 @@
-# Virtual environments
-.venv/
-venv/
-*.venv
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment Variables
+.env
+
+# Cache
+*.db-journal
+*.log
 
 # IDE
 .vscode/
@@ -15,26 +26,13 @@ __pycache__/
 *.swp
 *.swo
 
-# Environment
-.env
-.env.local
-
-# Database
-*.db
-*.sqlite
-
-# Logs
-error_logs.jsonl
-*.log
-
 # OS
 .DS_Store
 Thumbs.db
 
-# Build
-build/
-dist/
-*.egg-info/
+# Archives (keep existing)
+_archive/
 
-# CSV data (optional - includes large files)
-read_rates.csv
+# Temp files
+*.tmp
+*.bak
