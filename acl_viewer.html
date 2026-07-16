@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACL Freight Awareness - Live Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-slow {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto p-6 max-w-7xl">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg shadow-lg p-6 mb-6">
+            <h1 class="text-4xl font-bold mb-2">ACL Freight Awareness</h1>
+            <p class="text-blue-100">Real-time monitoring • Background analysis every 2 minutes • Instant page loads</p>
+            <div class="mt-4 flex items-center space-x-4">
+                <span class="px-3 py-1 bg-white/20 rounded text-sm font-semibold" id="lastUpdate">Loading...</span>
+                <span class="px-3 py-1 bg-green-400 text-green-900 rounded text-sm font-semibold pulse-slow" id="refreshIndicator">Auto-refresh: 60s</span>
+            </div>
+        </div>
+
+        <!-- ACL Tabs -->
+        <div class="bg-white rounded-lg shadow-lg mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="flex space-x-8 px-6" aria-label="Tabs">
+                    <button onclick="switchACL('acl1')" id="tab-acl1" class="acl-tab border-b-2 border-blue-500 py-4 px-1 text-center font-medium text-blue-600">
+                        ACL 1
+                    </button>
+                    <button onclick="switchACL('acl2')" id="tab-acl2" class="acl-tab border-b-2 border-transparent py-4 px-1 text-center font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        ACL 2
+                    </button>
+                    <button onclick="switchACL('acl3')" id="tab-acl3" class="acl-tab border-b-2 border-transparent py-4 px-1 text-center font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        ACL 3
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div id="contentArea">
+            <div class="text-center py-12">
+                <div class="inline-block h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <p class="mt-4 text-gray-600">Loading ACL data...</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-6 text-center text-gray-500 text-sm">
+            <p>Server: <span id="serverStatus" class="font-semibold">Checking...</span></p>
+            <p class="mt-2">
+                <a href="/delivery-analysis" class="text-blue-600 hover:underline">Delivery Analysis Tool</a> •
+                <a href="/item-analysis" class="text-blue-600 hover:underline">Item Analysis Tool</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:8000';
+        let currentACL = 'acl1';
+        let refreshInterval = null;
+        let countdownInterval = null;
+        let secondsUntilRefresh = 60;
+
+        // Switch ACL tabs
+        function switchACL(acl) {
+            currentACL = acl;
+            
+            // Update tab styles
+            document.querySelectorAll('.acl-tab').forEach(tab => {
+                tab.classList.remove('border-blue-500', 'text-blue-600');
+                tab.classList.add('border-transparent', 'text-gray-500');
+            });
+            document.getElementById(`tab-${acl}`).classList.remove('border-transparent', 'text-gray-500');
+            document.getElementById(`tab-${acl}`).classList.add('border-blue-500', 'text-blue-600');
+            
+            // Load data
+            loadACLData(acl);
+        }
+
+        // Load ACL data from cache endpoint
+        async function loadACLData(acl) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/acl-cache/${acl}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                renderACLData(acl, data);
+                
+                document.getElementById('serverStatus').textContent = 'Connected';
+                document.getElementById('serverStatus').className = 'font-semibold text-green-600';
+                
+            } catch (error) {
+                console.error('Error loading ACL data:', error);
+                document.getElementById('contentArea').innerHTML = `
+                    <div class="bg-red-50 border-2 border-red-400 rounded-lg p-6 text-center">
+                        <p class="text-red-800 font-bold text-lg">Cannot connect to server</p>
+                        <p class="text-red-700 mt-2">Make sure the server is running on ${SERVER_URL}</p>
+                        <p class="text-sm text-gray-600 mt-2">Error: ${error.message}</p>
+                    </div>
+                `;
+                document.getElementById('serverStatus').textContent = 'Disconnected';
+                document.getElementById('serverStatus').className = 'font-semibold text-red-600';
+            }
+        }
+
+        // Render ACL data as cards
+        function renderACLData(acl, data) {
+            const deliveries = data.deliveries || [];
+            const lastUpdate = data.last_update || 'Unknown';
+            const status = data.status || 'unknown';
+            
+            document.getElementById('lastUpdate').textContent = `Last updated: ${lastUpdate}`;
+            
+            if (deliveries.length === 0) {
+                document.getElementById('contentArea').innerHTML = `
+                    <div class="bg-green-50 border-2 border-green-400 rounded-lg p-8 text-center">
+                        <svg class="mx-auto h-16 w-16 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-green-800 font-bold text-2xl mt-4">No active deliveries in ${acl.toUpperCase()}</p>
+                        <p class="text-green-700 mt-2">All clear!</p>
+                        <p class="text-xs text-gray-600 mt-2">Status: ${status}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Build delivery cards
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">';
+            
+            deliveries.forEach(delivery => {
+                const deliveryNum = delivery.delivery_number || 'Unknown';
+                const station = delivery.station || 'Unknown';
+                const analysis = delivery.analysis || {};
+                const problematicCount = analysis.problematic_count || 0;
+                const problematicItems = analysis.problematic_items || [];
+                
+                // Color coding
+                let borderColor, headerBg, badgeBg, statusEmoji;
+                if (problematicCount === 0) {
+                    borderColor = 'border-green-500';
+                    headerBg = 'bg-gradient-to-r from-green-600 to-green-700';
+                    badgeBg = 'bg-green-100 text-green-800';
+                    statusEmoji = '';
+                } else if (problematicCount < 5) {
+                    borderColor = 'border-yellow-500';
+                    headerBg = 'bg-gradient-to-r from-yellow-600 to-yellow-700';
+                    badgeBg = 'bg-yellow-100 text-yellow-800';
+                    statusEmoji = '';
+                } else {
+                    borderColor = 'border-red-500';
+                    headerBg = 'bg-gradient-to-r from-red-600 to-red-700';
+                    badgeBg = 'bg-red-100 text-red-800';
+                    statusEmoji = '';
+                }
+                
+                html += `
+                    <div class="bg-white rounded-lg shadow-lg border-2 ${borderColor} overflow-hidden hover:shadow-xl transition">
+                        <div class="${headerBg} text-white px-4 py-3">
+                            <div class="flex justify-between items-center">
+                                <h3 class="font-bold text-lg">#${deliveryNum}</h3>
+                                <span class="text-2xl">${statusEmoji}</span>
+                            </div>
+                            <p class="text-sm opacity-90">Station: ${station}</p>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="text-sm text-gray-600">Problematic Items</span>
+                                <span class="px-3 py-1 ${badgeBg} rounded-full text-sm font-bold">${problematicCount}</span>
+                            </div>
+                `;
+                
+                if (problematicItems.length > 0) {
+                    html += '<div class="space-y-2">';
+                    problematicItems.slice(0, 5).forEach(item => {
+                        const perf = item.performance || 0;
+                        const perfColor = perf < 50 ? 'text-red-600' : perf < 70 ? 'text-yellow-600' : 'text-orange-600';
+                        
+                        html += `
+                            <div class="text-xs bg-gray-50 p-2 rounded border">
+                                <div class="flex justify-between">
+                                    <span class="font-mono">${item.mds_fam_id || 'N/A'}</span>
+                                    <span class="${perfColor} font-bold">${perf.toFixed(0)}%</span>
+                                </div>
+                                ${item.item_name ? `<div class="text-gray-600 mt-1">${item.item_name.substring(0, 30)}...</div>` : ''}
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    
+                    if (problematicItems.length > 5) {
+                        html += `<p class="text-xs text-gray-500 mt-2">+ ${problematicItems.length - 5} more items</p>`;
+                    }
+                } else {
+                    html += '<p class="text-sm text-gray-500 italic">All items performing well</p>';
+                }
+                
+                html += `
+                            <a href="${SERVER_URL}/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-4 block w-full px-4 py-2 bg-blue-600 text-white rounded text-center font-semibold hover:bg-blue-700">
+                                Full Analysis →
+                            </a>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            document.getElementById('contentArea').innerHTML = html;
+        }
+
+        // Auto-refresh countdown
+        function startRefreshCountdown() {
+            secondsUntilRefresh = 60;
+            
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                secondsUntilRefresh--;
+                document.getElementById('refreshIndicator').textContent = `Auto-refresh: ${secondsUntilRefresh}s`;
+                
+                if (secondsUntilRefresh <= 0) {
+                    secondsUntilRefresh = 60;
+                }
+            }, 1000);
+        }
+
+        // Start auto-refresh
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            
+            refreshInterval = setInterval(() => {
+                loadACLData(currentACL);
+            }, 60000); // 60 seconds
+            
+            startRefreshCountdown();
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadACLData(currentACL);
+            startAutoRefresh();
+        });
+
+        // Manual refresh button (optional)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+                e.preventDefault();
+                loadACLData(currentACL);
+                startRefreshCountdown();
+            }
+        });
+    </script>
+</body>
+</html>
