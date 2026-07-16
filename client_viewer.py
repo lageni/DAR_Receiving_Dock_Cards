@@ -127,20 +127,42 @@ async def home():
                 return;
             }
             
-            let html = '<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">';
+            // Sort deliveries by total bad cases (highest first)
+            const sortedDeliveries = [...deliveries].sort((a, b) => {
+                const aBadCases = (a.problematic_items || []).reduce((sum, item) => sum + (item.bad_cases || 0), 0);
+                const bBadCases = (b.problematic_items || []).reduce((sum, item) => sum + (item.bad_cases || 0), 0);
+                return bBadCases - aBadCases;
+            });
             
-            deliveries.forEach(delivery => {
+            // Check if we need to update (compare delivery numbers)
+            const existingDeliveries = Array.from(document.querySelectorAll('.delivery-section')).map(el => el.dataset.delivery);
+            const newDeliveryNumbers = sortedDeliveries.map(d => d.delivery_number);
+            
+            const needsFullRedraw = JSON.stringify(existingDeliveries.sort()) !== JSON.stringify(newDeliveryNumbers.sort());
+            
+            if (needsFullRedraw) {
+                console.log('[CLIENT] Full redraw needed - delivery list changed');
+                buildFullDisplay(acl, sortedDeliveries);
+            } else {
+                console.log('[CLIENT] Updating existing deliveries in place');
+                updateExistingDeliveries(sortedDeliveries);
+            }
+        }
+        function buildFullDisplay(acl, deliveries) {
+            let html = '<div class="flex gap-4 overflow-x-auto pb-4" style="scroll-snap-type: x mandatory;">';
+            
+            deliveries.forEach((delivery, deliveryIndex) => {
                 const deliveryNum = delivery.delivery_number || 'Unknown';
                 const station = delivery.station || 'Unknown';
                 const problematicCount = delivery.problematic_count || 0;
                 const problematicItems = delivery.problematic_items || [];
                 const isCached = delivery.cached !== false;
                 const isPending = delivery.status === 'pending_analysis';
+                const totalBadCases = problematicItems.reduce((sum, item) => sum + (item.bad_cases || 0), 0);
                 
                 let borderColor, headerBg, badgeBg, statusText;
                 
                 if (isPending) {
-                    // Not analyzed yet - gray/pending
                     borderColor = 'border-gray-400';
                     headerBg = 'bg-gradient-to-r from-gray-500 to-gray-600';
                     badgeBg = 'bg-gray-100 text-gray-800';
@@ -163,81 +185,80 @@ async def home():
                 }
                 
                 html += `
-                    <div class="bg-white rounded-lg shadow border-2 ${borderColor} overflow-hidden hover:shadow-lg transition">
+                    <div class="delivery-section flex-shrink-0 bg-white rounded-lg shadow border-2 ${borderColor} overflow-hidden" 
+                         style="width: 400px; scroll-snap-align: start; height: 600px; display: flex; flex-direction: column;"
+                         data-delivery="${deliveryNum}" data-item-count="${problematicItems.length}">
                         <div class="${headerBg} text-white px-3 py-2">
-                            <h3 class="font-bold text-base">#${deliveryNum}</h3>
-                            <p class="text-xs opacity-90">${station}</p>
+                            <div class="flex justify-between items-center">
+                                <h3 class="font-bold text-lg">#${deliveryNum}</h3>
+                                <span class="text-sm">${station}</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-1">
+                                <span class="text-xs">${statusText}</span>
+                                <span class="px-2 py-0.5 ${badgeBg} rounded-full text-xs font-bold">${problematicCount} items</span>
+                            </div>
+                            ${totalBadCases > 0 ? `<div class="text-sm font-bold mt-1 text-red-200">${totalBadCases} total bad cases</div>` : ''}
                         </div>
-                        <div class="p-3">
+                        <div class="carousel-container flex-1 overflow-hidden relative" data-current-index="0">
                 `;
                 
                 if (isPending) {
-                    // Pending analysis - show gray status
                     html += `
-                        <div class="text-center py-4">
-                            <p class="text-gray-600 font-semibold mb-1 text-sm">Pending Analysis</p>
+                        <div class="h-full flex flex-col items-center justify-center p-4">
+                            <p class="text-gray-600 font-semibold mb-2">Pending Analysis</p>
                             <p class="text-xs text-gray-500">Click to analyze</p>
-                        </div>
-                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="block w-full px-3 py-2 bg-gray-600 text-white rounded text-center text-sm font-semibold hover:bg-gray-700">
-                            Analyze Now
-                        </a>
-                    `;
-                } else {
-                    // Has analysis - show problematic items
-                    html += `
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-xs text-gray-600">${statusText}</span>
-                            <span class="px-2 py-1 ${badgeBg} rounded-full text-xs font-bold">${problematicCount}</span>
+                            <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" 
+                               class="mt-4 px-4 py-2 bg-gray-600 text-white rounded text-sm font-semibold hover:bg-gray-700">
+                                Analyze Now
+                            </a>
                         </div>
                     `;
-                    
-                    if (problematicItems.length > 0) {
-                        html += '<div class="space-y-2">';
-                        problematicItems.slice(0, 5).forEach(item => {
-                            const perf = item.performance || 0;
-                            const badCases = item.bad_cases || 0;
-                            const imageUrl = item.image_url || '';
-                            const recommendation = item.recommendation || '';
-                            const colorHex = item.color_hex || '#6b7280';
-                            const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
-                                `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
-                            
-                            html += `
-                                <div class="bg-white p-2 rounded border-2" style="border-color: ${colorHex};">
-                                    <div class="flex gap-2 items-center">
-                                        ${imageUrl ? `<img src="${imageUrl}" class="w-16 h-16 object-cover rounded" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center"><span class="text-xs text-gray-400">No Img</span></div>'}
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex justify-between items-center mb-1">
-                                                <span class="font-mono text-sm font-semibold">${item.mds_fam_id || 'N/A'}</span>
-                                                <span class="text-2xl font-bold text-center px-2" style="color: ${colorHex};">${perf.toFixed(0)}%</span>
-                                            </div>
-                                            ${item.item_name ? `<div class="text-gray-800 text-sm font-bold truncate">${item.item_name}</div>` : ''}
-                                            <div class="text-sm mt-1">
-                                                ${badCases > 0 ? `<span class="text-red-600 font-bold">${badCases} bad cases</span>` : ''}
-                                                ${dimensions ? `<span class="ml-2 text-gray-600">${dimensions}</span>` : ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    ${recommendation ? `<div class="mt-2 text-sm font-bold text-center px-2 py-1 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
+                } else if (problematicItems.length > 0) {
+                    html += '<div class="carousel-items">';
+                    problematicItems.forEach((item, itemIndex) => {
+                        const perf = item.performance || 0;
+                        const badCases = item.bad_cases || 0;
+                        const imageUrl = item.image_url || '';
+                        const recommendation = item.recommendation || '';
+                        const colorHex = item.color_hex || '#6b7280';
+                        const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
+                            `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
+                        
+                        html += `
+                            <div class="carousel-item h-full p-4" style="display: ${itemIndex === 0 ? 'flex' : 'none'}; flex-direction: column; justify-content: center;">
+                                <div class="text-center mb-4">
+                                    ${imageUrl ? `<img src="${imageUrl}" class="w-32 h-32 object-cover rounded mx-auto mb-2" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
+                                    <div class="font-mono text-lg font-bold mb-1">${item.mds_fam_id || 'N/A'}</div>
+                                    ${item.item_name ? `<div class="text-gray-800 text-base font-bold mb-2">${item.item_name}</div>` : ''}
+                                    <div class="text-5xl font-bold my-3" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
                                 </div>
-                            `;
-                        });
-                        html += '</div>';
-                        if (problematicItems.length > 5) {
-                            html += `<p class="text-xs text-gray-500 mt-2">+ ${problematicItems.length - 5} more</p>`;
-                        }
-                    } else {
-                        html += '<p class="text-xs text-gray-500 italic text-center py-3">All items OK</p>';
-                    }
-                    
+                                <div class="text-center space-y-2">
+                                    ${badCases > 0 ? `<div class="text-red-600 font-bold text-xl">${badCases} bad cases</div>` : ''}
+                                    ${dimensions ? `<div class="text-gray-600 text-sm">${dimensions}</div>` : ''}
+                                    ${recommendation ? `<div class="mt-3 text-base font-bold px-3 py-2 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
+                                </div>
+                                <div class="mt-4 text-center text-sm text-gray-500">
+                                    Item ${itemIndex + 1} of ${problematicItems.length}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                } else {
                     html += `
-                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-3 block w-full px-3 py-2 bg-blue-600 text-white rounded text-center text-sm font-semibold hover:bg-blue-700">
-                            Full Analysis
-                        </a>
+                        <div class="h-full flex items-center justify-center p-4">
+                            <p class="text-lg text-gray-500 italic">All items OK</p>
+                        </div>
                     `;
                 }
                 
                 html += `
+                        </div>
+                        <div class="p-3 border-t">
+                            <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" 
+                               class="block w-full px-3 py-2 bg-blue-600 text-white rounded text-center text-sm font-semibold hover:bg-blue-700">
+                                Full Analysis
+                            </a>
                         </div>
                     </div>
                 `;
@@ -245,7 +266,59 @@ async def home():
             
             html += '</div>';
             document.getElementById('contentArea').innerHTML = html;
+            
+            // Start auto-scroll for each delivery
+            startAutoScroll();
         }
+
+        function updateExistingDeliveries(deliveries) {
+            // Just update counts/badges without full redraw
+            deliveries.forEach(delivery => {
+                const section = document.querySelector(`.delivery-section[data-delivery="${delivery.delivery_number}"]`);
+                if (section) {
+                    const newItemCount = (delivery.problematic_items || []).length;
+                    const oldItemCount = parseInt(section.dataset.itemCount || '0');
+                    if (newItemCount !== oldItemCount) {
+                        console.log(`[CLIENT] Delivery ${delivery.delivery_number} changed: ${oldItemCount} -> ${newItemCount} items`);
+                        // Full redraw if item count changed
+                        buildFullDisplay(currentACL, deliveries);
+                        return;
+                    }
+                }
+            });
+        }
+
+        let autoScrollIntervals = [];
+
+        function startAutoScroll() {
+            // Clear existing intervals
+            autoScrollIntervals.forEach(interval => clearInterval(interval));
+            autoScrollIntervals = [];
+            
+            // Start auto-scroll for each delivery carousel
+            document.querySelectorAll('.carousel-container').forEach(container => {
+                const items = container.querySelectorAll('.carousel-item');
+                if (items.length <= 1) return; // No need to scroll if only 1 item
+                
+                let currentIndex = 0;
+                
+                const interval = setInterval(() => {
+                    // Hide current item
+                    items[currentIndex].style.display = 'none';
+                    
+                    // Move to next item
+                    currentIndex = (currentIndex + 1) % items.length;
+                    
+                    // Show next item
+                    items[currentIndex].style.display = 'flex';
+                    
+                    container.dataset.currentIndex = currentIndex;
+                }, 5000); // Change item every 5 seconds
+                
+                autoScrollIntervals.push(interval);
+            });
+        }
+
 
         function startAutoRefresh() {
             if (refreshInterval) clearInterval(refreshInterval);
