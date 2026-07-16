@@ -38,8 +38,8 @@ async def home():
     </style>
 </head>
 <body class="bg-gray-50">
-    <div class="container mx-auto p-6 max-w-7xl">
-        <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg shadow-lg p-6 mb-6">
+    <div class="container mx-auto p-2 max-w-full">
+        <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg shadow-lg p-4 mb-4">
             <h1 class="text-4xl font-bold mb-2">ACL Freight Awareness - Live Monitor</h1>
             <p class="text-blue-100">Real-time cache viewer • Auto-refresh every 30s • No server load</p>
             <div class="mt-4 flex items-center space-x-4">
@@ -49,7 +49,7 @@ async def home():
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-lg mb-6">
+        <div class="bg-white rounded-lg shadow-lg mb-4">
             <div class="border-b border-gray-200">
                 <nav class="flex space-x-8 px-6" aria-label="Tabs">
                     <button onclick="switchACL('acl1')" id="tab-acl1" class="acl-tab border-b-2 border-blue-500 py-4 px-1 text-center font-medium text-blue-600">ACL 1</button>
@@ -127,7 +127,7 @@ async def home():
                 return;
             }
             
-            let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">';
+            let html = '<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">';
             
             deliveries.forEach(delivery => {
                 const deliveryNum = delivery.delivery_number || 'Unknown';
@@ -163,59 +163,59 @@ async def home():
                 }
                 
                 html += `
-                    <div class="bg-white rounded-lg shadow-lg border-2 ${borderColor} overflow-hidden hover:shadow-xl transition">
-                        <div class="${headerBg} text-white px-4 py-3">
-                            <h3 class="font-bold text-lg">#${deliveryNum}</h3>
-                            <p class="text-sm opacity-90">Station: ${station}</p>
+                    <div class="bg-white rounded-lg shadow border-2 ${borderColor} overflow-hidden hover:shadow-lg transition">
+                        <div class="${headerBg} text-white px-3 py-2">
+                            <h3 class="font-bold text-base">#${deliveryNum}</h3>
+                            <p class="text-xs opacity-90">${station}</p>
                         </div>
-                        <div class="p-4">
+                        <div class="p-3">
                 `;
                 
                 if (isPending) {
                     // Pending analysis - show gray status
                     html += `
-                        <div class="text-center py-6">
-                            <p class="text-gray-600 font-semibold mb-2">Pending Analysis</p>
-                            <p class="text-xs text-gray-500">Server analyzing delivery...</p>
+                        <div class="text-center py-4">
+                            <p class="text-gray-600 font-semibold mb-1 text-sm">Pending Analysis</p>
+                            <p class="text-xs text-gray-500">Click to analyze</p>
                         </div>
-                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-4 block w-full px-4 py-2 bg-gray-600 text-white rounded text-center font-semibold hover:bg-gray-700">
+                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="block w-full px-3 py-2 bg-gray-600 text-white rounded text-center text-sm font-semibold hover:bg-gray-700">
                             Analyze Now
                         </a>
                     `;
                 } else {
                     // Has analysis - show problematic items
                     html += `
-                        <div class="flex justify-between items-center mb-3">
-                            <span class="text-sm text-gray-600">${statusText}</span>
-                            <span class="px-3 py-1 ${badgeBg} rounded-full text-sm font-bold">${problematicCount}</span>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs text-gray-600">${statusText}</span>
+                            <span class="px-2 py-1 ${badgeBg} rounded-full text-xs font-bold">${problematicCount}</span>
                         </div>
                     `;
                     
                     if (problematicItems.length > 0) {
-                        html += '<div class="space-y-2">';
+                        html += '<div class="space-y-1.5">';
                         problematicItems.slice(0, 5).forEach(item => {
                             const perf = item.performance || 0;
                             const perfColor = perf < 50 ? 'text-red-600' : perf < 70 ? 'text-yellow-600' : 'text-orange-600';
                             html += `
-                                <div class="text-xs bg-gray-50 p-2 rounded border">
-                                    <div class="flex justify-between">
-                                        <span class="font-mono">${item.mds_fam_id || 'N/A'}</span>
-                                        <span class="${perfColor} font-bold">${perf.toFixed(0)}%</span>
+                                <div class="text-xs bg-gray-50 p-1.5 rounded border">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-mono text-xs">${item.mds_fam_id || 'N/A'}</span>
+                                        <span class="${perfColor} font-bold text-xs">${perf.toFixed(0)}%</span>
                                     </div>
-                                    ${item.item_name ? `<div class="text-gray-600 mt-1 truncate">${item.item_name}</div>` : ''}
+                                    ${item.item_name ? `<div class="text-gray-600 text-xs truncate">${item.item_name}</div>` : ''}
                                 </div>
                             `;
                         });
                         html += '</div>';
                         if (problematicItems.length > 5) {
-                            html += `<p class="text-xs text-gray-500 mt-2">+ ${problematicItems.length - 5} more</p>`;
+                            html += `<p class="text-xs text-gray-500 mt-1">+ ${problematicItems.length - 5} more</p>`;
                         }
                     } else {
-                        html += '<p class="text-sm text-gray-500 italic text-center py-4">All items performing well</p>';
+                        html += '<p class="text-xs text-gray-500 italic text-center py-3">All items OK</p>';
                     }
                     
                     html += `
-                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-4 block w-full px-4 py-2 bg-blue-600 text-white rounded text-center font-semibold hover:bg-blue-700">
+                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-3 block w-full px-3 py-2 bg-blue-600 text-white rounded text-center text-sm font-semibold hover:bg-blue-700">
                             Full Analysis
                         </a>
                     `;
@@ -291,17 +291,21 @@ async def get_acl_cache(acl: str):
                 problematic_items = cached_analysis.get('problematic_items_data', [])
                 problematic_details = cached_analysis.get('problematic_details', {})
                 
+                print(f"[CLIENT-DEBUG] Delivery {delivery_number}: Found {len(problematic_items)} problematic items in cache")
+                
                 # Build display data
                 display_items = []
                 for prob_item in problematic_items[:10]:  # Top 10
                     mds_id = prob_item.get('mds_fam_id', '')
                     acl_details = prob_item.get('acl_details', problematic_details.get(str(mds_id), {}))
                     
-                    display_items.append({
+                    display_item = {
                         'mds_fam_id': mds_id,
                         'item_name': prob_item.get('item_name', ''),
                         'performance': acl_details.get('avg_perf', 0)
-                    })
+                    }
+                    display_items.append(display_item)
+                    print(f"[CLIENT-DEBUG]   Item {mds_id}: perf={display_item['performance']}%")
                 
                 enriched_deliveries.append({
                     'delivery_number': delivery_number,
@@ -310,8 +314,10 @@ async def get_acl_cache(acl: str):
                     'problematic_items': display_items,
                     'cached': True
                 })
+                print(f"[CLIENT-DEBUG] Delivery {delivery_number}: Added to enriched list (problematic_count={len(problematic_items)})")
             else:
                 # Not analyzed yet - show as pending
+                print(f"[CLIENT-DEBUG] Delivery {delivery_number}: No analysis cache found - showing as pending")
                 enriched_deliveries.append({
                     'delivery_number': delivery_number,
                     'station': station,
@@ -323,11 +329,16 @@ async def get_acl_cache(acl: str):
         
         print(f"[CLIENT] Enriched {len(enriched_deliveries)} deliveries for {acl} (checked analysis cache)")
         
-        return JSONResponse({
+        result = {
             "deliveries": enriched_deliveries,
             "last_update": datetime.now().isoformat(),
             "status": "ready"
-        })
+        }
+        
+        # DEBUG: Log the result being sent
+        print(f"[CLIENT-DEBUG] Returning {len(enriched_deliveries)} deliveries to frontend")
+        
+        return JSONResponse(result)
         
     except Exception as e:
         print(f"[CLIENT] Error fetching/enriching {acl}: {e}")
