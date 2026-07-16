@@ -252,24 +252,22 @@ async def home():
                             `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
                         
                         html += `
-                            <div class="bg-white p-3 rounded-lg border-2 flex-1" style="border-color: ${colorHex};">
-                                <div class="flex gap-3 items-center h-full">
-                                    ${imageUrl ? `<img src="${imageUrl}" class="w-24 h-24 object-cover rounded flex-shrink-0" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
-                                    <div class="flex-1 min-w-0">
-                                        <div class="dev-only text-xs text-gray-600 mb-1" style="display: none;">
-                                            ${item.mds_fam_id || 'N/A'}
-                                        </div>
-                                        ${item.item_name ? `<div class="text-gray-800 text-base font-bold mb-2 truncate">${item.item_name}</div>` : ''}
-                                        <div class="flex items-center gap-4 mb-2">
-                                            <div class="text-4xl font-bold" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
-                                            ${badCases > 0 ? `<div class="text-red-600 font-bold text-xl">${badCases} bad cases</div>` : ''}
-                                        </div>
-                                        <div class="dev-only text-xs text-gray-600" style="display: none;">
-                                            ${dimensions ? `${dimensions}` : ''}
-                                        </div>
+                            <div class="bg-white p-4 rounded-lg border-2 flex-1 flex flex-col" style="border-color: ${colorHex};">
+                                <div class="dev-only text-xs text-gray-600 mb-2 text-center" style="display: none;">
+                                    ${item.mds_fam_id || 'N/A'}
+                                </div>
+                                ${item.item_name ? `<div class="text-gray-800 text-base font-bold mb-3 text-center truncate">${item.item_name}</div>` : ''}
+                                <div class="flex-1 flex items-center justify-center mb-3">
+                                    ${imageUrl ? `<img src="${imageUrl}" class="max-w-full max-h-48 object-contain rounded" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27200%27 height=%27200%27%3E%3Crect fill=%27%23ddd%27 width=%27200%27 height=%27200%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2716%27%3ENo Image%3C/text%3E%3C/svg%3E'" />` : '<div class="w-full h-48 bg-gray-200 rounded flex items-center justify-center"><span class="text-gray-400">No Image</span></div>'}
+                                </div>
+                                <div class="text-center space-y-2">
+                                    <div class="text-5xl font-bold" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
+                                    ${badCases > 0 ? `<div class="text-red-600 font-bold text-2xl">${badCases} bad cases</div>` : ''}
+                                    <div class="dev-only text-xs text-gray-600" style="display: none;">
+                                        ${dimensions ? `${dimensions}` : ''}
                                     </div>
                                 </div>
-                                ${recommendation ? `<div class="mt-2 text-sm font-bold text-center px-2 py-1 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
+                                ${recommendation ? `<div class="mt-3 text-base font-bold text-center px-3 py-2 rounded" style="background-color: ${colorHex}20; color: ${colorHex}; word-wrap: break-word;">${recommendation}</div>` : ''}
                             </div>
                         `;
                     });
