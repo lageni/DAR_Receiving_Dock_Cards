@@ -196,13 +196,29 @@ async def home():
                         problematicItems.slice(0, 5).forEach(item => {
                             const perf = item.performance || 0;
                             const perfColor = perf < 50 ? 'text-red-600' : perf < 70 ? 'text-yellow-600' : 'text-orange-600';
+                            const badCases = item.bad_cases || 0;
+                            const imageUrl = item.image_url || '';
+                            const recommendation = item.recommendation || '';
+                            const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
+                                `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
+                            
                             html += `
                                 <div class="text-xs bg-gray-50 p-1.5 rounded border">
-                                    <div class="flex justify-between items-center">
-                                        <span class="font-mono text-xs">${item.mds_fam_id || 'N/A'}</span>
-                                        <span class="${perfColor} font-bold text-xs">${perf.toFixed(0)}%</span>
+                                    <div class="flex gap-2">
+                                        ${imageUrl ? `<img src="${imageUrl}" class="w-12 h-12 object-cover rounded" />` : '<div class="w-12 h-12 bg-gray-200 rounded flex items-center justify-center"><span class="text-xs text-gray-400">No Img</span></div>'}
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex justify-between items-center">
+                                                <span class="font-mono text-xs truncate">${item.mds_fam_id || 'N/A'}</span>
+                                                <span class="${perfColor} font-bold text-xs">${perf.toFixed(0)}%</span>
+                                            </div>
+                                            ${item.item_name ? `<div class="text-gray-700 text-xs font-semibold truncate">${item.item_name}</div>` : ''}
+                                            <div class="text-gray-600 text-xs mt-0.5">
+                                                ${badCases > 0 ? `<span class="text-red-600 font-semibold">${badCases} bad cases</span>` : ''}
+                                                ${dimensions ? `<span class="ml-2">${dimensions}</span>` : ''}
+                                            </div>
+                                            ${recommendation ? `<div class="text-xs text-blue-600 italic mt-0.5">${recommendation}</div>` : ''}
+                                        </div>
                                     </div>
-                                    ${item.item_name ? `<div class="text-gray-600 text-xs truncate">${item.item_name}</div>` : ''}
                                 </div>
                             `;
                         });
@@ -302,10 +318,16 @@ async def get_acl_cache(acl: str):
                     display_item = {
                         'mds_fam_id': mds_id,
                         'item_name': prob_item.get('item_name', ''),
-                        'performance': acl_details.get('avg_perf', 0)
+                        'performance': acl_details.get('avg_perf', 0),
+                        'bad_cases': acl_details.get('bad_cases', 0),
+                        'recommendation': acl_details.get('recommendation', ''),
+                        'image_url': prob_item.get('image_url', ''),
+                        'vnpk_length': prob_item.get('vnpk_length', ''),
+                        'vnpk_width': prob_item.get('vnpk_width', ''),
+                        'vnpk_height': prob_item.get('vnpk_height', '')
                     }
                     display_items.append(display_item)
-                    print(f"[CLIENT-DEBUG]   Item {mds_id}: perf={display_item['performance']}%")
+                    print(f"[CLIENT-DEBUG]   Item {mds_id}: perf={display_item['performance']}%, bad_cases={display_item['bad_cases']}")
                 
                 enriched_deliveries.append({
                     'delivery_number': delivery_number,

@@ -96,8 +96,16 @@ class ACLMonitor:
             po_rows = enriched.get('data', [])
             
             # Load read rates for analysis (using optimized SQL filtering)
-            from main import load_read_rates_for_items, get_avg_performance
+            from main import load_read_rates_for_items, get_avg_performance, get_recommendation, extract_item_data
             read_rates_cache = load_read_rates_for_items(mds_fam_ids)
+            
+            # Build lookup dict for item quantities
+            po_rows_by_mds_id = {}
+            for row in po_rows:
+                mds_id = str(row.get('mds_fam_id', ''))
+                if mds_id not in po_rows_by_mds_id:
+                    po_rows_by_mds_id[mds_id] = []
+                po_rows_by_mds_id[mds_id].append(row)
             
             # Find problematic items (avg performance < 85%)
             problematic_mds_ids = []
@@ -116,10 +124,30 @@ class ACLMonitor:
                 
                 # Check if problematic (< 85%)
                 if avg_perf < 85:
+                    # Get item quantity for bad cases calculation
+                    item_qty = 0
+                    for row in po_rows_by_mds_id.get(str(mds_id), []):
+                        qty = row.get('total_freight_qty', row.get('whpk_order_qty', 0))
+                        if qty:
+                            try:
+                                item_qty += int(qty) if isinstance(qty, (int, str)) else 0
+                            except:
+                                pass
+                    
+                    # Calculate bad cases
+                    bad_cases = int(item_qty * (100 - avg_perf) / 100)
+                    
+                    # Get recommendation
+                    recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "")
+                    
                     problematic_mds_ids.append(mds_id)
                     problematic_details[str(mds_id)] = {
                         'avg_perf': avg_perf,
-                        'rate_data': rate_data
+                        'rate_data': rate_data,
+                        'item_qty': item_qty,
+                        'bad_cases': bad_cases,
+                        'recommendation': recommendation,
+                        'color_hex': color_hex
                     }
                 else:
                     approved_count += 1
@@ -160,20 +188,14 @@ class ACLMonitor:
                             response.raise_for_status()
                             mdm_data = response.json()
                             
-                            # Extract item data (simplified - just name and image)
-                            item_name = mdm_data.get('itemBasicInfo', {}).get('itemName', f'MDS {mds_id}')
-                            image_url = mdm_data.get('imageInfo', {}).get('thumbnailURL', '')
-                            
-                            item_data = {
-                                "mds_fam_id": str(mds_id),
-                                "item_name": item_name,
-                                "image_url": image_url,
-                                "acl_details": problematic_details.get(mds_id, {})
-                            }
+                            # Extract full item data using main server's function
+                            item_data = extract_item_data(mdm_data)
+                            item_data["mds_fam_id"] = str(mds_id)
+                            item_data["acl_details"] = problematic_details.get(str(mds_id), {})
                             problematic_items_data.append(item_data)
                             
-                            # Cache MDM data
-                            mdm_cache_data = {"item_name": item_name, "image_url": image_url, "mds_fam_id": str(mds_id)}
+                            # Cache MDM data (without acl_details which is delivery-specific)
+                            mdm_cache_data = {k: v for k, v in item_data.items() if k != "acl_details"}
                             cache.set(f"mdm_{mds_id}", mdm_cache_data, category="items")
                             
                         except Exception as e:
