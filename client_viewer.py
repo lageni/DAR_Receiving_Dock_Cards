@@ -134,20 +134,32 @@ async def home():
                 const station = delivery.station || 'Unknown';
                 const problematicCount = delivery.problematic_count || 0;
                 const problematicItems = delivery.problematic_items || [];
+                const isCached = delivery.cached !== false;
+                const isPending = delivery.status === 'pending_analysis';
                 
-                let borderColor, headerBg, badgeBg;
-                if (problematicCount === 0) {
+                let borderColor, headerBg, badgeBg, statusText;
+                
+                if (isPending) {
+                    // Not analyzed yet - gray/pending
+                    borderColor = 'border-gray-400';
+                    headerBg = 'bg-gradient-to-r from-gray-500 to-gray-600';
+                    badgeBg = 'bg-gray-100 text-gray-800';
+                    statusText = 'Pending Analysis';
+                } else if (problematicCount === 0) {
                     borderColor = 'border-green-500';
                     headerBg = 'bg-gradient-to-r from-green-600 to-green-700';
                     badgeBg = 'bg-green-100 text-green-800';
+                    statusText = 'All Clear';
                 } else if (problematicCount < 5) {
                     borderColor = 'border-yellow-500';
                     headerBg = 'bg-gradient-to-r from-yellow-600 to-yellow-700';
                     badgeBg = 'bg-yellow-100 text-yellow-800';
+                    statusText = 'Minor Issues';
                 } else {
                     borderColor = 'border-red-500';
                     headerBg = 'bg-gradient-to-r from-red-600 to-red-700';
                     badgeBg = 'bg-red-100 text-red-800';
+                    statusText = 'Needs Attention';
                 }
                 
                 html += `
@@ -157,37 +169,59 @@ async def home():
                             <p class="text-sm opacity-90">Station: ${station}</p>
                         </div>
                         <div class="p-4">
-                            <div class="flex justify-between items-center mb-3">
-                                <span class="text-sm text-gray-600">Problematic Items</span>
-                                <span class="px-3 py-1 ${badgeBg} rounded-full text-sm font-bold">${problematicCount}</span>
-                            </div>
                 `;
                 
-                if (problematicItems.length > 0) {
-                    html += '<div class="space-y-2">';
-                    problematicItems.slice(0, 5).forEach(item => {
-                        const perf = item.performance || 0;
-                        const perfColor = perf < 50 ? 'text-red-600' : perf < 70 ? 'text-yellow-600' : 'text-orange-600';
-                        html += `
-                            <div class="text-xs bg-gray-50 p-2 rounded border">
-                                <div class="flex justify-between">
-                                    <span class="font-mono">${item.mds_fam_id || 'N/A'}</span>
-                                    <span class="${perfColor} font-bold">${perf.toFixed(0)}%</span>
+                if (isPending) {
+                    // Pending analysis - show gray status
+                    html += `
+                        <div class="text-center py-6">
+                            <p class="text-gray-600 font-semibold mb-2">Pending Analysis</p>
+                            <p class="text-xs text-gray-500">Server analyzing delivery...</p>
+                        </div>
+                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-4 block w-full px-4 py-2 bg-gray-600 text-white rounded text-center font-semibold hover:bg-gray-700">
+                            Analyze Now
+                        </a>
+                    `;
+                } else {
+                    // Has analysis - show problematic items
+                    html += `
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-sm text-gray-600">${statusText}</span>
+                            <span class="px-3 py-1 ${badgeBg} rounded-full text-sm font-bold">${problematicCount}</span>
+                        </div>
+                    `;
+                    
+                    if (problematicItems.length > 0) {
+                        html += '<div class="space-y-2">';
+                        problematicItems.slice(0, 5).forEach(item => {
+                            const perf = item.performance || 0;
+                            const perfColor = perf < 50 ? 'text-red-600' : perf < 70 ? 'text-yellow-600' : 'text-orange-600';
+                            html += `
+                                <div class="text-xs bg-gray-50 p-2 rounded border">
+                                    <div class="flex justify-between">
+                                        <span class="font-mono">${item.mds_fam_id || 'N/A'}</span>
+                                        <span class="${perfColor} font-bold">${perf.toFixed(0)}%</span>
+                                    </div>
+                                    ${item.item_name ? `<div class="text-gray-600 mt-1 truncate">${item.item_name}</div>` : ''}
                                 </div>
-                                ${item.item_name ? `<div class="text-gray-600 mt-1 truncate">${item.item_name}</div>` : ''}
-                            </div>
-                        `;
-                    });
-                    html += '</div>';
-                    if (problematicItems.length > 5) {
-                        html += `<p class="text-xs text-gray-500 mt-2">+ ${problematicItems.length - 5} more</p>`;
+                            `;
+                        });
+                        html += '</div>';
+                        if (problematicItems.length > 5) {
+                            html += `<p class="text-xs text-gray-500 mt-2">+ ${problematicItems.length - 5} more</p>`;
+                        }
+                    } else {
+                        html += '<p class="text-sm text-gray-500 italic text-center py-4">All items performing well</p>';
                     }
+                    
+                    html += `
+                        <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-4 block w-full px-4 py-2 bg-blue-600 text-white rounded text-center font-semibold hover:bg-blue-700">
+                            Full Analysis
+                        </a>
+                    `;
                 }
                 
                 html += `
-                            <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" class="mt-4 block w-full px-4 py-2 bg-blue-600 text-white rounded text-center font-semibold hover:bg-blue-700">
-                                Full Analysis
-                            </a>
                         </div>
                     </div>
                 `;
@@ -222,28 +256,81 @@ async def home():
 
 @app.get("/api/cache/{acl}")
 async def get_acl_cache(acl: str):
-    """Read ACL data from shared cache - FAST!"""
+    """Fetch deliveries from ABIA, check server's analysis cache"""
+    import httpx
+    
     try:
+        # Step 1: Call ABIA API to get active deliveries (same as server does)
+        abia_url = f"https://abia.wal-mart.com/aclaware/fetchData/?dc=6068&acl={acl}"
+        
+        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            response = await client.get(abia_url)
+            response.raise_for_status()
+            abia_data = response.json()
+        
+        raw_deliveries = abia_data.get('data', [])
+        print(f"[CLIENT] ABIA API: Fetched {len(raw_deliveries)} active deliveries for {acl}")
+        
+        # Step 2: For each delivery, check if server has analyzed it
         cache = get_cache_manager()
+        enriched_deliveries = []
         
-        # Read from shared cache structure written by server
-        cache_key = f"acl_{acl}_deliveries"
-        cached_data = cache.get(cache_key, category="acl")
+        for item in raw_deliveries:
+            delivery_number = item.get('delivery', '')
+            station = item.get('station', 'Unknown')
+            
+            if not delivery_number:
+                continue
+            
+            # Check server's analysis cache
+            analysis_key = f"analysis_{delivery_number}"
+            cached_analysis = cache.get(analysis_key, category="deliveries")
+            
+            if cached_analysis:
+                # Server has analyzed this delivery!
+                problematic_items = cached_analysis.get('problematic_items_data', [])
+                problematic_details = cached_analysis.get('problematic_details', {})
+                
+                # Build display data
+                display_items = []
+                for prob_item in problematic_items[:10]:  # Top 10
+                    mds_id = prob_item.get('mds_fam_id', '')
+                    acl_details = prob_item.get('acl_details', problematic_details.get(str(mds_id), {}))
+                    
+                    display_items.append({
+                        'mds_fam_id': mds_id,
+                        'item_name': prob_item.get('item_name', ''),
+                        'performance': acl_details.get('avg_perf', 0)
+                    })
+                
+                enriched_deliveries.append({
+                    'delivery_number': delivery_number,
+                    'station': station,
+                    'problematic_count': len(problematic_items),
+                    'problematic_items': display_items,
+                    'cached': True
+                })
+            else:
+                # Not analyzed yet - show as pending
+                enriched_deliveries.append({
+                    'delivery_number': delivery_number,
+                    'station': station,
+                    'problematic_count': 0,
+                    'problematic_items': [],
+                    'cached': False,
+                    'status': 'pending_analysis'
+                })
         
-        if not cached_data:
-            print(f"[CLIENT] No cache found for {acl}")
-            return JSONResponse({
-                "deliveries": [],
-                "last_update": "Never",
-                "status": "no_cache"
-            })
+        print(f"[CLIENT] Enriched {len(enriched_deliveries)} deliveries for {acl} (checked analysis cache)")
         
-        print(f"[CLIENT] Serving {len(cached_data.get('deliveries', []))} deliveries for {acl} from cache")
-        
-        return JSONResponse(cached_data)
+        return JSONResponse({
+            "deliveries": enriched_deliveries,
+            "last_update": datetime.now().isoformat(),
+            "status": "ready"
+        })
         
     except Exception as e:
-        print(f"[CLIENT] Error reading cache: {e}")
+        print(f"[CLIENT] Error fetching/enriching {acl}: {e}")
         return JSONResponse({
             "deliveries": [],
             "last_update": "Error",

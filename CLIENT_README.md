@@ -9,10 +9,11 @@
 ## OVERVIEW
 
 The client is a lightweight viewer that:
-- Reads cached data from shared L: drive
-- Displays ACL deliveries in real-time
+- **Calls ABIA API directly** to get active deliveries (same endpoint as server)
+- **Checks server's analysis cache** to see which deliveries have been analyzed
+- Displays deliveries with color-coded status (analyzed vs pending)
 - Auto-refreshes every 30 seconds
-- Zero database or API load
+- Zero database load
 - Multiple users can run simultaneously
 
 ---
@@ -56,6 +57,7 @@ http://localhost:8001
 - **ACL 3** - Active deliveries on ACL 3
 
 ### Color-Coded Cards
+- **Gray** - Pending analysis (server hasn't analyzed yet)
 - **Green** - 0 problematic items (all good)
 - **Yellow** - 1-4 problematic items (minor issues)
 - **Red** - 5+ problematic items (attention needed)
@@ -68,9 +70,29 @@ Each delivery card shows:
 - Top 5 problematic items with performance %
 - Link to full analysis (opens server)
 
----
+## HOW IT WORKS
 
-## ENDPOINTS
+### Step 1: Fetch Active Deliveries
+Client calls ABIA API directly:
+```
+https://abia.wal-mart.com/aclaware/fetchData/?dc=6068&acl=acl1
+```
+
+### Step 2: Check Analysis Status
+For each delivery from ABIA, client checks if server has analyzed it:
+```python
+cache_key = f"analysis_{delivery_number}"
+cached_analysis = cache.get(cache_key)
+```
+
+### Step 3: Display Results
+- **Analyzed deliveries:** Show problematic items, performance scores (green/yellow/red)
+- **Pending deliveries:** Show gray "Pending Analysis" status
+
+### Step 4: Auto-Refresh
+- Every 30 seconds, repeat steps 1-3
+- Get fresh ABIA data
+- Check for new analysis results
 
 ### Main Page
 - `GET /` - ACL viewer with tabs
@@ -83,36 +105,49 @@ Each delivery card shows:
 
 ## CACHE READING
 
-### Cache Location
+### What Client Checks
+For each delivery from ABIA, client checks:
 ```
-L:\Engineering\DAR Docktag Cards\cache_data\acl\
+L:\Engineering\DAR Docktag Cards\cache_data\deliveries\
+analysis_{delivery_number}.json
 ```
 
-### Cache Files
-- `acl_acl1_deliveries.json` - ACL 1 data
-- `acl_acl2_deliveries.json` - ACL 2 data
-- `acl_acl3_deliveries.json` - ACL 3 data
-
-### Cache Structure
+### Cache Structure (Written by Server)
 ```json
 {
-  "deliveries": [
+  "problematic_mds_ids": ["12345", "67890"],
+  "problematic_details": {
+    "12345": {
+      "avg_perf": 62.5,
+      "item_qty": 200,
+      "bad_cases": 75
+    }
+  },
+  "problematic_items_data": [
     {
-      "delivery_number": "10917836",
-      "station": "A1",
-      "problematic_count": 5,
-      "problematic_items": [
-        {
-          "mds_fam_id": "12345678",
-          "item_name": "Widget Name",
-          "performance": 62.5
-        }
-      ]
+      "mds_fam_id": "12345",
+      "item_name": "Widget",
+      "acl_details": {...}
     }
   ],
-  "last_update": "2026-07-15T16:30:00",
-  "status": "ready"
+  "approved_count": 420
 }
+```
+
+### Client Logic
+```python
+# 1. Get deliveries from ABIA
+deliveries = fetch_from_abia()
+
+# 2. For each delivery, check if analyzed
+for delivery in deliveries:
+    analysis = cache.get(f"analysis_{delivery.number}")
+    if analysis:
+        # Show problematic items
+        display_analyzed(delivery, analysis)
+    else:
+        # Show "Pending Analysis"
+        display_pending(delivery)
 ```
 
 ---
@@ -143,17 +178,20 @@ L:\Engineering\DAR Docktag Cards\cache_data\acl\
 
 ## TROUBLESHOOTING
 
-### "No cache" or "All clear"
-**Cause:** Server hasn't written cache yet  
-**Fix:** Wait 2 minutes after starting server  
-**Check:** Server logs should show `[ACL-WORKER] Wrote X deliveries to disk cache`
+### Seeing gray "Pending Analysis" cards
+**Cause:** Server hasn't analyzed those deliveries yet  
+**This is normal!** Server analyzes deliveries in background  
+**Wait time:** Usually 2-5 seconds per delivery  
+**Action:** 
+- Click "Analyze Now" to trigger analysis on server
+- Or wait for server background worker to analyze it
 
-### "Cannot read cache"
-**Cause:** Cache directory not accessible  
+### "Cannot read cache" error
+**Cause:** Cannot access L: drive or cache directory  
 **Fix:**
-- Verify path exists: `L:\Engineering\DAR Docktag Cards\cache_data\acl\`
+- Verify path exists: `L:\Engineering\DAR Docktag Cards\cache_data\deliveries\`
 - Check file permissions
-- Ensure server has written cache at least once
+- Ensure you're on VPN (if L: drive is network)
 
 ### Old data showing
 **Cause:** Server stopped or crashed  

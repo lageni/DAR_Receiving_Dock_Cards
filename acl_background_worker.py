@@ -188,35 +188,6 @@ class ACLMonitor:
         self.cache[acl]["last_update"] = datetime.now().isoformat()
         self.cache[acl]["status"] = "ready"
         
-        # WRITE TO DISK CACHE for client viewer
-        try:
-            from cache_manager import get_cache_manager
-            cache_mgr = get_cache_manager()
-            
-            # Flatten structure for client consumption
-            client_deliveries = []
-            for delivery in analyzed:
-                analysis = delivery.get('analysis', {})
-                client_deliveries.append({
-                    'delivery_number': delivery.get('delivery_number'),
-                    'station': delivery.get('station'),
-                    'problematic_count': analysis.get('problematic_count', 0),
-                    'problematic_items': analysis.get('problematic_items', [])
-                })
-            
-            cache_data = {
-                'deliveries': client_deliveries,
-                'last_update': datetime.now().isoformat(),
-                'status': 'ready'
-            }
-            
-            cache_key = f"acl_{acl}_deliveries"
-            cache_mgr.set(cache_key, cache_data, category="acl")
-            print(f"[ACL-WORKER] {acl.upper()}: Wrote {len(client_deliveries)} deliveries to disk cache for client")
-            
-        except Exception as e:
-            print(f"[ACL-WORKER] {acl.upper()}: Error writing to disk cache: {e}")
-        
         print(f"[ACL-WORKER] {acl.upper()}: Analysis complete! {len(analyzed)} deliveries cached.")
     
     async def monitor_loop(self):
