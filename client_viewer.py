@@ -169,7 +169,7 @@ async def home():
             const numDeliveries = deliveries.length;
             const gridCols = Math.min(numDeliveries, 5); // Max 5 columns
             
-            let html = `<div class="grid gap-4" style="grid-template-columns: repeat(${gridCols}, 1fr); height: calc(100vh - 180px);">`;
+            let html = `<div class="grid gap-4 auto-rows-fr" style="grid-template-columns: repeat(${gridCols}, 1fr); height: calc(100vh - 180px);">`;
             
             deliveries.forEach((delivery, deliveryIndex) => {
                 const deliveryNum = delivery.delivery_number || 'Unknown';
@@ -218,7 +218,7 @@ async def home():
                             </div>
                             ${totalBadCases > 0 ? `<div class="text-sm font-bold mt-1 text-red-200">${totalBadCases} total bad cases</div>` : ''}
                         </div>
-                        <div class="flex-1 overflow-y-auto p-3">
+                        <div class="flex-1 overflow-hidden relative" data-current-index="0">
                 `;
                 
                 if (isPending) {
@@ -232,10 +232,18 @@ async def home():
                     // Sort items by bad cases (worst first)
                     const sortedItems = [...problematicItems].sort((a, b) => (b.bad_cases || 0) - (a.bad_cases || 0));
                     
-                    // Show ALL items in a grid
-                    html += '<div class="space-y-3">';
+                    // Show 2 items at a time, auto-scroll through pages
+                    const itemsPerPage = 2;
+                    const pages = [];
+                    for (let i = 0; i < sortedItems.length; i += itemsPerPage) {
+                        pages.push(sortedItems.slice(i, i + itemsPerPage));
+                    }
                     
-                    sortedItems.forEach(item => {
+                    html += '<div class="carousel-items h-full p-3">';
+                    pages.forEach((pageItems, pageIndex) => {
+                        html += `<div class="carousel-page h-full space-y-3" style="display: ${pageIndex === 0 ? 'flex' : 'none'}; flex-direction: column;">`;
+                        
+                        pageItems.forEach(item => {
                         const perf = item.performance || 0;
                         const badCases = item.bad_cases || 0;
                         const imageUrl = item.image_url || '';
@@ -245,19 +253,19 @@ async def home():
                             `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
                         
                         html += `
-                            <div class="bg-white p-3 rounded-lg border-2" style="border-color: ${colorHex};">
-                                <div class="flex gap-3 items-center">
-                                    ${imageUrl ? `<img src="${imageUrl}" class="w-20 h-20 object-cover rounded flex-shrink-0" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
+                            <div class="bg-white p-3 rounded-lg border-2 flex-1" style="border-color: ${colorHex};">
+                                <div class="flex gap-3 items-center h-full">
+                                    ${imageUrl ? `<img src="${imageUrl}" class="w-24 h-24 object-cover rounded flex-shrink-0" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
                                     <div class="flex-1 min-w-0">
                                         <div class="dev-only text-xs text-gray-600 mb-1" style="display: none;">
                                             ${item.mds_fam_id || 'N/A'}
                                         </div>
-                                        ${item.item_name ? `<div class="text-gray-800 text-sm font-bold mb-1 truncate">${item.item_name}</div>` : ''}
-                                        <div class="flex items-center gap-3">
-                                            <div class="text-3xl font-bold" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
-                                            ${badCases > 0 ? `<div class="text-red-600 font-bold text-lg">${badCases} bad cases</div>` : ''}
+                                        ${item.item_name ? `<div class="text-gray-800 text-base font-bold mb-2 truncate">${item.item_name}</div>` : ''}
+                                        <div class="flex items-center gap-4 mb-2">
+                                            <div class="text-4xl font-bold" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
+                                            ${badCases > 0 ? `<div class="text-red-600 font-bold text-xl">${badCases} bad cases</div>` : ''}
                                         </div>
-                                        <div class="dev-only text-xs text-gray-600 mt-1" style="display: none;">
+                                        <div class="dev-only text-xs text-gray-600" style="display: none;">
                                             ${dimensions ? `${dimensions}` : ''}
                                         </div>
                                     </div>
@@ -268,6 +276,12 @@ async def home():
                     });
                     
                     html += '</div>';
+                });
+                html += '</div>';
+                
+                if (pages.length > 1) {
+                    html += `<div class="absolute bottom-2 left-0 right-0 text-center text-sm text-gray-500 bg-white/80 py-1">Page <span class="page-indicator">1</span> of ${pages.length}</div>`;
+                }
                 } else {
                     html += `
                         <div class="h-full flex items-center justify-center p-4">
@@ -284,6 +298,9 @@ async def home():
             
             html += '</div>';
             document.getElementById('contentArea').innerHTML = html;
+            
+            // Start auto-scroll for each delivery carousel
+            startAutoScroll();
         }
 
         function updateExistingDeliveries(deliveries) {
@@ -300,6 +317,49 @@ async def home():
                         return;
                     }
                 }
+            });
+        }
+
+        let autoScrollIntervals = [];
+
+        function startAutoScroll() {
+            // Clear existing intervals
+            autoScrollIntervals.forEach(interval => clearInterval(interval));
+            autoScrollIntervals = [];
+            
+            // Start auto-scroll for each delivery carousel
+            document.querySelectorAll('.delivery-section').forEach(deliverySection => {
+                const pages = deliverySection.querySelectorAll('.carousel-page');
+                if (pages.length <= 1) return; // No need to scroll if only 1 page
+                
+                let currentIndex = 0;
+                const pageIndicator = deliverySection.querySelector('.page-indicator');
+                
+                const interval = setInterval(() => {
+                    // Hide current page with fade
+                    pages[currentIndex].style.opacity = '0';
+                    pages[currentIndex].style.transition = 'opacity 0.5s ease-in-out';
+                    
+                    setTimeout(() => {
+                        pages[currentIndex].style.display = 'none';
+                        
+                        // Move to next page
+                        currentIndex = (currentIndex + 1) % pages.length;
+                        
+                        // Show next page with fade
+                        pages[currentIndex].style.display = 'flex';
+                        pages[currentIndex].style.opacity = '0';
+                        setTimeout(() => {
+                            pages[currentIndex].style.opacity = '1';
+                        }, 50);
+                        
+                        if (pageIndicator) {
+                            pageIndicator.textContent = currentIndex + 1;
+                        }
+                    }, 500);
+                }, 5000); // Change page every 5 seconds
+                
+                autoScrollIntervals.push(interval);
             });
         }
 
