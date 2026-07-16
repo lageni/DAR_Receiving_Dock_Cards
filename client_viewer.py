@@ -165,7 +165,11 @@ async def home():
         }
 
         function buildFullDisplay(acl, deliveries) {
-            let html = '<div class="flex gap-6 overflow-x-auto pb-4" style="scroll-behavior: smooth;">';
+            // Calculate grid columns based on number of deliveries
+            const numDeliveries = deliveries.length;
+            const gridCols = Math.min(numDeliveries, 5); // Max 5 columns
+            
+            let html = `<div class="grid gap-4" style="grid-template-columns: repeat(${gridCols}, 1fr); height: calc(100vh - 180px);">`;
             
             deliveries.forEach((delivery, deliveryIndex) => {
                 const deliveryNum = delivery.delivery_number || 'Unknown';
@@ -201,86 +205,73 @@ async def home():
                 }
                 
                 html += `
-                    <div class="delivery-section flex-shrink-0 bg-white rounded-lg shadow border-2 ${borderColor} overflow-hidden" 
-                         style="width: calc(33.333vw - 24px); min-width: 450px; scroll-snap-align: start; height: calc(100vh - 200px); display: flex; flex-direction: column;"
+                    <div class="delivery-section bg-white rounded-lg shadow border-2 ${borderColor} overflow-hidden flex flex-col"
                          data-delivery="${deliveryNum}" data-item-count="${problematicItems.length}">
-                        <div class="${headerBg} text-white px-4 py-3">
+                        <div class="${headerBg} text-white px-3 py-2 flex-shrink-0">
                             <div class="flex justify-between items-center">
-                                <h3 class="font-bold text-2xl">#${deliveryNum}</h3>
-                                <span class="text-base">${station}</span>
+                                <h3 class="font-bold text-lg">#${deliveryNum}</h3>
+                                <span class="text-sm">${station}</span>
                             </div>
-                            <div class="flex justify-between items-center mt-2">
-                                <span class="text-sm">${statusText}</span>
-                                <span class="px-3 py-1 ${badgeBg} rounded-full text-sm font-bold">${problematicCount} items</span>
+                            <div class="flex justify-between items-center mt-1">
+                                <span class="text-xs">${statusText}</span>
+                                <span class="px-2 py-0.5 ${badgeBg} rounded-full text-xs font-bold">${problematicCount} items</span>
                             </div>
-                            ${totalBadCases > 0 ? `<div class="text-lg font-bold mt-2 text-red-200">${totalBadCases} total bad cases</div>` : ''}
+                            ${totalBadCases > 0 ? `<div class="text-sm font-bold mt-1 text-red-200">${totalBadCases} total bad cases</div>` : ''}
                         </div>
-                        <div class="carousel-container flex-1 overflow-hidden relative p-4" data-current-index="0">
+                        <div class="flex-1 overflow-y-auto p-3">
                 `;
                 
                 if (isPending) {
                     html += `
-                        <div class="h-full flex flex-col items-center justify-center p-6">
-                            <p class="text-gray-600 font-semibold text-2xl mb-3">Pending Analysis</p>
-                            <p class="text-lg text-gray-500">Server analyzing delivery...</p>
+                        <div class="h-full flex flex-col items-center justify-center p-4">
+                            <p class="text-gray-600 font-semibold text-lg mb-2">Pending Analysis</p>
+                            <p class="text-sm text-gray-500">Server analyzing delivery...</p>
                         </div>
                     `;
                 } else if (problematicItems.length > 0) {
                     // Sort items by bad cases (worst first)
                     const sortedItems = [...problematicItems].sort((a, b) => (b.bad_cases || 0) - (a.bad_cases || 0));
                     
-                    // Show 2 items at a time in grid
-                    const itemsPerPage = 2;
-                    const pages = [];
-                    for (let i = 0; i < sortedItems.length; i += itemsPerPage) {
-                        pages.push(sortedItems.slice(i, i + itemsPerPage));
-                    }
+                    // Show ALL items in a grid
+                    html += '<div class="space-y-3">';
                     
-                    html += '<div class="carousel-items h-full">';
-                    pages.forEach((pageItems, pageIndex) => {
-                        html += `<div class="carousel-page h-full" style="display: ${pageIndex === 0 ? 'grid' : 'none'}; grid-template-rows: repeat(${pageItems.length}, 1fr); gap: 16px;">`;
+                    sortedItems.forEach(item => {
+                        const perf = item.performance || 0;
+                        const badCases = item.bad_cases || 0;
+                        const imageUrl = item.image_url || '';
+                        const recommendation = item.recommendation || '';
+                        const colorHex = item.color_hex || '#6b7280';
+                        const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
+                            `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
                         
-                        pageItems.forEach(item => {
-                            const perf = item.performance || 0;
-                            const badCases = item.bad_cases || 0;
-                            const imageUrl = item.image_url || '';
-                            const recommendation = item.recommendation || '';
-                            const colorHex = item.color_hex || '#6b7280';
-                            const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
-                                `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
-                            
-                            html += `
-                                <div class="bg-white p-4 rounded-lg border-2" style="border-color: ${colorHex};">
-                                    <div class="flex gap-4 items-center h-full">
-                                        ${imageUrl ? `<img src="${imageUrl}" class="w-32 h-32 object-cover rounded flex-shrink-0" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
-                                        <div class="flex-1 min-w-0">
-                                            <div class="dev-only mb-2" style="display: none;">
-                                                <span class="font-mono text-base font-semibold text-gray-600">${item.mds_fam_id || 'N/A'}</span>
-                                            </div>
-                                            ${item.item_name ? `<div class="text-gray-800 text-xl font-bold mb-2">${item.item_name}</div>` : ''}
-                                            <div class="text-6xl font-bold mb-3" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
-                                            ${badCases > 0 ? `<div class="text-red-600 font-bold text-2xl mb-2">${badCases} bad cases</div>` : ''}
-                                            <div class="dev-only text-sm text-gray-600" style="display: none;">
-                                                ${dimensions ? `${dimensions}` : ''}
-                                            </div>
+                        html += `
+                            <div class="bg-white p-3 rounded-lg border-2" style="border-color: ${colorHex};">
+                                <div class="flex gap-3 items-center">
+                                    ${imageUrl ? `<img src="${imageUrl}" class="w-20 h-20 object-cover rounded flex-shrink-0" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
+                                    <div class="flex-1 min-w-0">
+                                        <div class="dev-only text-xs text-gray-600 mb-1" style="display: none;">
+                                            ${item.mds_fam_id || 'N/A'}
+                                        </div>
+                                        ${item.item_name ? `<div class="text-gray-800 text-sm font-bold mb-1 truncate">${item.item_name}</div>` : ''}
+                                        <div class="flex items-center gap-3">
+                                            <div class="text-3xl font-bold" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
+                                            ${badCases > 0 ? `<div class="text-red-600 font-bold text-lg">${badCases} bad cases</div>` : ''}
+                                        </div>
+                                        <div class="dev-only text-xs text-gray-600 mt-1" style="display: none;">
+                                            ${dimensions ? `${dimensions}` : ''}
                                         </div>
                                     </div>
-                                    ${recommendation ? `<div class="mt-3 text-lg font-bold text-center px-4 py-3 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
                                 </div>
-                            `;
-                        });
-                        
-                        html += '</div>';
+                                ${recommendation ? `<div class="mt-2 text-sm font-bold text-center px-2 py-1 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
+                            </div>
+                        `;
                     });
-                    html += '</div>';
                     
-                    if (pages.length > 1) {
-                        html += `<div class="absolute bottom-4 left-0 right-0 text-center text-sm text-gray-500">Page <span class="page-indicator">1</span> of ${pages.length}</div>`;
-                    }
+                    html += '</div>';
                 } else {
                     html += `
-                        <div class="h-full flex items-center justify-center p-6">
-                            <p class="text-2xl text-gray-500 italic">All items performing well</p>
+                        <div class="h-full flex items-center justify-center p-4">
+                            <p class="text-lg text-gray-500 italic">All items performing well</p>
                         </div>
                     `;
                 }
@@ -293,9 +284,6 @@ async def home():
             
             html += '</div>';
             document.getElementById('contentArea').innerHTML = html;
-            
-            // Start auto-scroll for each delivery
-            startAutoScroll();
         }
 
         function updateExistingDeliveries(deliveries) {
@@ -312,50 +300,6 @@ async def home():
                         return;
                     }
                 }
-            });
-        }
-
-        let autoScrollIntervals = [];
-
-        function startAutoScroll() {
-            // Clear existing intervals
-            autoScrollIntervals.forEach(interval => clearInterval(interval));
-            autoScrollIntervals = [];
-            
-            // Start auto-scroll for each delivery carousel
-            document.querySelectorAll('.carousel-container').forEach(container => {
-                const pages = container.querySelectorAll('.carousel-page');
-                if (pages.length <= 1) return; // No need to scroll if only 1 page
-                
-                let currentIndex = 0;
-                const pageIndicator = container.querySelector('.page-indicator');
-                
-                const interval = setInterval(() => {
-                    // Hide current page with fade out
-                    pages[currentIndex].style.opacity = '0';
-                    pages[currentIndex].style.transition = 'opacity 0.5s ease-in-out';
-                    
-                    setTimeout(() => {
-                        pages[currentIndex].style.display = 'none';
-                        
-                        // Move to next page
-                        currentIndex = (currentIndex + 1) % pages.length;
-                        
-                        // Show next page with fade in
-                        pages[currentIndex].style.display = 'grid';
-                        pages[currentIndex].style.opacity = '0';
-                        setTimeout(() => {
-                            pages[currentIndex].style.opacity = '1';
-                        }, 50);
-                        
-                        container.dataset.currentIndex = currentIndex;
-                        if (pageIndicator) {
-                            pageIndicator.textContent = currentIndex + 1;
-                        }
-                    }, 500);
-                }, 5000); // Change page every 5 seconds
-                
-                autoScrollIntervals.push(interval);
             });
         }
 
