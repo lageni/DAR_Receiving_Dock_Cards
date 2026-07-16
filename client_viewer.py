@@ -40,12 +40,18 @@ async def home():
 <body class="bg-gray-50">
     <div class="container mx-auto p-2 max-w-full">
         <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg shadow-lg p-4 mb-4">
-            <h1 class="text-4xl font-bold mb-2">ACL Freight Awareness - Live Monitor</h1>
-            <p class="text-blue-100">Real-time cache viewer • Auto-refresh every 30s • No server load</p>
-            <div class="mt-4 flex items-center space-x-4">
-                <span class="px-3 py-1 bg-white/20 rounded text-sm font-semibold" id="lastUpdate">Loading...</span>
-                <span class="px-3 py-1 bg-green-400 text-green-900 rounded text-sm font-semibold pulse-slow" id="refreshIndicator">Auto-refresh: 30s</span>
-                <span class="px-3 py-1 bg-purple-400 text-purple-900 rounded text-sm font-semibold">Client Mode</span>
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-4xl font-bold mb-2">ACL Freight Awareness - Live Monitor</h1>
+                    <p class="text-blue-100">Real-time cache viewer • Auto-refresh every 30s • No server load</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleDevView()" id="devViewToggle" class="px-4 py-2 bg-white/20 rounded font-semibold hover:bg-white/30 transition">
+                        Dev View: OFF
+                    </button>
+                    <span class="px-3 py-1 bg-white/20 rounded text-sm font-semibold" id="lastUpdate">Loading...</span>
+                    <span class="px-3 py-1 bg-green-400 text-green-900 rounded text-sm font-semibold pulse-slow" id="refreshIndicator">Auto-refresh: 30s</span>
+                </div>
             </div>
         </div>
 
@@ -148,8 +154,18 @@ async def home():
                 updateExistingDeliveries(sortedDeliveries);
             }
         }
+        let devViewEnabled = false;
+
+        function toggleDevView() {
+            devViewEnabled = !devViewEnabled;
+            document.getElementById('devViewToggle').textContent = `Dev View: ${devViewEnabled ? 'ON' : 'OFF'}`;
+            document.querySelectorAll('.dev-only').forEach(el => {
+                el.style.display = devViewEnabled ? 'block' : 'none';
+            });
+        }
+
         function buildFullDisplay(acl, deliveries) {
-            let html = '<div class="flex gap-4 overflow-x-auto pb-4" style="scroll-snap-type: x mandatory;">';
+            let html = '<div class="flex gap-6 overflow-x-auto pb-4" style="scroll-behavior: smooth;">';
             
             deliveries.forEach((delivery, deliveryIndex) => {
                 const deliveryNum = delivery.delivery_number || 'Unknown';
@@ -186,79 +202,90 @@ async def home():
                 
                 html += `
                     <div class="delivery-section flex-shrink-0 bg-white rounded-lg shadow border-2 ${borderColor} overflow-hidden" 
-                         style="width: 400px; scroll-snap-align: start; height: 600px; display: flex; flex-direction: column;"
+                         style="width: calc(33.333vw - 24px); min-width: 450px; scroll-snap-align: start; height: calc(100vh - 200px); display: flex; flex-direction: column;"
                          data-delivery="${deliveryNum}" data-item-count="${problematicItems.length}">
-                        <div class="${headerBg} text-white px-3 py-2">
+                        <div class="${headerBg} text-white px-4 py-3">
                             <div class="flex justify-between items-center">
-                                <h3 class="font-bold text-lg">#${deliveryNum}</h3>
-                                <span class="text-sm">${station}</span>
+                                <h3 class="font-bold text-2xl">#${deliveryNum}</h3>
+                                <span class="text-base">${station}</span>
                             </div>
-                            <div class="flex justify-between items-center mt-1">
-                                <span class="text-xs">${statusText}</span>
-                                <span class="px-2 py-0.5 ${badgeBg} rounded-full text-xs font-bold">${problematicCount} items</span>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-sm">${statusText}</span>
+                                <span class="px-3 py-1 ${badgeBg} rounded-full text-sm font-bold">${problematicCount} items</span>
                             </div>
-                            ${totalBadCases > 0 ? `<div class="text-sm font-bold mt-1 text-red-200">${totalBadCases} total bad cases</div>` : ''}
+                            ${totalBadCases > 0 ? `<div class="text-lg font-bold mt-2 text-red-200">${totalBadCases} total bad cases</div>` : ''}
                         </div>
-                        <div class="carousel-container flex-1 overflow-hidden relative" data-current-index="0">
+                        <div class="carousel-container flex-1 overflow-hidden relative p-4" data-current-index="0">
                 `;
                 
                 if (isPending) {
                     html += `
-                        <div class="h-full flex flex-col items-center justify-center p-4">
-                            <p class="text-gray-600 font-semibold mb-2">Pending Analysis</p>
-                            <p class="text-xs text-gray-500">Click to analyze</p>
-                            <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" 
-                               class="mt-4 px-4 py-2 bg-gray-600 text-white rounded text-sm font-semibold hover:bg-gray-700">
-                                Analyze Now
-                            </a>
+                        <div class="h-full flex flex-col items-center justify-center p-6">
+                            <p class="text-gray-600 font-semibold text-2xl mb-3">Pending Analysis</p>
+                            <p class="text-lg text-gray-500">Server analyzing delivery...</p>
                         </div>
                     `;
                 } else if (problematicItems.length > 0) {
-                    html += '<div class="carousel-items">';
-                    problematicItems.forEach((item, itemIndex) => {
-                        const perf = item.performance || 0;
-                        const badCases = item.bad_cases || 0;
-                        const imageUrl = item.image_url || '';
-                        const recommendation = item.recommendation || '';
-                        const colorHex = item.color_hex || '#6b7280';
-                        const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
-                            `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
+                    // Sort items by bad cases (worst first)
+                    const sortedItems = [...problematicItems].sort((a, b) => (b.bad_cases || 0) - (a.bad_cases || 0));
+                    
+                    // Show 2 items at a time in grid
+                    const itemsPerPage = 2;
+                    const pages = [];
+                    for (let i = 0; i < sortedItems.length; i += itemsPerPage) {
+                        pages.push(sortedItems.slice(i, i + itemsPerPage));
+                    }
+                    
+                    html += '<div class="carousel-items h-full">';
+                    pages.forEach((pageItems, pageIndex) => {
+                        html += `<div class="carousel-page h-full" style="display: ${pageIndex === 0 ? 'grid' : 'none'}; grid-template-rows: repeat(${pageItems.length}, 1fr); gap: 16px;">`;
                         
-                        html += `
-                            <div class="carousel-item h-full p-4" style="display: ${itemIndex === 0 ? 'flex' : 'none'}; flex-direction: column; justify-content: center;">
-                                <div class="text-center mb-4">
-                                    ${imageUrl ? `<img src="${imageUrl}" class="w-32 h-32 object-cover rounded mx-auto mb-2" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
-                                    <div class="font-mono text-lg font-bold mb-1">${item.mds_fam_id || 'N/A'}</div>
-                                    ${item.item_name ? `<div class="text-gray-800 text-base font-bold mb-2">${item.item_name}</div>` : ''}
-                                    <div class="text-5xl font-bold my-3" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
+                        pageItems.forEach(item => {
+                            const perf = item.performance || 0;
+                            const badCases = item.bad_cases || 0;
+                            const imageUrl = item.image_url || '';
+                            const recommendation = item.recommendation || '';
+                            const colorHex = item.color_hex || '#6b7280';
+                            const dimensions = item.vnpk_length && item.vnpk_width && item.vnpk_height ? 
+                                `${item.vnpk_length}x${item.vnpk_width}x${item.vnpk_height}` : '';
+                            
+                            html += `
+                                <div class="bg-white p-4 rounded-lg border-2" style="border-color: ${colorHex};">
+                                    <div class="flex gap-4 items-center h-full">
+                                        ${imageUrl ? `<img src="${imageUrl}" class="w-32 h-32 object-cover rounded flex-shrink-0" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2712%27%3ENo Img%3C/text%3E%3C/svg%3E'" />` : ''}
+                                        <div class="flex-1 min-w-0">
+                                            <div class="dev-only mb-2" style="display: none;">
+                                                <span class="font-mono text-base font-semibold text-gray-600">${item.mds_fam_id || 'N/A'}</span>
+                                            </div>
+                                            ${item.item_name ? `<div class="text-gray-800 text-xl font-bold mb-2">${item.item_name}</div>` : ''}
+                                            <div class="text-6xl font-bold mb-3" style="color: ${colorHex};">${perf.toFixed(0)}%</div>
+                                            ${badCases > 0 ? `<div class="text-red-600 font-bold text-2xl mb-2">${badCases} bad cases</div>` : ''}
+                                            <div class="dev-only text-sm text-gray-600" style="display: none;">
+                                                ${dimensions ? `${dimensions}` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    ${recommendation ? `<div class="mt-3 text-lg font-bold text-center px-4 py-3 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
                                 </div>
-                                <div class="text-center space-y-2">
-                                    ${badCases > 0 ? `<div class="text-red-600 font-bold text-xl">${badCases} bad cases</div>` : ''}
-                                    ${dimensions ? `<div class="text-gray-600 text-sm">${dimensions}</div>` : ''}
-                                    ${recommendation ? `<div class="mt-3 text-base font-bold px-3 py-2 rounded" style="background-color: ${colorHex}20; color: ${colorHex};">${recommendation}</div>` : ''}
-                                </div>
-                                <div class="mt-4 text-center text-sm text-gray-500">
-                                    Item ${itemIndex + 1} of ${problematicItems.length}
-                                </div>
-                            </div>
-                        `;
+                            `;
+                        });
+                        
+                        html += '</div>';
                     });
                     html += '</div>';
+                    
+                    if (pages.length > 1) {
+                        html += `<div class="absolute bottom-4 left-0 right-0 text-center text-sm text-gray-500">Page <span class="page-indicator">1</span> of ${pages.length}</div>`;
+                    }
                 } else {
                     html += `
-                        <div class="h-full flex items-center justify-center p-4">
-                            <p class="text-lg text-gray-500 italic">All items OK</p>
+                        <div class="h-full flex items-center justify-center p-6">
+                            <p class="text-2xl text-gray-500 italic">All items performing well</p>
                         </div>
                     `;
                 }
                 
                 html += `
-                        </div>
-                        <div class="p-3 border-t">
-                            <a href="http://localhost:8000/delivery-analysis?delivery=${deliveryNum}" target="_blank" 
-                               class="block w-full px-3 py-2 bg-blue-600 text-white rounded text-center text-sm font-semibold hover:bg-blue-700">
-                                Full Analysis
-                            </a>
                         </div>
                     </div>
                 `;
@@ -297,23 +324,36 @@ async def home():
             
             // Start auto-scroll for each delivery carousel
             document.querySelectorAll('.carousel-container').forEach(container => {
-                const items = container.querySelectorAll('.carousel-item');
-                if (items.length <= 1) return; // No need to scroll if only 1 item
+                const pages = container.querySelectorAll('.carousel-page');
+                if (pages.length <= 1) return; // No need to scroll if only 1 page
                 
                 let currentIndex = 0;
+                const pageIndicator = container.querySelector('.page-indicator');
                 
                 const interval = setInterval(() => {
-                    // Hide current item
-                    items[currentIndex].style.display = 'none';
+                    // Hide current page with fade out
+                    pages[currentIndex].style.opacity = '0';
+                    pages[currentIndex].style.transition = 'opacity 0.5s ease-in-out';
                     
-                    // Move to next item
-                    currentIndex = (currentIndex + 1) % items.length;
-                    
-                    // Show next item
-                    items[currentIndex].style.display = 'flex';
-                    
-                    container.dataset.currentIndex = currentIndex;
-                }, 5000); // Change item every 5 seconds
+                    setTimeout(() => {
+                        pages[currentIndex].style.display = 'none';
+                        
+                        // Move to next page
+                        currentIndex = (currentIndex + 1) % pages.length;
+                        
+                        // Show next page with fade in
+                        pages[currentIndex].style.display = 'grid';
+                        pages[currentIndex].style.opacity = '0';
+                        setTimeout(() => {
+                            pages[currentIndex].style.opacity = '1';
+                        }, 50);
+                        
+                        container.dataset.currentIndex = currentIndex;
+                        if (pageIndicator) {
+                            pageIndicator.textContent = currentIndex + 1;
+                        }
+                    }, 500);
+                }, 5000); // Change page every 5 seconds
                 
                 autoScrollIntervals.push(interval);
             });
