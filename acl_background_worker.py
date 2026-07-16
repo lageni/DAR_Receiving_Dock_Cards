@@ -89,11 +89,113 @@ class ACLMonitor:
                 return None
             
             # Apply batching analysis to get performance metrics
-            # WARNING: This still uses old batch_get_read_rates() - slow!
-            # TODO: Replace with optimized version
             enriched = apply_batching_to_delivery(delivery_data)
             
-            return enriched
+            # EXTRACT AND CACHE PROBLEMATIC ITEMS ANALYSIS
+            mds_fam_ids = enriched.get('mds_fam_ids', [])
+            po_rows = enriched.get('data', [])
+            
+            # Find problematic items (performance < 85%)
+            problematic_mds_ids = []
+            problematic_details = {}
+            approved_count = 0
+            
+            for row in po_rows:
+                mds_id = str(row.get('mds_fam_id', ''))
+                batching_info = row.get('batching_info', {})
+                perf = batching_info.get('performance', 100)
+                
+                if perf < 85:
+                    if mds_id not in problematic_mds_ids:
+                        problematic_mds_ids.append(mds_id)
+                        problematic_details[mds_id] = {
+                            'avg_perf': perf,
+                            'bad_cases': batching_info.get('bad_cases_projected', 0),
+                            'item_qty': row.get('total_freight_qty', 0)
+                        }
+                else:
+                    approved_count += 1
+            
+            print(f"[ACL-WORKER] Delivery {delivery_number}: Found {len(problematic_mds_ids)} problematic items, {approved_count} approved")
+            
+            # Fetch MDM data for problematic items
+            problematic_items_data = []
+            
+            if problematic_mds_ids:
+                import httpx
+                import os
+                
+                api_key = os.getenv("MDM_API_KEY", "")
+                facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
+                facility_country = os.getenv("MDM_FACILITY_COUNTRY_CODE", "US")
+                wmt_userid = os.getenv("MDM_WMT_USERID", "mdm-ui")
+                
+                mdm_headers = {
+                    "Api-Key": api_key,
+                    "Facilitynum": facility_num,
+                    "Facilitycountrycode": facility_country,
+                    "Wmt-Userid": wmt_userid
+                }
+                
+                with httpx.Client(verify=False, timeout=10.0) as client:
+                    for mds_id in problematic_mds_ids[:10]:  # Top 10 for ACL display
+                        # Check cache first
+                        cached_mdm = cache.get(f"mdm_{mds_id}", category="items")
+                        if cached_mdm:
+                            cached_mdm["acl_details"] = problematic_details.get(mds_id, {})
+                            problematic_items_data.append(cached_mdm)
+                            continue
+                        
+                        try:
+                            api_url = f"https://uwms-item.prod.us.walmart.net/items/wm/{mds_id}/?xrefItemInfo=false"
+                            response = client.get(api_url, headers=mdm_headers)
+                            response.raise_for_status()
+                            mdm_data = response.json()
+                            
+                            # Extract item data (simplified - just name and image)
+                            item_name = mdm_data.get('itemBasicInfo', {}).get('itemName', f'MDS {mds_id}')
+                            image_url = mdm_data.get('imageInfo', {}).get('thumbnailURL', '')
+                            
+                            item_data = {
+                                "mds_fam_id": str(mds_id),
+                                "item_name": item_name,
+                                "image_url": image_url,
+                                "acl_details": problematic_details.get(mds_id, {})
+                            }
+                            problematic_items_data.append(item_data)
+                            
+                            # Cache MDM data
+                            mdm_cache_data = {"item_name": item_name, "image_url": image_url, "mds_fam_id": str(mds_id)}
+                            cache.set(f"mdm_{mds_id}", mdm_cache_data, category="items")
+                            
+                        except Exception as e:
+                            print(f"[ACL-WORKER] Error fetching MDM for {mds_id}: {e}")
+                            problematic_items_data.append({
+                                "mds_fam_id": str(mds_id),
+                                "item_name": f"MDS {mds_id}",
+                                "image_url": "",
+                                "acl_details": problematic_details.get(mds_id, {})
+                            })
+            
+            # WRITE ANALYSIS CACHE
+            analysis_cache_data = {
+                'problematic_mds_ids': problematic_mds_ids,
+                'problematic_details': problematic_details,
+                'problematic_items_data': problematic_items_data,
+                'approved_count': approved_count
+            }
+            cache.set(analysis_cache_key, analysis_cache_data, category="deliveries")
+            print(f"[ANALYSIS-CACHE-WRITE] Cached analysis for {delivery_number} ({len(problematic_items_data)} problematic items)")
+            
+            # Return enriched data for ACL display
+            return {
+                'success': True,
+                'delivery_number': delivery_number,
+                'data': po_rows,
+                'cached': False,
+                'problematic_items_data': problematic_items_data,
+                'problematic_details': problematic_details,
+            }
             
         except Exception as e:
             print(f"[ACL-WORKER] Error analyzing delivery {delivery_number}: {e}")
