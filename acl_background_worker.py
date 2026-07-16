@@ -95,28 +95,36 @@ class ACLMonitor:
             mds_fam_ids = enriched.get('mds_fam_ids', [])
             po_rows = enriched.get('data', [])
             
-            # Find problematic items (performance < 85%)
+            # Load read rates for analysis (using optimized SQL filtering)
+            from main import load_read_rates_for_items, get_avg_performance
+            read_rates_cache = load_read_rates_for_items(mds_fam_ids)
+            
+            # Find problematic items (avg performance < 85%)
             problematic_mds_ids = []
             problematic_details = {}
             approved_count = 0
             
-            for row in po_rows:
-                mds_id = str(row.get('mds_fam_id', ''))
-                batching_info = row.get('batching_info', {})
-                perf = batching_info.get('performance', 100)
+            for mds_id in mds_fam_ids:
+                rate_data = read_rates_cache.get(str(mds_id), [])
                 
-                if perf < 85:
-                    if mds_id not in problematic_mds_ids:
-                        problematic_mds_ids.append(mds_id)
-                        problematic_details[mds_id] = {
-                            'avg_perf': perf,
-                            'bad_cases': batching_info.get('bad_cases_projected', 0),
-                            'item_qty': row.get('total_freight_qty', 0)
-                        }
+                # Skip items with no history
+                if not rate_data:
+                    continue
+                
+                # Calculate average performance from read rate history
+                avg_perf = get_avg_performance(rate_data)
+                
+                # Check if problematic (< 85%)
+                if avg_perf < 85:
+                    problematic_mds_ids.append(mds_id)
+                    problematic_details[str(mds_id)] = {
+                        'avg_perf': avg_perf,
+                        'rate_data': rate_data
+                    }
                 else:
                     approved_count += 1
             
-            print(f"[ACL-WORKER] Delivery {delivery_number}: Found {len(problematic_mds_ids)} problematic items, {approved_count} approved")
+            print(f"[ACL-WORKER] Delivery {delivery_number}: Found {len(problematic_mds_ids)} problematic items (< 85%), {approved_count} approved")
             
             # Fetch MDM data for problematic items
             problematic_items_data = []
