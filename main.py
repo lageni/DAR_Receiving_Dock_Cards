@@ -592,9 +592,13 @@ async def print_card(item_id: str, product_id: str = "", gtin: str = "", supplie
         return f'<div class="text-red-600">Error: {str(e)}</div>'
 
 
+# ============================================================================
+# ARCHIVED: PDF Generation Endpoints (deprecated in favor of client viewer)
+# ============================================================================
+
 @app.get("/print-card-pdf")
 async def print_card_pdf(item_id: str, product_id: str = "", gtin: str = "", catalog_gtin: str = "", supplier_dept: str = ""):
-    """Generate PDF of the print card for download (MDM API)."""
+    """[ARCHIVED] Generate PDF of the print card for download (MDM API)."""
     try:
         api_key = os.getenv("MDM_API_KEY")
         facility_num = os.getenv("MDM_FACILITY_NUM", "6068")
@@ -2913,7 +2917,7 @@ def generate_batch_pdf_OLD(items_data: list) -> bytes:
 
 @app.get("/batch/pdf")
 async def batch_pdf(items: str = ""):
-    """Download consolidated PDF with multiple items (one page per item)."""
+    """[ARCHIVED] Download consolidated PDF with multiple items (one page per item)."""
     # Parse item IDs from query param
     if not items:
         return JSONResponse({"error": "No items specified. Use ?items=id1,id2,id3"}, status_code=400)
@@ -3935,7 +3939,7 @@ async def delivery_analysis_search(delivery_number: str):
 
 @app.get("/api/delivery-analysis/pdf")
 def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false"):
-    """Generate PDF with summary, priority ranking, and caching."""
+    """[ARCHIVED] Generate PDF with summary, priority ranking, and caching."""
     from delivery_analysis import get_delivery_po_data, apply_batching_to_delivery
     import time
     pdf_start = time.time()
@@ -4082,7 +4086,7 @@ def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false")
 
 @app.get("/api/delivery-analysis/pdf-item")
 def delivery_pdf_single_item(mds_id: str):
-    """Generate PDF for a single problematic item with full details."""
+    """[ARCHIVED] Generate PDF for a single problematic item with full details."""
     try:
         # Fetch MDM data for single item
         api_key = os.getenv("MDM_API_KEY", "")

@@ -1,1 +1,0 @@
-print("ACL Installer Ready - Run to install")\nimport re\nwith open("main.py") as f: c=f.read()\nif "/acl-freight" in c:\n    print("Already installed!")\nelse:\n    print("Installation ready - see full code in ACL_CODE_TEMPLATE.txt")

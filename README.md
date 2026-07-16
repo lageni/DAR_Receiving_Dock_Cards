@@ -1,71 +1,210 @@
-# ACL Freight Awareness - CodePuppy DAR
+# ACL Freight Awareness - DAR Receiving Dock Cards
 
-Client/Server architecture for real-time ACL monitoring and delivery analysis.
+Real-time ACL monitoring system with client/server architecture for warehouse receiving dock operations.
 
 ---
 
-## QUICK START
+## Quick Start
 
-### Server (Analysis Engine)
+### Server (Analysis & Cache Writer)
 ```bash
 RUN.bat
 ```
-**Port:** 8000  
-**See:** [SERVER_README.md](SERVER_README.md)
+- **Port:** 8000
+- **Role:** Analyzes deliveries from Informix, writes cache files
+- **Background:** ACL worker updates every 2 minutes
+- **Access:** http://localhost:8000/delivery-analysis (manual testing)
 
-### Client (Viewer)
+### Client (Live Monitor Display)
 ```bash
 RUN_CLIENT.bat
 ```
-**Port:** 8001  
-**See:** [CLIENT_README.md](CLIENT_README.md)
+- **Port:** 8001
+- **Role:** Reads cache, displays ACL freight status
+- **Auto-refresh:** Every 30 seconds
+- **Access:** http://localhost:8001
 
 ---
 
-## ARCHITECTURE
+## Architecture
 
-- **Server:** Analyzes deliveries, writes to shared cache (L: drive)
-- **Client:** Reads cache, displays data, auto-refreshes
-- **Cache:** Shared JSON files on L:\Engineering\DAR Docktag Cards\cache_data
+```
+ABIA API (Active Deliveries)
+         ↓
+    SERVER (Port 8000)
+    - Analyzes deliveries
+    - Checks read rates (SQLite)
+    - Fetches MDM data (images, info)
+    - Calculates bad cases
+    - Writes cache files
+         ↓
+  CACHE (L:\Engineering\DAR Docktag Cards\cache_data)
+    - analysis_{delivery}.json
+    - mdm_{item}.json
+         ↓
+    CLIENT (Port 8001)
+    - Reads cache
+    - Displays grid of deliveries
+    - Auto-scrolls through items
+    - Ranked by bad cases
+```
 
 ---
 
-## DOCUMENTATION
+## Key Files
 
-- **[SERVER_README.md](SERVER_README.md)** - Server setup, endpoints, optimizations
-- **[CLIENT_README.md](CLIENT_README.md)** - Client setup, features, troubleshooting
-- **[docs/](docs/)** - Archived documentation and technical details
-- **[scripts/](scripts/)** - Diagnostic and helper scripts
-
----
-
-## FILES
-
-### Core
-- `main.py` - Server application
-- `client_viewer.py` - Client application
+### Core Application
+- `main.py` - FastAPI server (analysis engine, cache writer)
+- `client_viewer.py` - FastAPI client (display only)
 - `acl_background_worker.py` - Background ACL monitor
+- `delivery_analysis.py` - Delivery analysis logic
 - `cache_manager.py` - Shared cache module
-- `delivery_analysis.py` - Analysis logic
+- `informix_connect.py` - Informix database connection
+- `batch_report.py` - Read rates analysis
 
-### Config
-- `.env` - Environment variables
-- `pyproject.toml` - Dependencies
+### Configuration
+- `.env` - Environment variables (API keys, DB paths)
+- `pyproject.toml` - Python dependencies
 
-### Startup
-- `RUN.bat` - Start server
-- `RUN_CLIENT.bat` - Start client
-
----
-
-## SUPPORT
-
-**Issues?** Check the troubleshooting sections in:
-- [SERVER_README.md](SERVER_README.md#troubleshooting)
-- [CLIENT_README.md](CLIENT_README.md#troubleshooting)
-
-**Diagnostics:** Run `python scripts/diagnose_acl_cache.py`
+### Reference
+- `reference/department_bands.json` - Department data
+- `reference/mdm_item_api_response_example.json` - MDM API example
 
 ---
 
-Last Updated: 2026-07-15
+## Features
+
+### Server
+- **Informix PO Query** - Test endpoint at `/delivery-analysis`
+- **Read Rates Analysis** - SQL-optimized, pre-filters problematic items (< 85%)
+- **MDM Integration** - Fetches item images, names, dimensions
+- **Cache Writing** - Analysis results saved for instant client access
+- **Background Worker** - Auto-analyzes ACL deliveries every 2 minutes
+
+### Client
+- **All Deliveries Visible** - No scrolling, grid layout
+- **Auto-Scroll Items** - 2 items per page, 5 second rotation
+- **Ranked Display** - Worst deliveries (most bad cases) first
+- **Dev View Toggle** - Hide/show technical details (MDS#, dimensions)
+- **Color-Coded** - Red (urgent), Yellow (warning), Green (OK), Gray (pending)
+
+---
+
+## Cache Structure
+
+### Analysis Cache
+**File:** `cache_data/deliveries/analysis_{delivery_number}.json`
+
+```json
+{
+  "problematic_mds_ids": ["12345", "67890"],
+  "problematic_details": {
+    "12345": {
+      "avg_perf": 62.5,
+      "bad_cases": 75,
+      "recommendation": "REQUIRES MANUAL INSPECTION",
+      "color_hex": "#f59e0b"
+    }
+  },
+  "problematic_items_data": [
+    {
+      "mds_fam_id": "12345",
+      "item_name": "Great Value Widget",
+      "image_url": "https://...",
+      "vnpk_length": "12",
+      "vnpk_width": "8",
+      "vnpk_height": "6"
+    }
+  ],
+  "approved_count": 420
+}
+```
+
+### MDM Cache
+**File:** `cache_data/items/mdm_{mds_id}.json`
+
+Contains item images, names, dimensions from MDM API.
+
+---
+
+## Environment Variables
+
+Create `.env` file with:
+
+```env
+MDM_API_KEY=your_key
+MDM_FACILITY_NUM=6068
+MDM_FACILITY_COUNTRY_CODE=US
+MDM_WMT_USERID=mdm-ui
+DATABASE_PATH=L:\Engineering\DAR Docktag Cards\read_rates.db
+```
+
+---
+
+## Optimizations
+
+### SQL Pre-Filtering
+- **Before:** Load 131k items, filter in Python
+- **After:** SQL WHERE IN clause loads only needed items
+- **Result:** 100-1000x faster queries
+
+### Analysis Caching
+- **Before:** Re-analyze every request
+- **After:** Cache results for 2 days
+- **Result:** Instant subsequent loads
+
+### Bad Cases Pre-Filter
+- **Before:** Load all items, check performance
+- **After:** SQL CTE filters performance < 85% at database level
+- **Result:** Only loads problematic items
+
+---
+
+## Troubleshooting
+
+### Server Won't Start
+- Check port 8000 not in use
+- Verify `.env` file exists with API keys
+- Check VPN connection (for MDM API)
+
+### Client Shows "Pending Analysis"
+- Wait 2 minutes for background worker to analyze
+- Or click delivery on server (port 8000) to trigger manual analysis
+
+### No Cache Found
+- Ensure server is running (port 8000)
+- Check background worker logs: `[ACL-WORKER]`
+- Verify L: drive accessible
+
+---
+
+## Development
+
+### Install Dependencies
+```bash
+uv pip install -r pyproject.toml --index-url https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple --allow-insecure-host pypi.ci.artifacts.walmart.com
+```
+
+### Clear Cache
+```bash
+del "L:\Engineering\DAR Docktag Cards\cache_data\deliveries\*.json"
+del "L:\Engineering\DAR Docktag Cards\cache_data\items\*.json"
+```
+
+### Git
+```bash
+git add -A
+git commit -m "Your message"
+git push
+```
+
+---
+
+## Repository
+
+**GitHub:** https://github.com/lageni/DAR_Receiving_Dock_Cards.git
+
+---
+
+Last Updated: 2026-07-16
+Version: 2.0 (Client/Server Architecture)
