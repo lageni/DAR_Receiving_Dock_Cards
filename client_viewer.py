@@ -165,11 +165,10 @@ async def home():
         }
 
         function buildFullDisplay(acl, deliveries) {
-            // Calculate grid columns based on number of deliveries
+            // Show ALL deliveries in one row - no max limit
             const numDeliveries = deliveries.length;
-            const gridCols = Math.min(numDeliveries, 5); // Max 5 columns
             
-            let html = `<div class="grid gap-4 auto-rows-fr" style="grid-template-columns: repeat(${gridCols}, 1fr); height: calc(100vh - 180px);">`;
+            let html = `<div class="grid gap-4 auto-rows-fr" style="grid-template-columns: repeat(${numDeliveries}, 1fr); height: calc(100vh - 180px);">`;
             
             deliveries.forEach((delivery, deliveryIndex) => {
                 const deliveryNum = delivery.delivery_number || 'Unknown';
