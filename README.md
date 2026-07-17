@@ -61,6 +61,7 @@ ABIA API (Active Deliveries)
 - `cache_manager.py` - Shared cache module
 - `informix_connect.py` - Informix database connection
 - `batch_report.py` - Read rates analysis
+- `sync_bigquery.py` -  **Standalone BigQuery sync CLI script**
 
 ### Configuration
 - `.env` - Environment variables (API keys, DB paths)
@@ -179,6 +180,22 @@ DATABASE_PATH=L:\Engineering\DAR Docktag Cards\read_rates.db
 ---
 
 ## Development
+
+### Sync BigQuery Data (Standalone)
+```bash
+python sync_bigquery.py
+```
+
+**What it does:**
+- Automatically detects missing dates in SQLite database
+- Syncs only new data from BigQuery ACL_READ_RATE table
+- Filters out DPAL/LBSS pick types
+- Shows progress and statistics
+
+**Requirements:**
+- Google Cloud credentials configured
+- VPN connection to Walmart network
+- BigQuery access to `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
 
 ### Install Dependencies
 ```bash
