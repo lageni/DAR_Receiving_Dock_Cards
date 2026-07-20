@@ -145,7 +145,7 @@ class ACLMonitor:
                     # Calculate bad cases
                     bad_cases = int(item_qty * (100 - avg_perf) / 100)
                     
-                    # Get recommendation
+                    # Get preliminary recommendation (will update after MDM fetch if catalog_gtin found)
                     recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "")
                     
                     problematic_mds_ids.append(mds_id)
@@ -155,7 +155,8 @@ class ACLMonitor:
                         'item_qty': item_qty,
                         'bad_cases': bad_cases,
                         'recommendation': recommendation,
-                        'color_hex': color_hex
+                        'color_hex': color_hex,
+                        'needs_catalog_check': avg_perf < 50  # Flag for catalog GTIN check
                     }
                 else:
                     approved_count += 1
@@ -186,7 +187,22 @@ class ACLMonitor:
                         # Check cache first
                         cached_mdm = cache.get(f"mdm_{mds_id}", category="items")
                         if cached_mdm:
-                            cached_mdm["acl_details"] = problematic_details.get(mds_id, {})
+                            # Check if we need to update recommendation based on catalog_gtin
+                            catalog_gtin = cached_mdm.get("catalog_gtin", "")
+                            item_details = problematic_details.get(str(mds_id), {})
+                            
+                            if catalog_gtin and item_details.get('needs_catalog_check'):
+                                # Recalculate recommendation with catalog_gtin
+                                avg_perf = item_details.get('avg_perf', 0)
+                                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "", catalog_gtin)
+                                
+                                # Update details with new recommendation
+                                item_details['recommendation'] = recommendation
+                                item_details['color_hex'] = color_hex
+                                problematic_details[str(mds_id)] = item_details
+                                print(f"[ACL-WORKER] Item {mds_id}: Updated recommendation to '{recommendation}' (cached catalog_gtin)")
+                            
+                            cached_mdm["acl_details"] = problematic_details.get(str(mds_id), {})
                             problematic_items_data.append(cached_mdm)
                             continue
                         
@@ -199,6 +215,22 @@ class ACLMonitor:
                             # Extract full item data using main server's function
                             item_data = extract_item_data(mdm_data)
                             item_data["mds_fam_id"] = str(mds_id)
+                            
+                            # Check if we need to update recommendation based on catalog_gtin
+                            catalog_gtin = item_data.get("catalog_gtin", "")
+                            item_details = problematic_details.get(str(mds_id), {})
+                            
+                            if catalog_gtin and item_details.get('needs_catalog_check'):
+                                # Recalculate recommendation with catalog_gtin
+                                avg_perf = item_details.get('avg_perf', 0)
+                                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "", catalog_gtin)
+                                
+                                # Update details with new recommendation
+                                item_details['recommendation'] = recommendation
+                                item_details['color_hex'] = color_hex
+                                problematic_details[str(mds_id)] = item_details
+                                print(f"[ACL-WORKER] Item {mds_id}: Updated recommendation to '{recommendation}' (catalog_gtin found)")
+                            
                             item_data["acl_details"] = problematic_details.get(str(mds_id), {})
                             problematic_items_data.append(item_data)
                             
