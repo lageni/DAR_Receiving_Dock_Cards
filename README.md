@@ -12,19 +12,19 @@ Real-time ACL monitoring system with client/server architecture for warehouse re
 ```bash
 RUN.bat
 ```
-- **Port:** 8000
+- **Port:** 8050
 - **Role:** Analyzes deliveries from Informix, writes cache files
 - **Background:** ACL worker updates every 2 minutes
-- **Access:** http://localhost:8000/delivery-analysis (manual testing)
+- **Access:** http://localhost:8050/delivery-analysis (manual testing)
 
 #### Client (Live Monitor Display)
 ```bash
 RUN_CLIENT.bat
 ```
-- **Port:** 8001
+- **Port:** 8051
 - **Role:** Reads cache, displays ACL freight status
 - **Auto-refresh:** Every 30 seconds
-- **Access:** http://localhost:8001
+- **Access:** http://localhost:8051
 
 ---
 
@@ -54,21 +54,21 @@ RUN_CLIENT.bat
    ```
    - Creates `.venv/` directory
    - Installs dependencies from Walmart Artifactory
-   - Starts server on port 8000
+   - Starts server on port 8050
 
 4. **Run client** (in separate terminal):
    ```bash
    RUN_CLIENT.bat
    ```
    - Uses same `.venv/` as server
-   - Starts client on port 8001
+   - Starts client on port 8051
 
 #### Network Access
 To access from other machines on the network:
-- Server: `http://<MACHINE-IP>:8000`
-- Client: `http://<MACHINE-IP>:8001`
+- Server: `http://<MACHINE-IP>:8050`
+- Client: `http://<MACHINE-IP>:8051`
 
-Example: `http://10.145.220.133:8001`
+Example: `http://10.145.220.133:8051`
 
 #### Startup Scripts Handle Everything
  - Activate virtual environment automatically
@@ -83,7 +83,7 @@ Example: `http://10.145.220.133:8001`
 ```
 ABIA API (Active Deliveries)
          ↓
-    SERVER (Port 8000)
+    SERVER (Port 8050)
     - Analyzes deliveries
     - Checks read rates (SQLite)
     - Fetches MDM data (images, info)
@@ -94,7 +94,7 @@ ABIA API (Active Deliveries)
     - analysis_{delivery}.json
     - mdm_{item}.json
          ↓
-    CLIENT (Port 8001)
+    CLIENT (Port 8051)
     - Reads cache
     - Displays grid of deliveries
     - Auto-scrolls through items
@@ -216,16 +216,16 @@ DATABASE_PATH=L:\Engineering\DAR Docktag Cards\read_rates.db
 ## Troubleshooting
 
 ### Server Won't Start
-- Check port 8000 not in use
+- Check port 8050 not in use
 - Verify `.env` file exists with API keys
 - Check VPN connection (for MDM API)
 
 ### Client Shows "Pending Analysis"
 - Wait 2 minutes for background worker to analyze
-- Or click delivery on server (port 8000) to trigger manual analysis
+- Or click delivery on server (port 8050) to trigger manual analysis
 
 ### No Cache Found
-- Ensure server is running (port 8000)
+- Ensure server is running (port 8050)
 - Check background worker logs: `[ACL-WORKER]`
 - Verify L: drive accessible
 

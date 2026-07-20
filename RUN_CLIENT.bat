@@ -1,5 +1,5 @@
 @echo off
-title ACL Viewer Client (Port 8001)
+title ACL Viewer Client (Port 8051)
 color 0E
 
 echo ========================================
@@ -7,10 +7,10 @@ echo   ACL Freight Awareness - CLIENT
 echo ========================================
 echo.
 echo Mode:       READ-ONLY VIEWER
-echo Port:       8001
+echo Port:       8051
 echo Cache:      L:\Engineering\DAR Docktag Cards\cache_data
 echo.
-echo Server should be running on port 8000 to populate cache
+echo Server should be running on port 8050 to populate cache
 echo.
 
 cd /d "%~dp0"
@@ -26,7 +26,7 @@ if exist ".venv\Scripts\activate.bat" (
 echo.
 echo Starting client...
 echo.
-echo Open browser: http://localhost:8001
+echo Open browser: http://localhost:8051
 echo.
 
 python client_viewer.py
@@ -38,7 +38,7 @@ if errorlevel 1 (
     echo Possible causes:
     echo   - Python not found
     echo   - Missing dependencies
-    echo   - Port 8001 already in use
+    echo   - Port 8051 already in use
     echo.
     pause
 )

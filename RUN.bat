@@ -129,15 +129,15 @@ REM Start the server
 echo.
 echo [SERVER] Starting CodePuppyDAR...
 echo.
-echo Local Access:        http://localhost:8000
-echo Network Access:       http://%COMPUTERNAME%:8000
-echo Admin Debug Page:    http://localhost:8000/admin/debug
+echo Local Access:        http://localhost:8050
+echo Network Access:       http://%COMPUTERNAME%:8050
+echo Admin Debug Page:    http://localhost:8050/admin/debug
 echo.
 echo Press Ctrl+C to stop the server
 echo.
 
 REM Try to open browser automatically
-start http://localhost:8000
+start http://localhost:8050
 
 REM Run main.py using activated venv Python
 python main.py

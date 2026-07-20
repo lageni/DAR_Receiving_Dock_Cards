@@ -4,7 +4,7 @@ ACL Freight Awareness - CLIENT VIEWER
 Lightweight FastAPI app that ONLY READS from cache.
 Server writes to cache, client displays cached data.
 
-Port: 8001
+Port: 8051
 Cache: L:\\Engineering\\DAR Docktag Cards\\cache_data
 """
 
@@ -84,7 +84,7 @@ async def home():
 
         <div class="mt-6 text-center text-gray-500 text-sm">
             <p>Cache Status: <span id="cacheStatus" class="font-semibold">Checking...</span></p>
-            <p class="mt-2 text-xs">Client Port: 8001 (Read-Only) | Server Port: 8000 (Analysis)</p>
+            <p class="mt-2 text-xs">Client Port: 8051 (Read-Only) | Server Port: 8050 (Analysis)</p>
         </div>
     </div>
 
@@ -517,7 +517,7 @@ async def health_check():
     return JSONResponse({
         "status": "healthy",
         "mode": "client",
-        "port": 8001,
+        "port": 8051,
         "cache_accessible": cache_exists,
         "cache_path": str(CACHE_DIR)
     })
@@ -525,7 +525,7 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    print("[CLIENT] Starting ACL Viewer Client on port 8001...")
+    print("[CLIENT] Starting ACL Viewer Client on port 8051...")
     print("[CLIENT] Reading from cache: L:\\Engineering\\DAR Docktag Cards\\cache_data")
-    print("[CLIENT] Open browser: http://localhost:8001")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    print("[CLIENT] Open browser: http://localhost:8051")
+    uvicorn.run(app, host="0.0.0.0", port=8051)
