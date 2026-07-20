@@ -6,7 +6,9 @@ Real-time ACL monitoring system with client/server architecture for warehouse re
 
 ## Quick Start
 
-### Server (Analysis & Cache Writer)
+### Development (Local Machine)
+
+#### Server (Analysis & Cache Writer)
 ```bash
 RUN.bat
 ```
@@ -15,7 +17,7 @@ RUN.bat
 - **Background:** ACL worker updates every 2 minutes
 - **Access:** http://localhost:8000/delivery-analysis (manual testing)
 
-### Client (Live Monitor Display)
+#### Client (Live Monitor Display)
 ```bash
 RUN_CLIENT.bat
 ```
@@ -23,6 +25,56 @@ RUN_CLIENT.bat
 - **Role:** Reads cache, displays ACL freight status
 - **Auto-refresh:** Every 30 seconds
 - **Access:** http://localhost:8001
+
+---
+
+### Deployment (Production/Testing Machine)
+
+#### Prerequisites
+1. **Python 3.10+** installed and added to PATH
+2. **Walmart VPN** or Eagle WiFi connection
+3. **L: Drive access** to `L:\Engineering\DAR Docktag Cards\`
+4. **Clone repository** to testing machine
+
+#### First-Time Setup
+1. **Copy `.env.example` to `.env`**
+   ```bash
+   copy .env.example .env
+   ```
+
+2. **Edit `.env` with actual credentials:**
+   - `MDM_API_KEY` - Get from MDM team
+   - `INFORMIX_HOST`, `INFORMIX_USER`, `INFORMIX_PASSWORD` - Database credentials
+   - `DATABASE_PATH` - Path to read_rates.db (default: `L:\Engineering\DAR Docktag Cards\read_rates.db`)
+   - All other settings (see `.env.example` for descriptions)
+
+3. **Run server first time** (will auto-create venv and install dependencies):
+   ```bash
+   RUN.bat
+   ```
+   - Creates `.venv/` directory
+   - Installs dependencies from Walmart Artifactory
+   - Starts server on port 8000
+
+4. **Run client** (in separate terminal):
+   ```bash
+   RUN_CLIENT.bat
+   ```
+   - Uses same `.venv/` as server
+   - Starts client on port 8001
+
+#### Network Access
+To access from other machines on the network:
+- Server: `http://<MACHINE-IP>:8000`
+- Client: `http://<MACHINE-IP>:8001`
+
+Example: `http://10.145.220.133:8001`
+
+#### Startup Scripts Handle Everything
+ - Activate virtual environment automatically
+ - Create venv if it doesn't exist
+ - Install dependencies on first run
+ - No manual activation needed
 
 ---
 

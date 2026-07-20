@@ -12,10 +12,22 @@ echo Cache:      L:\Engineering\DAR Docktag Cards\cache_data
 echo.
 echo Server should be running on port 8000 to populate cache
 echo.
-echo Starting client...
-echo.
 
 cd /d "%~dp0"
+
+REM Activate virtual environment
+if exist ".venv\Scripts\activate.bat" (
+    call .venv\Scripts\activate.bat
+    echo [OK] Virtual environment activated
+) else (
+    echo [WARN] No .venv found - using system Python
+)
+
+echo.
+echo Starting client...
+echo.
+echo Open browser: http://localhost:8001
+echo.
 
 python client_viewer.py
 

@@ -111,20 +111,36 @@ echo ============================================================
 echo.
 
 :startup
-REM Start the server using uv run
+REM Activate virtual environment first
+echo [SERVER] Activating virtual environment...
+if exist ".venv\Scripts\activate.bat" (
+    call .venv\Scripts\activate.bat
+    echo [OK] Virtual environment activated
+) else (
+    echo [WARN] No .venv found - creating one now...
+    python -m venv .venv
+    call .venv\Scripts\activate.bat
+    echo [OK] Virtual environment created and activated
+    echo [INFO] Installing dependencies...
+    pip install -r requirements.txt --index-url https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple --allow-insecure-host pypi.ci.artifacts.walmart.com
+)
+
+REM Start the server
+echo.
 echo [SERVER] Starting CodePuppyDAR...
 echo.
 echo Local Access:        http://localhost:8000
+echo Network Access:       http://%COMPUTERNAME%:8000
 echo Admin Debug Page:    http://localhost:8000/admin/debug
 echo.
-echo Tip: For development, use: uv run uvicorn main:app --reload
+echo Press Ctrl+C to stop the server
 echo.
 
 REM Try to open browser automatically
 start http://localhost:8000
 
-REM Run using uv to ensure correct environment
-uv run python main.py
+REM Run main.py using activated venv Python
+python main.py
 
 REM If we get here, server was stopped
 echo.

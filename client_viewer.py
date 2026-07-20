@@ -412,11 +412,23 @@ async def get_acl_cache(acl: str):
         raw_deliveries = abia_data.get('data', [])
         print(f"[CLIENT] ABIA API: Fetched {len(raw_deliveries)} active deliveries for {acl}")
         
+        # Deduplicate deliveries by delivery number (ABIA sometimes returns duplicates)
+        seen_deliveries = set()
+        unique_deliveries = []
+        for item in raw_deliveries:
+            delivery_num = item.get('delivery', '')
+            if delivery_num and delivery_num not in seen_deliveries:
+                seen_deliveries.add(delivery_num)
+                unique_deliveries.append(item)
+        
+        if len(unique_deliveries) < len(raw_deliveries):
+            print(f"[CLIENT] Deduplicated {len(raw_deliveries)} -> {len(unique_deliveries)} deliveries for {acl}")
+        
         # Step 2: For each delivery, check if server has analyzed it
         cache = get_cache_manager()
         enriched_deliveries = []
         
-        for item in raw_deliveries:
+        for item in unique_deliveries:
             delivery_number = item.get('delivery', '')
             station = item.get('station', 'Unknown')
             
