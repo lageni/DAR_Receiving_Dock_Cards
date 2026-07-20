@@ -47,8 +47,16 @@ class ACLMonitor:
             print(f"[ACL-WORKER] {acl.upper()}: Fetched {len(deliveries)} active deliveries")
             return deliveries
             
+        except httpx.TimeoutException as e:
+            print(f"[ACL-WORKER] Error fetching {acl.upper()} deliveries: Timeout after 10s")
+            return []
+        except httpx.HTTPStatusError as e:
+            print(f"[ACL-WORKER] Error fetching {acl.upper()} deliveries: HTTP {e.response.status_code}")
+            return []
         except Exception as e:
-            print(f"[ACL-WORKER] Error fetching {acl.upper()} deliveries: {e}")
+            print(f"[ACL-WORKER] Error fetching {acl.upper()} deliveries: {type(e).__name__} - {str(e)}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def analyze_delivery_sync(self, delivery_number: str) -> Optional[Dict]:
@@ -244,10 +252,22 @@ class ACLMonitor:
         deliveries = await self.fetch_acl_deliveries(acl)
         self.cache[acl]["deliveries"] = deliveries
         
+        # Deduplicate deliveries by delivery number (sometimes same delivery appears twice)
+        seen_deliveries = set()
+        unique_deliveries = []
+        for item in deliveries:
+            delivery_num = item.get('delivery', '')
+            if delivery_num and delivery_num not in seen_deliveries:
+                seen_deliveries.add(delivery_num)
+                unique_deliveries.append(item)
+        
+        if len(unique_deliveries) < len(deliveries):
+            print(f"[ACL-WORKER] {acl.upper()}: Deduplicated {len(deliveries)} -> {len(unique_deliveries)} deliveries")
+        
         # Analyze each delivery synchronously
         analyzed = []
-        for item in deliveries:
-            delivery_number = item.get('delivery', '')
+        for delivery_item in unique_deliveries:
+            delivery_number = delivery_item.get('delivery', '')
             if not delivery_number:
                 continue
             
@@ -262,20 +282,20 @@ class ACLMonitor:
                     problematic_details = enriched.get('problematic_details', {})
                     
                     problematic = []
-                    for item in problematic_items[:10]:  # Top 10
-                        mds_id = item.get('mds_fam_id', '')
-                        acl_details = item.get('acl_details', problematic_details.get(str(mds_id), {}))
+                    for prob_item in problematic_items[:10]:  # Top 10
+                        mds_id = prob_item.get('mds_fam_id', '')
+                        acl_details = prob_item.get('acl_details', problematic_details.get(str(mds_id), {}))
                         
                         problematic.append({
                             'mds_fam_id': mds_id,
-                            'item_name': item.get('item_name', ''),
+                            'item_name': prob_item.get('item_name', ''),
                             'performance': acl_details.get('avg_perf', 0),
                             'bad_cases': acl_details.get('bad_cases', 0),
                         })
                     
                     analyzed.append({
                         'delivery_number': delivery_number,
-                        'station': item.get('station', 'Unknown'),
+                        'station': delivery_item.get('station', 'Unknown'),
                         'analysis': {
                             'total_items': len(problematic_items),
                             'problematic_count': len(problematic_items),
@@ -306,7 +326,7 @@ class ACLMonitor:
                     # Nest analysis data under 'analysis' key
                     analyzed.append({
                         'delivery_number': delivery_number,
-                        'station': item.get('station', 'Unknown'),
+                        'station': delivery_item.get('station', 'Unknown'),
                         'analysis': {
                             'total_items': len(enriched.get('data', [])),
                             'problematic_count': len(problematic),
