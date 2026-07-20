@@ -16,11 +16,17 @@ echo.
 cd /d "%~dp0"
 
 REM Activate virtual environment
+echo [CLIENT] Activating virtual environment...
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
     echo [OK] Virtual environment activated
 ) else (
-    echo [WARN] No .venv found - using system Python
+    echo [WARN] No .venv found - creating one now...
+    python -m venv .venv
+    call .venv\Scripts\activate.bat
+    echo [OK] Virtual environment created and activated
+    echo [INFO] Installing dependencies...
+    pip install -r requirements.txt --index-url https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple --allow-insecure-host pypi.ci.artifacts.walmart.com
 )
 
 echo.
