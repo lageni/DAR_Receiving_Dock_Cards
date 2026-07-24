@@ -136,6 +136,9 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
         print("[DB-READ] No items requested - returning empty dict")
         return {}
     
+    # CRITICAL: Convert all IDs to strings (database stores as TEXT)
+    mds_fam_ids = [str(item_id) for item_id in mds_fam_ids]
+    
     db_path = get_database_path()
     print(f"[DB-READ] Querying database: {db_path}")
     
@@ -145,6 +148,7 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
     
     print(f"[DB-READ] Requesting data for {len(mds_fam_ids)} items")
     print(f"[DB-READ] First 10 items: {mds_fam_ids[:10]}")
+    print(f"[DB-READ] Sample ID type: {type(mds_fam_ids[0]).__name__} (should be 'str')")
     
     rates_by_family = defaultdict(list)
     
@@ -173,6 +177,15 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
             
             rows = cursor.fetchall()
             print(f"[DB-READ] Query returned {len(rows)} total rows")
+            
+            if len(rows) == 0:
+                # DEBUG: Test with a few known IDs to see if DB is readable
+                print(f"[DB-READ-DEBUG] Testing with known items...")
+                test_query = "SELECT COUNT(*) FROM read_rates WHERE mds_fam_id IN (?, ?, ?)"
+                cursor.execute(test_query, ('550508254', '674874972', '570741739'))
+                test_count = cursor.fetchone()[0]
+                print(f"[DB-READ-DEBUG] Known items test: {test_count} records found")
+                print(f"[DB-READ-DEBUG] First 20 IDs we tried: {mds_fam_ids[:20]}")
             
             row_count = 0
             for row in rows:
