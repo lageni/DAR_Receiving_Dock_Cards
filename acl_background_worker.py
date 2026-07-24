@@ -189,18 +189,19 @@ class ACLMonitor:
                         if cached_mdm:
                             # Check if we need to update recommendation based on catalog_gtin
                             catalog_gtin = cached_mdm.get("catalog_gtin", "")
+                            orderable_gtin = cached_mdm.get("gtin", "")
                             item_details = problematic_details.get(str(mds_id), {})
                             
                             if catalog_gtin and item_details.get('needs_catalog_check'):
-                                # Recalculate recommendation with catalog_gtin
+                                # Recalculate recommendation with catalog_gtin and orderable_gtin
                                 avg_perf = item_details.get('avg_perf', 0)
-                                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "", catalog_gtin)
+                                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "", catalog_gtin, orderable_gtin)
                                 
                                 # Update details with new recommendation
                                 item_details['recommendation'] = recommendation
                                 item_details['color_hex'] = color_hex
                                 problematic_details[str(mds_id)] = item_details
-                                print(f"[ACL-WORKER] Item {mds_id}: Updated recommendation to '{recommendation}' (cached catalog_gtin)")
+                                print(f"[ACL-WORKER] Item {mds_id}: Updated recommendation to '{recommendation}' (cached catalog_gtin={catalog_gtin}, orderable={orderable_gtin})")
                             
                             cached_mdm["acl_details"] = problematic_details.get(str(mds_id), {})
                             problematic_items_data.append(cached_mdm)
@@ -218,18 +219,19 @@ class ACLMonitor:
                             
                             # Check if we need to update recommendation based on catalog_gtin
                             catalog_gtin = item_data.get("catalog_gtin", "")
+                            orderable_gtin = item_data.get("gtin", "")
                             item_details = problematic_details.get(str(mds_id), {})
                             
                             if catalog_gtin and item_details.get('needs_catalog_check'):
-                                # Recalculate recommendation with catalog_gtin
+                                # Recalculate recommendation with catalog_gtin and orderable_gtin
                                 avg_perf = item_details.get('avg_perf', 0)
-                                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "", catalog_gtin)
+                                recommendation, color_hex, gradient_class = get_recommendation(avg_perf, "", catalog_gtin, orderable_gtin)
                                 
                                 # Update details with new recommendation
                                 item_details['recommendation'] = recommendation
                                 item_details['color_hex'] = color_hex
                                 problematic_details[str(mds_id)] = item_details
-                                print(f"[ACL-WORKER] Item {mds_id}: Updated recommendation to '{recommendation}' (catalog_gtin found)")
+                                print(f"[ACL-WORKER] Item {mds_id}: Updated recommendation to '{recommendation}' (catalog_gtin={catalog_gtin}, orderable={orderable_gtin})")
                             
                             item_data["acl_details"] = problematic_details.get(str(mds_id), {})
                             problematic_items_data.append(item_data)

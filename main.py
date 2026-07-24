@@ -263,11 +263,18 @@ def check_non_conveyable(length: str, width: str, height: str) -> tuple:
         pass
     return False, "", ""
 
-def get_recommendation(avg_perf: float, trend_status: str, catalog_gtin: str = "") -> tuple:
+def get_recommendation(avg_perf: float, trend_status: str, catalog_gtin: str = "", orderable_gtin: str = "") -> tuple:
     """Get ACL recommendation based on performance and trend.
-    If performance < 50% AND catalog_gtin present -> "INSPECT CATALOG; TAKE TO PROBLEMS"
+    
+    Special case: If performance < 50% AND catalog_gtin is DIFFERENT from orderable_gtin,
+    this indicates a catalog mismatch issue -> "INSPECT CATALOG; TAKE TO PROBLEMS"
+    
+    If catalog_gtin == orderable_gtin, treat as if there's no catalog GTIN (it's just the normal GTIN).
     """
-    if avg_perf < 50 and catalog_gtin:
+    # Check if catalog GTIN is truly different from orderable (real catalog issue)
+    has_catalog_issue = catalog_gtin and catalog_gtin != orderable_gtin
+    
+    if avg_perf < 50 and has_catalog_issue:
         return "INSPECT CATALOG; TAKE TO PROBLEMS", "#dc2626", "from-red-50 via-red-50 to-red-100 border-red-300"
     elif avg_perf >= 85:
         return "ACL APPROVED", "#16a34a", "from-green-50 via-green-50 to-green-100 border-green-300"
@@ -923,7 +930,7 @@ def generate_print_card(data: dict, item_id: str) -> str:
     if rate_data and len(rate_data) > 0:
         avg_perf = get_avg_performance(rate_data)
         trend_status = get_trend_status(rate_data)
-        recommendation, rec_color, _ = get_recommendation(avg_perf, trend_status, catalog_gtin)
+        recommendation, rec_color, _ = get_recommendation(avg_perf, trend_status, catalog_gtin, gtin)
 
     image_section = ""
     if image_url:
@@ -1323,7 +1330,7 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
     if rate_data and len(rate_data) > 0:
         avg_perf = get_avg_performance(rate_data)
         trend_status = get_trend_status(rate_data)
-        recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status, catalog_gtin)
+        recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status, catalog_gtin, gtin)
     
     # Color mapping - matching what get_recommendation() returns
     color_map = {
@@ -2610,7 +2617,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
             try:
                 avg_perf = get_avg_performance(item_rates)
                 trend_status = get_trend_status(item_rates)
-                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status, catalog_gtin)
+                recommendation, rec_color_hex, _ = get_recommendation(avg_perf, trend_status, catalog_gtin, gtin)
             except:
                 pass
         
