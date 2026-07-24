@@ -289,6 +289,12 @@ git push
 - Detailed logging shows exactly what's being read from the database
 - Fixes: Server/client both reading DB without interference
 
+### 2026-07-24: File Logging Added
+- Server and client now log to `L:\Engineering\DAR Docktag Cards\cache_data\logs\`
+- Daily log files: `server_YYYYMMDD.log` and `client_YYYYMMDD.log`
+- Logs show DB queries, cache operations, errors, and performance metrics
+- Both console and file output for easy debugging
+
 ---
 
 Last Updated: 2026-07-24
