@@ -275,5 +275,14 @@ git push
 
 ---
 
-Last Updated: 2026-07-16
+## Recent Fixes
+
+### 2026-07-24: Performance Calculation Fix
+- Fixed `get_avg_performance()` to use weighted average: `total(acl_null_cnt) / total(acl_event_cnt)`
+- Old method incorrectly averaged individual percentages
+- Items are now flagged accurately (e.g., item 674874972 now shows 17.16% instead of 9.19%)
+
+---
+
+Last Updated: 2026-07-24
 Version: 2.0 (Client/Server Architecture)
