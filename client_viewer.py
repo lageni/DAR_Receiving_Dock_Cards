@@ -10,12 +10,33 @@ Cache: L:\\Engineering\\DAR Docktag Cards\\cache_data
 
 import json
 import time
+import logging
 from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from cache_manager import get_cache_manager
+
+# Setup logging to cache directory
+LOG_DIR = Path(r"L:\Engineering\DAR Docktag Cards\cache_data\logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+log_filename = LOG_DIR / f"client_{datetime.now().strftime('%Y%m%d')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(log_filename, encoding='utf-8'),
+        logging.StreamHandler()  # Also print to console
+    ]
+)
+
+logger = logging.getLogger(__name__)
+logger.info(f"="*60)
+logger.info(f"CLIENT STARTED - Logging to {log_filename}")
+logger.info(f"="*60)
 
 app = FastAPI(title="ACL Viewer Client")
 

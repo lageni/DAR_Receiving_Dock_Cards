@@ -5,10 +5,12 @@ import io
 import sqlite3
 import uuid
 import asyncio
+import logging
 from pathlib import Path
 from urllib.parse import urlencode
 from io import BytesIO
 from collections import defaultdict
+from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import HTMLResponse, Response, JSONResponse, FileResponse, RedirectResponse
@@ -19,6 +21,26 @@ from cache_manager import get_cache_manager
 from acl_background_worker import acl_monitor
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
+# Setup logging to cache directory
+LOG_DIR = Path(r"L:\Engineering\DAR Docktag Cards\cache_data\logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+log_filename = LOG_DIR / f"server_{datetime.now().strftime('%Y%m%d')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(log_filename, encoding='utf-8'),
+        logging.StreamHandler()  # Also print to console
+    ]
+)
+
+logger = logging.getLogger(__name__)
+logger.info(f"="*60)
+logger.info(f"SERVER STARTED - Logging to {log_filename}")
+logger.info(f"="*60)
 
 app = FastAPI(title="CodePuppy DAR")
 
@@ -133,22 +155,22 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
         dict[mds_fam_id] -> list of rate records
     """
     if not mds_fam_ids:
-        print("[DB-READ] No items requested - returning empty dict")
+        logger.info("[DB-READ] No items requested - returning empty dict")
         return {}
     
     # CRITICAL: Convert all IDs to strings (database stores as TEXT)
     mds_fam_ids = [str(item_id) for item_id in mds_fam_ids]
     
     db_path = get_database_path()
-    print(f"[DB-READ] Querying database: {db_path}")
+    logger.info(f"[DB-READ] Querying database: {db_path}")
     
     if not Path(db_path).exists():
-        print(f"[DB-READ-ERROR] Database file not found at {db_path}")
+        logger.error(f"[DB-READ-ERROR] Database file not found at {db_path}")
         return {}
     
-    print(f"[DB-READ] Requesting data for {len(mds_fam_ids)} items")
-    print(f"[DB-READ] First 10 items: {mds_fam_ids[:10]}")
-    print(f"[DB-READ] Sample ID type: {type(mds_fam_ids[0]).__name__} (should be 'str')")
+    logger.info(f"[DB-READ] Requesting data for {len(mds_fam_ids)} items")
+    logger.info(f"[DB-READ] First 10 items: {mds_fam_ids[:10]}")
+    logger.info(f"[DB-READ] Sample ID type: {type(mds_fam_ids[0]).__name__} (should be 'str')")
     
     rates_by_family = defaultdict(list)
     
@@ -172,20 +194,20 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
                 ORDER BY mds_fam_id, acl_insert_date
             """
             
-            print(f"[DB-READ] Executing query with {len(mds_fam_ids)} parameters...")
+            logger.info(f"[DB-READ] Executing query with {len(mds_fam_ids)} parameters...")
             cursor.execute(query, mds_fam_ids)
             
             rows = cursor.fetchall()
-            print(f"[DB-READ] Query returned {len(rows)} total rows")
+            logger.info(f"[DB-READ] Query returned {len(rows)} total rows")
             
             if len(rows) == 0:
                 # DEBUG: Test with a few known IDs to see if DB is readable
-                print(f"[DB-READ-DEBUG] Testing with known items...")
+                logger.warning(f"[DB-READ-DEBUG] Testing with known items...")
                 test_query = "SELECT COUNT(*) FROM read_rates WHERE mds_fam_id IN (?, ?, ?)"
                 cursor.execute(test_query, ('550508254', '674874972', '570741739'))
                 test_count = cursor.fetchone()[0]
-                print(f"[DB-READ-DEBUG] Known items test: {test_count} records found")
-                print(f"[DB-READ-DEBUG] First 20 IDs we tried: {mds_fam_ids[:20]}")
+                logger.warning(f"[DB-READ-DEBUG] Known items test: {test_count} records found")
+                logger.warning(f"[DB-READ-DEBUG] First 20 IDs we tried: {mds_fam_ids[:20]}")
             
             row_count = 0
             for row in rows:
@@ -200,30 +222,30 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
                     })
                     row_count += 1
             
-            print(f"[DB-READ] Processed {row_count} valid rows into {len(rates_by_family)} items")
+            logger.info(f"[DB-READ] Processed {row_count} valid rows into {len(rates_by_family)} items")
             
             # Log sample data for verification
             if rates_by_family:
                 sample_id = list(rates_by_family.keys())[0]
                 sample_count = len(rates_by_family[sample_id])
-                print(f"[DB-READ] Sample: Item {sample_id} has {sample_count} records")
+                logger.info(f"[DB-READ] Sample: Item {sample_id} has {sample_count} records")
             else:
-                print(f"[DB-READ-WARNING] No data found for any of the {len(mds_fam_ids)} requested items!")
+                logger.warning(f"[DB-READ-WARNING] No data found for any of the {len(mds_fam_ids)} requested items!")
         
         # Connection auto-closed by context manager
-        print(f"[DB-READ] SUCCESS - Loaded {len(rates_by_family)} items from database")
+        logger.info(f"[DB-READ] SUCCESS - Loaded {len(rates_by_family)} items from database")
         
     except sqlite3.OperationalError as e:
-        print(f"[DB-READ-ERROR] SQLite operational error (possibly locked): {e}")
-        print(f"[DB-READ-ERROR] Database path: {db_path}")
+        logger.error(f"[DB-READ-ERROR] SQLite operational error (possibly locked): {e}")
+        logger.error(f"[DB-READ-ERROR] Database path: {db_path}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         return {}
     except Exception as e:
-        print(f"[DB-READ-ERROR] Unexpected error loading read rates: {type(e).__name__} - {e}")
-        print(f"[DB-READ-ERROR] Database path: {db_path}")
+        logger.error(f"[DB-READ-ERROR] Unexpected error loading read rates: {type(e).__name__} - {e}")
+        logger.error(f"[DB-READ-ERROR] Database path: {db_path}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         return {}
     
     return rates_by_family
