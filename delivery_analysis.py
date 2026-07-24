@@ -158,55 +158,66 @@ def batch_get_read_rates(mds_fam_ids: list, progress: ProgressTracker) -> dict:
         import sqlite3
         from pathlib import Path
         
-        db_path = Path("L:\\Engineering\\DAR Docktag Cards\\read_rates.db")
+        db_path = Path("L:\Engineering\DAR Docktag Cards\read_rates.db")
         if not db_path.exists():
-            progress.log("BATCH", "Database not found - skipping read rates")
+            progress.log("BATCH", f"Database not found at {db_path} - skipping read rates")
             return batching_data
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        progress.log("BATCH", f"Opening database (read-only): {db_path}")
         
-        # Create placeholders for SQL IN clause
-        placeholders = ','.join('?' * len(mds_fam_ids))
+        # Use context manager with read-only mode and timeout
+        db_uri = f"file:{db_path}?mode=ro&timeout=20000"
         
-        # Query with PERFORMANCE PRE-FILTERING at SQL level!
-        # Only loads items where avg(null_pct) < 85 (problematic items)
-        query = f"""
-            WITH item_performance AS (
-                SELECT 
-                    mds_fam_id,
-                    AVG(CAST(acl_null_cnt AS FLOAT) / CAST(acl_event_cnt AS FLOAT) * 100) as avg_performance
-                FROM read_rates
-                WHERE mds_fam_id IN ({placeholders})
-                  AND acl_event_cnt > 0
-                GROUP BY mds_fam_id
-                HAVING avg_performance < 85  -- Only load problematic items!
-            )
-            SELECT r.mds_fam_id, r.acl_insert_date, r.acl_event_cnt, r.acl_null_cnt
-            FROM read_rates r
-            INNER JOIN item_performance p ON r.mds_fam_id = p.mds_fam_id
-            WHERE r.acl_event_cnt > 0
-            ORDER BY r.mds_fam_id, r.acl_insert_date
-        """
+        with sqlite3.connect(db_uri, uri=True, timeout=20.0) as conn:
+            conn.row_factory = None
+            cursor = conn.cursor()
+            
+            # Create placeholders for SQL IN clause
+            placeholders = ','.join('?' * len(mds_fam_ids))
+            
+            # Query with PERFORMANCE PRE-FILTERING at SQL level!
+            # Only loads items where avg(null_pct) < 85 (problematic items)
+            query = f"""
+                WITH item_performance AS (
+                    SELECT 
+                        mds_fam_id,
+                        AVG(CAST(acl_null_cnt AS FLOAT) / CAST(acl_event_cnt AS FLOAT) * 100) as avg_performance
+                    FROM read_rates
+                    WHERE mds_fam_id IN ({placeholders})
+                      AND acl_event_cnt > 0
+                    GROUP BY mds_fam_id
+                    HAVING avg_performance < 85  -- Only load problematic items!
+                )
+                SELECT r.mds_fam_id, r.acl_insert_date, r.acl_event_cnt, r.acl_null_cnt
+                FROM read_rates r
+                INNER JOIN item_performance p ON r.mds_fam_id = p.mds_fam_id
+                WHERE r.acl_event_cnt > 0
+                ORDER BY r.mds_fam_id, r.acl_insert_date
+            """
+            
+            progress.log("BATCH", f"Executing query for {len(mds_fam_ids)} items...")
+            cursor.execute(query, mds_fam_ids)
+            
+            rows = cursor.fetchall()
+            progress.log("BATCH", f"Query returned {len(rows)} rows")
+            
+            # Group results by mds_fam_id
+            from collections import defaultdict
+            rates_by_id = defaultdict(list)
+            
+            for row in rows:
+                mds_fam_id, insert_date, event_cnt, null_cnt = row
+                if event_cnt and event_cnt > 0:
+                    null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
+                    rates_by_id[str(mds_fam_id)].append({
+                        "date": str(insert_date),
+                        "null_pct": null_pct,
+                        "event_cnt": event_cnt,
+                        "null_cnt": null_cnt
+                    })
         
-        cursor.execute(query, mds_fam_ids)
-        
-        # Group results by mds_fam_id
-        from collections import defaultdict
-        rates_by_id = defaultdict(list)
-        
-        for row in cursor.fetchall():
-            mds_fam_id, insert_date, event_cnt, null_cnt = row
-            if event_cnt and event_cnt > 0:
-                null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
-                rates_by_id[str(mds_fam_id)].append({
-                    "date": str(insert_date),
-                    "null_pct": null_pct,
-                    "event_cnt": event_cnt,
-                    "null_cnt": null_cnt
-                })
-        
-        conn.close()
+        # Connection auto-closed by context manager
+        progress.log("BATCH", "Database connection closed")
         
         # Build batching_data structure
         for mds_id, records in rates_by_id.items():

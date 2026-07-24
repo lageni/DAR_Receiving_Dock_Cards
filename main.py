@@ -59,42 +59,63 @@ def load_read_rates():
     """Load read rates from read_rates.db (SQLite). Returns dict[mds_fam_id] -> list of records."""
     global _read_rates_cache
     if _read_rates_cache is not None:
+        print("[DB-READ] Using cached read rates (already loaded)")
         return _read_rates_cache
     
     db_path = get_database_path()
+    print(f"[DB-READ-ALL] Loading ALL items from database: {db_path}")
     
     if not Path(db_path).exists():
-        print(f"[WARNING] Database not found at {db_path}")
+        print(f"[DB-READ-ALL-ERROR] Database not found at {db_path}")
         return {}
     
     rates_by_family = defaultdict(list)
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        # Use context manager with read-only mode and timeout
+        db_uri = f"file:{db_path}?mode=ro&timeout=20000"
         
-        # Query: get all rows grouped by mds_fam_id, sorted by date
-        cursor.execute("""
-            SELECT mds_fam_id, acl_insert_date, acl_event_cnt, acl_null_cnt
-            FROM read_rates
-            ORDER BY mds_fam_id, acl_insert_date
-        """)
+        with sqlite3.connect(db_uri, uri=True, timeout=20.0) as conn:
+            conn.row_factory = None
+            cursor = conn.cursor()
+            
+            print("[DB-READ-ALL] Executing query to load all read rates...")
+            # Query: get all rows grouped by mds_fam_id, sorted by date
+            cursor.execute("""
+                SELECT mds_fam_id, acl_insert_date, acl_event_cnt, acl_null_cnt
+                FROM read_rates
+                ORDER BY mds_fam_id, acl_insert_date
+            """)
+            
+            rows = cursor.fetchall()
+            print(f"[DB-READ-ALL] Fetched {len(rows)} total rows from database")
+            
+            row_count = 0
+            for row in rows:
+                mds_fam_id, insert_date, event_cnt, null_cnt = row
+                if mds_fam_id and event_cnt and event_cnt > 0:
+                    null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
+                    rates_by_family[str(mds_fam_id)].append({
+                        "date": str(insert_date),
+                        "null_pct": null_pct,
+                        "event_cnt": event_cnt,
+                        "null_cnt": null_cnt
+                    })
+                    row_count += 1
+            
+            print(f"[DB-READ-ALL] Processed {row_count} valid rows into {len(rates_by_family)} items")
         
-        for row in cursor.fetchall():
-            mds_fam_id, insert_date, event_cnt, null_cnt = row
-            if mds_fam_id and event_cnt and event_cnt > 0:
-                null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
-                rates_by_family[str(mds_fam_id)].append({
-                    "date": str(insert_date),
-                    "null_pct": null_pct,
-                    "event_cnt": event_cnt,
-                    "null_cnt": null_cnt
-                })
-        
-        conn.close()
         _read_rates_cache = rates_by_family
-        print(f"[INFO] Loaded {len(rates_by_family)} items from {db_path}")
+        print(f"[DB-READ-ALL] SUCCESS - Cached {len(rates_by_family)} items for future use")
+        
+    except sqlite3.OperationalError as e:
+        print(f"[DB-READ-ALL-ERROR] SQLite operational error (possibly locked): {e}")
+        import traceback
+        traceback.print_exc()
+        _read_rates_cache = {}
     except Exception as e:
-        print(f"[ERROR] Loading read_rates.db: {e}")
+        print(f"[DB-READ-ALL-ERROR] Unexpected error: {type(e).__name__} - {e}")
+        import traceback
+        traceback.print_exc()
         _read_rates_cache = {}
     
     return _read_rates_cache
@@ -112,49 +133,84 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
         dict[mds_fam_id] -> list of rate records
     """
     if not mds_fam_ids:
+        print("[DB-READ] No items requested - returning empty dict")
         return {}
     
     db_path = get_database_path()
+    print(f"[DB-READ] Querying database: {db_path}")
     
     if not Path(db_path).exists():
-        print(f"[WARNING] Database not found at {db_path}")
+        print(f"[DB-READ-ERROR] Database file not found at {db_path}")
         return {}
+    
+    print(f"[DB-READ] Requesting data for {len(mds_fam_ids)} items")
+    print(f"[DB-READ] First 10 items: {mds_fam_ids[:10]}")
     
     rates_by_family = defaultdict(list)
     
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        # Use context manager for automatic connection cleanup
+        # URI mode with timeout and read-only for multi-process safety
+        db_uri = f"file:{db_path}?mode=ro&timeout=20000"  # 20 second timeout, read-only
         
-        # Create placeholders for SQL IN clause
-        placeholders = ','.join('?' * len(mds_fam_ids))
+        with sqlite3.connect(db_uri, uri=True, timeout=20.0) as conn:
+            conn.row_factory = None  # Use tuples for speed
+            cursor = conn.cursor()
+            
+            # Create placeholders for SQL IN clause
+            placeholders = ','.join('?' * len(mds_fam_ids))
+            
+            # Query ONLY the items we need (SQL-level filtering!)
+            query = f"""
+                SELECT mds_fam_id, acl_insert_date, acl_event_cnt, acl_null_cnt
+                FROM read_rates
+                WHERE mds_fam_id IN ({placeholders})
+                ORDER BY mds_fam_id, acl_insert_date
+            """
+            
+            print(f"[DB-READ] Executing query with {len(mds_fam_ids)} parameters...")
+            cursor.execute(query, mds_fam_ids)
+            
+            rows = cursor.fetchall()
+            print(f"[DB-READ] Query returned {len(rows)} total rows")
+            
+            row_count = 0
+            for row in rows:
+                mds_fam_id, insert_date, event_cnt, null_cnt = row
+                if mds_fam_id and event_cnt and event_cnt > 0:
+                    null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
+                    rates_by_family[str(mds_fam_id)].append({
+                        "date": str(insert_date),
+                        "null_pct": null_pct,
+                        "event_cnt": event_cnt,
+                        "null_cnt": null_cnt
+                    })
+                    row_count += 1
+            
+            print(f"[DB-READ] Processed {row_count} valid rows into {len(rates_by_family)} items")
+            
+            # Log sample data for verification
+            if rates_by_family:
+                sample_id = list(rates_by_family.keys())[0]
+                sample_count = len(rates_by_family[sample_id])
+                print(f"[DB-READ] Sample: Item {sample_id} has {sample_count} records")
+            else:
+                print(f"[DB-READ-WARNING] No data found for any of the {len(mds_fam_ids)} requested items!")
         
-        # Query ONLY the items we need (SQL-level filtering!)
-        query = f"""
-            SELECT mds_fam_id, acl_insert_date, acl_event_cnt, acl_null_cnt
-            FROM read_rates
-            WHERE mds_fam_id IN ({placeholders})
-            ORDER BY mds_fam_id, acl_insert_date
-        """
+        # Connection auto-closed by context manager
+        print(f"[DB-READ] SUCCESS - Loaded {len(rates_by_family)} items from database")
         
-        cursor.execute(query, mds_fam_ids)
-        
-        for row in cursor.fetchall():
-            mds_fam_id, insert_date, event_cnt, null_cnt = row
-            if mds_fam_id and event_cnt and event_cnt > 0:
-                null_pct = (null_cnt / event_cnt) * 100 if null_cnt else 0
-                rates_by_family[str(mds_fam_id)].append({
-                    "date": str(insert_date),
-                    "null_pct": null_pct,
-                    "event_cnt": event_cnt,
-                    "null_cnt": null_cnt
-                })
-        
-        conn.close()
-        print(f"[OPTIMIZED] Loaded {len(rates_by_family)} items (queried only {len(mds_fam_ids)} specific items from DB)")
-        
+    except sqlite3.OperationalError as e:
+        print(f"[DB-READ-ERROR] SQLite operational error (possibly locked): {e}")
+        print(f"[DB-READ-ERROR] Database path: {db_path}")
+        import traceback
+        traceback.print_exc()
+        return {}
     except Exception as e:
-        print(f"[ERROR] Loading read rates for items: {e}")
+        print(f"[DB-READ-ERROR] Unexpected error loading read rates: {type(e).__name__} - {e}")
+        print(f"[DB-READ-ERROR] Database path: {db_path}")
+        import traceback
+        traceback.print_exc()
         return {}
     
     return rates_by_family
