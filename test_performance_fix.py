@@ -10,7 +10,10 @@ load_dotenv()
 
 # Replicate get_avg_performance function (NEW FIXED VERSION)
 def get_avg_performance(item_rates: list) -> float:
-    """Calculate average ACL Performance using total(acl_null_cnt) / total(acl_event_cnt)."""
+    """Calculate average ACL Performance using total(acl_null_cnt) / total(acl_event_cnt).
+    
+    NOTE: acl_null_cnt = SUCCESSFUL reads (misleading name)
+    """
     if not item_rates:
         return 0
     
@@ -21,11 +24,11 @@ def get_avg_performance(item_rates: list) -> float:
     if total_event_cnt == 0:
         return 0
     
-    # Calculate null percentage: total(acl_null_cnt) / total(acl_event_cnt) * 100
-    acl_null_pct = (total_null_cnt / total_event_cnt) * 100
+    # Calculate performance: total(acl_null_cnt) / total(acl_event_cnt) * 100
+    # acl_null_cnt = successful reads (despite misleading name)
+    performance = (total_null_cnt / total_event_cnt) * 100
     
-    # Return PERFORMANCE (inverse of null %)
-    return 100 - acl_null_pct
+    return performance
 
 # Get database path
 db_path = os.getenv("DATABASE_PATH", "")

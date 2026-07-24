@@ -177,12 +177,13 @@ def format_date_for_chart(date_str: str) -> str:
 def get_avg_performance(item_rates: list) -> float:
     """Calculate average ACL Performance using total(acl_null_cnt) / total(acl_event_cnt).
     
+    NOTE: Despite the name, acl_null_cnt actually means SUCCESSFUL reads (misleading naming).
     This is a WEIGHTED average - more accurate than averaging individual percentages.
     
     Returns:
         Performance percentage (0-100), where:
         - 100% = all reads successful
-        - 0% = all reads failed/null
+        - 0% = all reads failed
     """
     if not item_rates:
         return 0
@@ -194,11 +195,11 @@ def get_avg_performance(item_rates: list) -> float:
     if total_event_cnt == 0:
         return 0
     
-    # Calculate null percentage: total(acl_null_cnt) / total(acl_event_cnt) * 100
-    acl_null_pct = (total_null_cnt / total_event_cnt) * 100
+    # Calculate performance: total(acl_null_cnt) / total(acl_event_cnt) * 100
+    # acl_null_cnt = successful reads (despite misleading name)
+    performance = (total_null_cnt / total_event_cnt) * 100
     
-    # Return PERFORMANCE (inverse of null %)
-    return 100 - acl_null_pct
+    return performance
 
 
 def get_trend_status(item_rates: list) -> str:
