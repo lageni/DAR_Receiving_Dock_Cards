@@ -280,7 +280,8 @@ git push
 ### 2026-07-24: Performance Calculation Fix
 - Fixed `get_avg_performance()` to use weighted average: `total(acl_null_cnt) / total(acl_event_cnt)`
 - Old method incorrectly averaged individual percentages
-- Items are now flagged accurately (e.g., item 674874972 now shows 17.16% instead of 9.19%)
+- Clarified: `acl_null_cnt` = successful reads (misleading name)
+- Item 674874972 now correctly shows 82.84% and gets flagged (< 85%)
 
 ---
 
