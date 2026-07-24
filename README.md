@@ -283,6 +283,12 @@ git push
 - Clarified: `acl_null_cnt` = successful reads (misleading name)
 - Item 674874972 now correctly shows 82.84% and gets flagged (< 85%)
 
+### 2026-07-24: SQLite Connection Optimization
+- All DB reads now use context managers (`with` statement) for automatic cleanup
+- Read-only mode with 20-second timeout prevents database locks
+- Detailed logging shows exactly what's being read from the database
+- Fixes: Server/client both reading DB without interference
+
 ---
 
 Last Updated: 2026-07-24
