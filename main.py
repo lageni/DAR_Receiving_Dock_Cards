@@ -22,6 +22,10 @@ from acl_background_worker import acl_monitor
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
+print(f"[STARTUP-DEBUG] .env file location: {Path(__file__).parent / '.env'}")
+print(f"[STARTUP-DEBUG] .env file exists: {(Path(__file__).parent / '.env').exists()}")
+print(f"[STARTUP-DEBUG] DATABASE_PATH value: '{os.getenv('DATABASE_PATH', 'NOT SET')}'")
+
 # Setup logging to cache directory
 LOG_DIR = Path(r"L:\Engineering\DAR Docktag Cards\cache_data\logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,13 +64,19 @@ def get_database_path():
     """
     db_path = os.getenv("DATABASE_PATH", "").strip()
     
+    logger.info(f"[DB-PATH] DATABASE_PATH from env: '{db_path}'")
+    logger.info(f"[DB-PATH] __file__ location: {Path(__file__).parent}")
+    
     if not db_path:
         # Default to local directory
         db_path = str(Path(__file__).parent / "read_rates.db")
+        logger.info(f"[DB-PATH] Using default path: {db_path}")
     elif not os.path.isabs(db_path):
         # Relative path - make it absolute from app directory
         db_path = str(Path(__file__).parent / db_path)
-    # else: absolute path, use as-is
+        logger.info(f"[DB-PATH] Converted relative to absolute: {db_path}")
+    else:
+        logger.info(f"[DB-PATH] Using absolute path from .env: {db_path}")
     
     return db_path
 
