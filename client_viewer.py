@@ -197,6 +197,22 @@ async def home():
                     headerBg = 'bg-gradient-to-r from-gray-500 to-gray-600';
                     badgeBg = 'bg-gray-100 text-gray-800';
                     statusText = 'Pending Analysis';
+                } else if (problematicCount === 0 && isCached && problematicItems.length === 0 && totalBadCases === 0) {
+                    // Check if approved_count exists to distinguish "All Clear" vs "No Items"
+                    const approvedCount = delivery.approved_count || 0;
+                    if (approvedCount === 0) {
+                        // No items found at all - likely Informix query issue or delivery not ready
+                        borderColor = 'border-gray-400';
+                        headerBg = 'bg-gradient-to-r from-gray-500 to-gray-600';
+                        badgeBg = 'bg-gray-100 text-gray-800';
+                        statusText = 'No Items Found';
+                    } else {
+                        // Truly all clear - has items, all approved
+                        borderColor = 'border-green-500';
+                        headerBg = 'bg-gradient-to-r from-green-600 to-green-700';
+                        badgeBg = 'bg-green-100 text-green-800';
+                        statusText = 'All Clear';
+                    }
                 } else if (problematicCount === 0) {
                     borderColor = 'border-green-500';
                     headerBg = 'bg-gradient-to-r from-green-600 to-green-700';
@@ -472,9 +488,10 @@ async def get_acl_cache(acl: str):
                     'station': station,
                     'problematic_count': len(problematic_items),
                     'problematic_items': display_items,
+                    'approved_count': cached_analysis.get('approved_count', 0),
                     'cached': True
                 })
-                print(f"[CLIENT-DEBUG] Delivery {delivery_number}: Added to enriched list (problematic_count={len(problematic_items)})")
+                print(f"[CLIENT-DEBUG] Delivery {delivery_number}: Added to enriched list (problematic_count={len(problematic_items)}, approved_count={cached_analysis.get('approved_count', 0)})")
             else:
                 # Not analyzed yet - show as pending
                 print(f"[CLIENT-DEBUG] Delivery {delivery_number}: No analysis cache found - showing as pending")
