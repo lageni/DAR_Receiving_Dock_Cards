@@ -133,6 +133,7 @@ ABIA API (Active Deliveries)
 - **MDM Integration** - Fetches item images, names, dimensions
 - **Cache Writing** - Analysis results saved for instant client access
 - **Background Worker** - Auto-analyzes ACL deliveries every 2 minutes
+- **Import Detection** - Department bands only generated for IMPORT PO events
 
 ### Client
 - **All Deliveries Visible** - No scrolling, grid layout

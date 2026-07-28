@@ -2686,47 +2686,55 @@ def generate_batch_pdf(items_data: list) -> bytes:
             current_y = master_pdf.get_y() + 0.1
         
         # 2d. Department Band Trio (3 bands: Dept  | Description)
-        dept_band = get_department_band(supplier_dept)
-        if dept_band:
-            band_height = 0.11  # HALF SIZE
-            rgb = dept_band["rgb"]
-            
-            # Band 1: Department Number (COLORED)
-            master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(*rgb)
-            master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-            master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
-            master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
-            master_pdf.set_font("Helvetica", "B", 7)
-            master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(2.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
-            current_y += band_height
-            
-            # Band 2: Category Name (CARDBOARD)
-            master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
-            master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-            master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
-            master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
-            master_pdf.set_font("Helvetica", "B", 7)
-            master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
-            master_pdf.cell(2.9, band_height - 0.01, dept_band['name'], align='L')
-            current_y += band_height
-    
-            # Band 3: Item Description (CARDBOARD)
-            item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
-            master_pdf.set_xy(content_x, current_y)
-            master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
-            master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
-            master_pdf.set_line_width(0.02)
-            master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
-            master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
-            master_pdf.set_font("Helvetica", "B", 6)
-            master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
-            master_pdf.cell(2.9, band_height - 0.01, item_desc, align='L')
-            current_y += band_height + 0.05
+        # ONLY generate department bands if PO event is "import"
+        po_event = item_data.get("po_event", "").lower()
+        print(f"[BATCH-PDF] Item {idx + 1}: PO Event = '{po_event}'")
+        
+        if po_event == "import":
+            print(f"[BATCH-PDF] Item {idx + 1}: Generating department bands (IMPORT)")
+            dept_band = get_department_band(supplier_dept)
+            if dept_band:
+                band_height = 0.11  # HALF SIZE
+                rgb = dept_band["rgb"]
+                
+                # Band 1: Department Number (COLORED)
+                master_pdf.set_xy(content_x, current_y)
+                master_pdf.set_fill_color(*rgb)
+                master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
+                master_pdf.set_line_width(0.02)
+                master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
+                master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
+                master_pdf.set_font("Helvetica", "B", 7)
+                master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
+                master_pdf.cell(2.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
+                current_y += band_height
+                
+                # Band 2: Category Name (CARDBOARD)
+                master_pdf.set_xy(content_x, current_y)
+                master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
+                master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
+                master_pdf.set_line_width(0.02)
+                master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
+                master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
+                master_pdf.set_font("Helvetica", "B", 7)
+                master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
+                master_pdf.cell(2.9, band_height - 0.01, dept_band['name'], align='L')
+                current_y += band_height
+        
+                # Band 3: Item Description (CARDBOARD)
+                item_desc = sanitize_for_pdf(item_data.get("item_description", "Item Description"))
+                master_pdf.set_xy(content_x, current_y)
+                master_pdf.set_fill_color(196, 165, 123)  # Light brown/cardboard
+                master_pdf.set_draw_color(0, 0, 0)  # BLACK BORDER
+                master_pdf.set_line_width(0.02)
+                master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
+                master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
+                master_pdf.set_font("Helvetica", "B", 6)
+                master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT ON CARDBOARD
+                master_pdf.cell(2.9, band_height - 0.01, item_desc, align='L')
+                current_y += band_height + 0.05
+        else:
+            print(f"[BATCH-PDF] Item {idx + 1}: Skipping department bands (event='{po_event}', not 'import')")
         
         # 3. DIRECTIVE ACTION CARD (TOP - EMPHASIZED)
         rates = load_read_rates()
@@ -4140,6 +4148,12 @@ def delivery_analysis_pdf(delivery_number: str, include_approved: str = "false")
                         item_data = extract_item_data(mdm_data)
                         item_data["mds_fam_id"] = str(mds_id)
                         item_data["acl_details"] = problematic_details.get(str(mds_id), {})
+                        
+                        # Attach PO event from Informix query for import check
+                        po_rows_for_item = po_rows_by_mds_id.get(str(mds_id), [])
+                        if po_rows_for_item and len(po_rows_for_item) > 0:
+                            item_data["po_event"] = po_rows_for_item[0].get("event", "")
+                        
                         problematic_items_data.append(item_data)
                     except Exception as e:
                         problematic_items_data.append({"mds_fam_id": str(mds_id), "item_name": f"MDS {mds_id}", "acl_details": problematic_details.get(str(mds_id), {})})
