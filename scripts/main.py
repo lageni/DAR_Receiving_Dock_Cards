@@ -64,19 +64,20 @@ def get_database_path():
     """
     db_path = os.getenv("DATABASE_PATH", "").strip()
     
-    logger.info(f"[DB-PATH] DATABASE_PATH from env: '{db_path}'")
-    logger.info(f"[DB-PATH] __file__ location: {Path(__file__).parent}")
+    # Use repr() to safely log paths with backslashes
+    logger.info(f"[DB-PATH] DATABASE_PATH from env: {repr(db_path)}")
+    logger.info(f"[DB-PATH] __file__ location: {Path(__file__).parent.as_posix()}")
     
     if not db_path:
         # Default to local directory
         db_path = str(Path(__file__).parent / "read_rates.db")
-        logger.info(f"[DB-PATH] Using default path: {db_path}")
+        logger.info(f"[DB-PATH] Using default path: {Path(db_path).as_posix()}")
     elif not os.path.isabs(db_path):
         # Relative path - make it absolute from app directory
         db_path = str(Path(__file__).parent / db_path)
-        logger.info(f"[DB-PATH] Converted relative to absolute: {db_path}")
+        logger.info(f"[DB-PATH] Converted relative to absolute: {Path(db_path).as_posix()}")
     else:
-        logger.info(f"[DB-PATH] Using absolute path from .env: {db_path}")
+        logger.info(f"[DB-PATH] Using absolute path from .env: {Path(db_path).as_posix()}")
     
     return db_path
 
@@ -172,10 +173,10 @@ def load_read_rates_for_items(mds_fam_ids: list) -> dict:
     mds_fam_ids = [str(item_id) for item_id in mds_fam_ids]
     
     db_path = get_database_path()
-    logger.info(f"[DB-READ] Querying database: {db_path}")
+    logger.info(f"[DB-READ] Querying database: {Path(db_path).as_posix()}")
     
     if not Path(db_path).exists():
-        logger.error(f"[DB-READ-ERROR] Database file not found at {db_path}")
+        logger.error(f"[DB-READ-ERROR] Database file not found at {Path(db_path).as_posix()}")
         return {}
     
     logger.info(f"[DB-READ] Requesting data for {len(mds_fam_ids)} items")
