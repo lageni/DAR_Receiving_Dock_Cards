@@ -35,7 +35,7 @@ echo.
 echo Open browser: http://localhost:8051
 echo.
 
-python client_viewer.py
+python scripts\client_viewer.py
 
 if errorlevel 1 (
     echo.

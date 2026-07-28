@@ -36,7 +36,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["main", "db", "gcs_sync", "error_logger", "informix_connect"]
+packages = ["scripts"]
 
 [tool.uv]
 index-url = "https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple"

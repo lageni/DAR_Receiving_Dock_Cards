@@ -346,7 +346,7 @@ def get_color_for_performance(pct: float) -> str:
 
 def load_department_bands() -> dict:
     """Load department band info from JSON file."""
-    bands_file = Path("department_bands.json")
+    bands_file = Path(__file__).parent.parent / "reference" / "department_bands.json"
     if not bands_file.exists():
         return []
     try:

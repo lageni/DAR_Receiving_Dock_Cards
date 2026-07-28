@@ -26,6 +26,13 @@ RUN_CLIENT.bat
 - **Auto-refresh:** Every 30 seconds
 - **Access:** http://localhost:8051
 
+#### Stop Both Server and Client
+```bash
+KILL.bat
+```
+- Terminates processes on ports 8050 and 8051
+- Useful when processes are stuck or need restart
+
 ---
 
 ### Deployment (Production/Testing Machine)
@@ -105,7 +112,12 @@ ABIA API (Active Deliveries)
 
 ## Key Files
 
-### Core Application
+### Startup Scripts
+- `RUN.bat` - Start server (port 8050)
+- `RUN_CLIENT.bat` - Start client viewer (port 8051)
+- `KILL.bat` - Stop all processes on ports 8050 and 8051
+
+### Application Code (scripts/)
 - `main.py` - FastAPI server (analysis engine, cache writer)
 - `client_viewer.py` - FastAPI client (display only)
 - `acl_background_worker.py` - Background ACL monitor
@@ -113,11 +125,13 @@ ABIA API (Active Deliveries)
 - `cache_manager.py` - Shared cache module
 - `informix_connect.py` - Informix database connection
 - `batch_report.py` - Read rates analysis
-- `sync_bigquery.py` -  **Standalone BigQuery sync CLI script**
+- `sync_bigquery.py` - Standalone BigQuery sync CLI script
+- `db.py` - Database initialization
 
 ### Configuration
 - `.env` - Environment variables (API keys, DB paths)
 - `pyproject.toml` - Python dependencies
+- `requirements.txt` - Dependency list
 
 ### Reference
 - `reference/department_bands.json` - Department data

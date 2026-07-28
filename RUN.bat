@@ -77,7 +77,7 @@ if not exist ".env" (
 REM Step 4: Initialize database
 echo.
 echo [4/4] Initializing SQLite database...
-python db.py
+python scripts\db.py
 if errorlevel 1 (
     echo ERROR: Database initialization failed
     pause
@@ -102,7 +102,7 @@ echo [INFO] BigQuery connection status (optional)...
 echo If your GCS_PROJECT_ID, GCS_DATASET_ID, GCS_TABLE_ID are set in .env, they will be tested
 echo Otherwise, you can configure this in the admin debug page
 echo.
-python -c "from gcs_sync import test_gcs_connection; import os; proj=os.getenv('GCS_PROJECT_ID'); data=os.getenv('GCS_DATASET_ID'); tbl=os.getenv('GCS_TABLE_ID'); result = test_gcs_connection(proj, data, tbl) if proj and data and tbl else {'status': 'skipped', 'message': 'No GCS credentials in .env'}; print(f\"BigQuery Test: {result.get('status')}\" if result.get('status') != 'skipped' else 'BigQuery test skipped (configure in admin debug page)') except Exception as e: print(f'BigQuery test skipped: {e}')" 2>nul || echo [INFO] BigQuery test skipped
+python -c "import sys; sys.path.insert(0, 'scripts'); from sync_bigquery import test_gcs_connection; import os; proj=os.getenv('GCS_PROJECT_ID'); data=os.getenv('GCS_DATASET_ID'); tbl=os.getenv('GCS_TABLE_ID'); result = test_gcs_connection(proj, data, tbl) if proj and data and tbl else {'status': 'skipped', 'message': 'No GCS credentials in .env'}; print(f\"BigQuery Test: {result.get('status')}\" if result.get('status') != 'skipped' else 'BigQuery test skipped (configure in admin debug page)') except Exception as e: print(f'BigQuery test skipped: {e}')" 2>nul || echo [INFO] BigQuery test skipped
 
 echo.
 echo ============================================================
@@ -140,7 +140,7 @@ REM Try to open browser automatically
 start http://localhost:8050
 
 REM Run main.py using activated venv Python
-python main.py
+python scripts\main.py
 
 REM If we get here, server was stopped
 echo.
