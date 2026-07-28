@@ -158,7 +158,7 @@ def batch_get_read_rates(mds_fam_ids: list, progress: ProgressTracker) -> dict:
         import sqlite3
         from pathlib import Path
         
-        db_path = Path("L:\Engineering\DAR Docktag Cards\read_rates.db")
+        db_path = Path(r"L:\Engineering\DAR Docktag Cards\read_rates.db")
         if not db_path.exists():
             progress.log("BATCH", f"Database not found at {db_path} - skipping read rates")
             return batching_data

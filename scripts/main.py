@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from cache_manager import get_cache_manager
 from acl_background_worker import acl_monitor
 
-load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 print(f"[STARTUP-DEBUG] .env file location: {Path(__file__).parent / '.env'}")
 print(f"[STARTUP-DEBUG] .env file exists: {(Path(__file__).parent / '.env').exists()}")

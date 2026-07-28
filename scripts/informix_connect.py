@@ -12,7 +12,7 @@ except ImportError:
     pyodbc = None
 
 # Load environment variables
-load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 
 class InformixConnection:
