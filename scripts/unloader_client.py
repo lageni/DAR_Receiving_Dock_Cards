@@ -110,7 +110,7 @@ def get_door_assignments() -> Dict[str, int]:
 # Cache Reading
 # ============================================================================
 
-def get_deliveries_from_cache(door_start: int = 430, door_end: int = 450) -> List[Dict]:
+def get_deliveries_from_cache(door_start: int = 425, door_end: int = 500) -> List[Dict]:
     """Read deliveries from cache filtered by door range."""
     cache_dir = CACHE_DIR / "deliveries"
     if not cache_dir.exists():
@@ -192,7 +192,7 @@ def generate_department_band_html(supplier_dept: str, item_name: str, category: 
 # ============================================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def root(door_start: int = 430, door_end: int = 450):
+async def root(door_start: int = 425, door_end: int = 500):
     """Main client page with delivery rolodex."""
     
     deliveries = get_deliveries_from_cache(door_start, door_end)
@@ -447,7 +447,7 @@ async def root(door_start: int = 430, door_end: int = 450):
 # ============================================================================
 
 @app.get("/api/deliveries")
-async def api_deliveries(door_start: int = 430, door_end: int = 450):
+async def api_deliveries(door_start: int = 425, door_end: int = 500):
     """Get deliveries from cache."""
     deliveries = get_deliveries_from_cache(door_start, door_end)
     return {"deliveries": deliveries, "count": len(deliveries)}

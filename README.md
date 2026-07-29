@@ -45,7 +45,7 @@ RUN_UNLOADER.bat
 RUN_UNLOADER_CLIENT.bat
 ```
 - **Port:** 8061
-- **Role:** Displays deliveries by door range (430-450 default)
+- **Role:** Displays deliveries by door range (425-500 default)
 - **Special:** ICC Drop items show department bands instead of images
 - **Auto-refresh:** Every 30 seconds
 - **Access:** http://localhost:8061

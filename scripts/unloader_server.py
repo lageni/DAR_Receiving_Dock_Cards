@@ -655,7 +655,7 @@ async def api_update_cache():
 
 
 @app.get("/api/deliveries")
-async def api_get_deliveries(door_start: int = 430, door_end: int = 450):
+async def api_get_deliveries(door_start: int = 425, door_end: int = 500):
     """Get cached deliveries filtered by door range.
     
     Server caches ALL deliveries. This endpoint filters by door on-demand.
