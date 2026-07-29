@@ -48,7 +48,19 @@ RUN_UNLOADER_CLIENT.bat
 - **Role:** Displays deliveries by door range (425-500 default)
 - **Special:** ICC Drop items show department bands instead of images
 - **Auto-refresh:** Every 30 seconds
+- **Auto-open:** Browser opens automatically
 - **Access:** http://localhost:8061
+
+#### Manager (Summary View)
+```bash
+RUN_UNLOADER_MANAGER.bat
+```
+- **Port:** 8062
+- **Role:** Horizontal progress bars showing Good/Bad/Unknown cases by door
+- **Summary:** Quick overview for managers
+- **Auto-refresh:** Every 30 seconds
+- **Auto-open:** Browser opens automatically
+- **Access:** http://localhost:8062
 
 ---
 

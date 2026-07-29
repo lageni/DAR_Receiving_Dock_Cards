@@ -280,6 +280,9 @@ async def root(door_start: int = 425, door_end: int = 500):
                 <p class="text-sm">Showing ONLY problematic items (&lt; 85% read rate) | Auto-refresh: 30s</p>
             </div>
             <div class="flex gap-2">
+                <a href="http://localhost:8062" class="px-4 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700">
+                    Manager View
+                </a>
                 <button onclick="toggleDevView()" class="px-4 py-2 bg-white text-blue-600 rounded font-semibold hover:bg-gray-100">
                     Toggle Dev View
                 </button>

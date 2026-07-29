@@ -1,22 +1,22 @@
 @echo off
-title Unloader Client (Port 8061)
-color 0A
+title Unloader Manager (Port 8062)
+color 0D
 
 echo ========================================
-echo   UNLOADER CLIENT - Port 8061
+echo   UNLOADER MANAGER - Port 8062
 echo ========================================
 echo.
-echo Mode:           READ-ONLY VIEWER
+echo Mode:           MANAGER SUMMARY VIEW
 echo Cache Source:   L:\Engineering\DAR Docktag Cards\cache_data_unloader
-echo Door Range:     430-450 (default)
+echo Door Range:     425-500 (default)
 echo.
-echo Server should be running on port 8060 to populate cache
+echo Shows:          Case distribution by door (Good/Bad/Unknown)
 echo.
 
 cd /d "%~dp0"
 
 REM Activate virtual environment
-echo [CLIENT] Activating virtual environment...
+echo [MANAGER] Activating virtual environment...
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
     echo [OK] Virtual environment activated
@@ -28,18 +28,18 @@ if exist ".venv\Scripts\activate.bat" (
 )
 
 echo.
-echo Starting unloader client...
+echo Starting unloader manager view...
 echo.
-echo Opening browser: http://localhost:8061
+echo Opening browser: http://localhost:8062
 echo.
 
-start http://localhost:8061
+start http://localhost:8062
 
-python scripts\unloader_client.py
+python scripts\unloader_manager.py
 
 if errorlevel 1 (
     echo.
-    echo [ERROR] Client failed to start!
+    echo [ERROR] Manager failed to start!
     echo.
     pause
 )
