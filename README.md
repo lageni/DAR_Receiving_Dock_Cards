@@ -6,7 +6,7 @@ Real-time ACL monitoring system with client/server architecture for warehouse re
 
 ## Quick Start
 
-### Development (Local Machine)
+### ACL Freight Awareness (Ports 8050/8051)
 
 #### Server (Analysis & Cache Writer)
 ```bash
@@ -26,11 +26,37 @@ RUN_CLIENT.bat
 - **Auto-refresh:** Every 30 seconds
 - **Access:** http://localhost:8051
 
-#### Stop Both Server and Client
+---
+
+### Unloader Monitor (Ports 8060/8061)
+
+#### Server (BigQuery Cache Writer)
+```bash
+RUN_UNLOADER.bat
+```
+- **Port:** 8060
+- **Role:** Queries BigQuery, caches delivery data, fetches MDM for problematic items
+- **Data Source:** `wmt-ambient-centeng.6068_Engineering.DAR_DELIVERIES_CACHE`
+- **Background:** Cache updates every 10 minutes
+- **Access:** http://localhost:8060
+
+#### Client (Door Monitor Display)
+```bash
+RUN_UNLOADER_CLIENT.bat
+```
+- **Port:** 8061
+- **Role:** Displays deliveries by door range (430-450 default)
+- **Special:** ICC Drop items show department bands instead of images
+- **Auto-refresh:** Every 30 seconds
+- **Access:** http://localhost:8061
+
+---
+
+#### Stop All Processes
 ```bash
 KILL.bat
 ```
-- Terminates processes on ports 8050 and 8051
+- Terminates processes on ports 8050, 8051, 8060, 8061
 - Useful when processes are stuck or need restart
 
 ---
@@ -113,15 +139,24 @@ ABIA API (Active Deliveries)
 ## Key Files
 
 ### Startup Scripts
-- `RUN.bat` - Start server (port 8050)
-- `RUN_CLIENT.bat` - Start client viewer (port 8051)
-- `KILL.bat` - Stop all processes on ports 8050 and 8051
+- `RUN.bat` - Start ACL server (port 8050)
+- `RUN_CLIENT.bat` - Start ACL client viewer (port 8051)
+- `RUN_UNLOADER.bat` - Start Unloader server (port 8060)
+- `RUN_UNLOADER_CLIENT.bat` - Start Unloader client viewer (port 8061)
+- `KILL.bat` - Stop all processes on ports 8050/8051/8060/8061
 
 ### Application Code (scripts/)
+**ACL Freight Awareness:**
 - `main.py` - FastAPI server (analysis engine, cache writer)
 - `client_viewer.py` - FastAPI client (display only)
 - `acl_background_worker.py` - Background ACL monitor
 - `delivery_analysis.py` - Delivery analysis logic
+
+**Unloader Monitor:**
+- `unloader_server.py` - BigQuery-based server (port 8060)
+- `unloader_client.py` - Door range viewer (port 8061)
+
+**Shared Utilities:**
 - `cache_manager.py` - Shared cache module
 - `informix_connect.py` - Informix database connection
 - `batch_report.py` - Read rates analysis
@@ -137,11 +172,14 @@ ABIA API (Active Deliveries)
 - `reference/department_bands.json` - Department data
 - `reference/mdm_item_api_response_example.json` - MDM API example
 
+### Documentation
+- `_docs/UNLOADER_FEATURE_SPEC.md` - Complete unloader feature specification
+
 ---
 
 ## Features
 
-### Server
+### ACL Freight Awareness Server
 - **Informix PO Query** - Test endpoint at `/delivery-analysis`
 - **Read Rates Analysis** - SQL-optimized, pre-filters problematic items (< 85%)
 - **MDM Integration** - Fetches item images, names, dimensions
@@ -149,12 +187,30 @@ ABIA API (Active Deliveries)
 - **Background Worker** - Auto-analyzes ACL deliveries every 2 minutes
 - **Import Detection** - Department bands only generated for IMPORT PO events
 
-### Client
+### ACL Freight Awareness Client
 - **All Deliveries Visible** - No scrolling, grid layout
 - **Auto-Scroll Items** - 2 items per page, 5 second rotation
 - **Ranked Display** - Worst deliveries (most bad cases) first
 - **Dev View Toggle** - Hide/show technical details (MDS#, dimensions)
 - **Color-Coded** - Red (urgent), Yellow (warning), Green (OK), Gray (pending)
+
+### Unloader Monitor Server (NEW)
+- **BigQuery Data Source** - Queries `DAR_DELIVERIES_CACHE` table
+- **Incremental Caching** - Only pulls NEW deliveries from BQ
+- **Door Range Filtering** - Default: 430-450 (configurable)
+- **MDM Integration** - Fetches catalog GTIN + images for problematic items
+- **ICC Drop Logic** - Detects trailers needing department bands
+- **Background Updates** - Cache refreshes every 10 minutes
+- **Separate Cache** - Isolated in `cache_data_unloader/` folder
+
+### Unloader Monitor Client (NEW)
+- **Door Range Display** - Shows deliveries for doors 430-450 (default)
+- **Rolodex View** - Auto-scrolls through items (2 per page, 5 sec)
+- **Department Bands** - ICC Drop items show dept bands instead of images
+- **Case Estimates** - Unknown, Bad, Good case counts
+- **Dev View Toggle** - Simple view default, technical details on demand
+- **Auto-Refresh** - Page reloads every 30 seconds
+- **Color-Coded Performance** - Green (>85%), Yellow (50-85%), Red (<50%)
 
 ---
 
