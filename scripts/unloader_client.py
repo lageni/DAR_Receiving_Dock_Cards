@@ -294,6 +294,10 @@ async def root(door_start: int = 425, door_end: int = 500):
                     totalGood += item.estimated_good_cases || 0;
                 }});
                 
+                // Round to integers
+                totalUnknown = Math.round(totalUnknown);
+                totalBad = Math.round(totalBad);
+                totalGood = Math.round(totalGood);
                 const totalCases = totalUnknown + totalBad + totalGood;
                 
                 // Determine header color based on bad cases
@@ -314,8 +318,14 @@ async def root(door_start: int = 425, door_end: int = 500):
                                 <span class="text-xs">Trailer: ${{trailer}}</span>
                                 <span class="text-xs font-semibold">${{trailerStatus}}</span>
                             </div>
+                            <div class="text-xs mt-1">
+                                <span class="font-semibold">Cases:</span> 
+                                <span class="text-green-300">Good: ${{totalGood}}</span> | 
+                                <span class="text-red-300">Bad: ${{totalBad}}</span>
+                                ${{totalUnknown > 0 ? ` | <span class="text-gray-300">Unknown: ${{totalUnknown}}</span>` : ''}}
+                            </div>
                             <div class="dev-only text-xs mt-1">
-                                Total Cases: ${{totalCases}} | Bad: ${{totalBad}} | Good: ${{totalGood}} | Unknown: ${{totalUnknown}}
+                                Total Items: ${{items.length}} | Total Cases: ${{totalCases}}
                             </div>
                         </div>
                         
@@ -353,11 +363,12 @@ async def root(door_start: int = 425, door_end: int = 500):
                 pageItems.forEach(item => {{
                     const itemName = item.item_name || 'Unknown Item';
                     const readRate = item.avg_read_rate || 0;
-                    const badCases = item.estimated_bad_cases || 0;
+                    const badCases = Math.round(item.estimated_bad_cases || 0);
                     const imageUrl = item.image_url || '';
                     const showBand = item.show_department_band || false;
                     const mdsId = item.mds_fam_id || '';
-                    const supplierDept = item.supplier_dept || '';
+                    const supplierDept = item.supplier_dept || item.dept_nbr || '';
+                    const deptCategory = item.dept_category || 'Category';
                     
                     // Determine color based on read rate
                     let perfColor = '#6b7280';
@@ -371,12 +382,12 @@ async def root(door_start: int = 425, door_end: int = 500):
                             <div class="text-sm font-bold mb-2">${{itemName.substring(0, 40)}}</div>
                             
                             <div class="flex items-center justify-center mb-2" style="min-height: 150px;">
-                                ${{showBand ? generateDepartmentBandHTML(supplierDept, itemName) : generateImageHTML(imageUrl, itemName)}}
+                                ${{showBand ? generateDepartmentBandHTML(supplierDept, itemName, deptCategory) : generateImageHTML(imageUrl, itemName)}}
                             </div>
                             
                             <div class="text-center">
                                 <div class="text-4xl font-bold" style="color: ${{perfColor}};">${{readRate.toFixed(0)}}%</div>
-                                ${{badCases > 0 ? `<div class="text-red-400 font-bold text-xl">${{badCases}} bad cases</div>` : ''}}
+                                ${{badCases > 0 ? `<div class="text-red-400 font-bold text-xl">${{badCases}} bad case${{badCases !== 1 ? 's' : ''}}</div>` : ''}}
                             </div>
                         </div>
                     `;
@@ -388,17 +399,19 @@ async def root(door_start: int = 425, door_end: int = 500):
             return html;
         }}
         
-        function generateDepartmentBandHTML(dept, itemName) {{
+        function generateDepartmentBandHTML(dept, itemName, deptCategory) {{
             if (!dept) return '<div class="text-gray-400">No dept band data</div>';
             
-            // Simplified band rendering (full version would use department_bands.json)
+            // Use actual category from BQ data
+            const category = deptCategory || 'Category';
+            
             return `
                 <div class="w-full">
                     <div style="background-color: #ff8c00; color: #000; padding: 8px; font-weight: bold; border: 2px solid #000;">
                         Dept. ${{dept}}
                     </div>
                     <div style="background-color: rgb(196, 165, 123); color: #000; padding: 8px; font-weight: bold; border: 2px solid #000; border-top: none;">
-                        Category
+                        ${{category}}
                     </div>
                     <div style="background-color: rgb(196, 165, 123); color: #000; padding: 6px; font-weight: bold; font-size: 12px; border: 2px solid #000; border-top: none;">
                         ${{itemName.substring(0, 40)}}

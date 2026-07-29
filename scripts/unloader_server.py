@@ -318,15 +318,19 @@ def fetch_mdm_data(mds_id: str) -> Optional[Dict]:
 
 
 def extract_mdm_fields(mdm_data: Dict) -> Dict:
-    """Extract key fields from MDM API response."""
+    """Extract key fields from MDM API response.
+    
+    Returns only fields that are available. Does NOT return 'Unknown Item'
+    so we don't overwrite good data from BQ.
+    """
     try:
         prod_def = mdm_data.get("productDefinition", {})
+        result = {}
         
-        # Item name
-        item_name = "Unknown Item"
-        if isinstance(prod_def, dict) and "description" in prod_def:
-            item_name = prod_def["description"]
-            logger.debug(f"[MDM-EXTRACT] Item name: {item_name}")
+        # Item name - only include if found
+        if isinstance(prod_def, dict) and "description" in prod_def and prod_def["description"]:
+            result["item_name"] = prod_def["description"]
+            logger.debug(f"[MDM-EXTRACT] Item name: {prod_def['description']}")
         
         # Image URL
         image_url = ""
@@ -337,56 +341,37 @@ def extract_mdm_fields(mdm_data: Dict) -> Dict:
                     image_url = img_dim[size]
                     logger.debug(f"[MDM-EXTRACT] Image URL ({size}): {image_url[:50]}...")
                     break
+        if image_url:
+            result["image_url"] = image_url
         
         # Catalog GTIN
-        catalog_gtin = ""
-        if isinstance(prod_def, dict) and "gtin" in prod_def:
-            catalog_gtin = str(prod_def["gtin"])
-            logger.debug(f"[MDM-EXTRACT] Catalog GTIN: {catalog_gtin}")
+        if isinstance(prod_def, dict) and "gtin" in prod_def and prod_def["gtin"]:
+            result["catalog_gtin"] = str(prod_def["gtin"])
+            logger.debug(f"[MDM-EXTRACT] Catalog GTIN: {prod_def['gtin']}")
         
         # Orderable GTIN
-        gtin = ""
-        if "gtin" in mdm_data:
-            gtin = str(mdm_data["gtin"])
-            logger.debug(f"[MDM-EXTRACT] Orderable GTIN: {gtin}")
+        if "gtin" in mdm_data and mdm_data["gtin"]:
+            result["gtin"] = str(mdm_data["gtin"])
+            logger.debug(f"[MDM-EXTRACT] Orderable GTIN: {mdm_data['gtin']}")
         
         # Supplier department
-        supplier_dept = ""
         supp_info = mdm_data.get("supplierInformation", {})
         if isinstance(supp_info, dict) and "department" in supp_info:
             dept = supp_info["department"]
-            if isinstance(dept, dict) and "number" in dept:
-                supplier_dept = str(dept["number"])
-                logger.debug(f"[MDM-EXTRACT] Supplier Dept: {supplier_dept}")
+            if isinstance(dept, dict) and "number" in dept and dept["number"]:
+                result["supplier_dept"] = str(dept["number"])
+                logger.debug(f"[MDM-EXTRACT] Supplier Dept: {dept['number']}")
         
-        return {
-            "item_name": item_name,
-            "image_url": image_url,
-            "catalog_gtin": catalog_gtin,
-            "gtin": gtin,
-            "supplier_dept": supplier_dept
-        }
+        return result
     
     except KeyError as e:
         logger.error(f"[MDM-EXTRACT-ERROR] Missing key: {e}")
-        return {
-            "item_name": "Error",
-            "image_url": "",
-            "catalog_gtin": "",
-            "gtin": "",
-            "supplier_dept": ""
-        }
+        return {}
     except Exception as e:
         logger.error(f"[MDM-EXTRACT-ERROR] Unexpected error: {e}")
         import traceback
         logger.error(f"[MDM-EXTRACT-ERROR-TRACE] {traceback.format_exc()}")
-        return {
-            "item_name": "Error",
-            "image_url": "",
-            "catalog_gtin": "",
-            "gtin": "",
-            "supplier_dept": ""
-        }
+        return {}
 
 
 def should_show_department_band(item: Dict) -> bool:
@@ -477,11 +462,24 @@ def update_cache_all_deliveries():
                         # Only fetch MDM for problematic items (< 85% read rate)
                         if avg_read_rate < 85.0:
                             logger.info(f"[CACHE-UPDATE] PROBLEMATIC: Item {mds_id} ({avg_read_rate:.1f}%) - Fetching MDM")
+                            
+                            # Save BQ data before MDM merge
+                            bq_item_name = item.get("item_name")
+                            bq_dept_nbr = item.get("dept_nbr")
+                            bq_dept_category = item.get("dept_category")
+                            
                             mdm_data = fetch_mdm_data(mds_id)
                             if mdm_data:
-                                # Merge MDM data, but keep BQ dept_nbr if MDM doesn't have it
-                                if not mdm_data.get("supplier_dept") and item.get("dept_nbr"):
-                                    mdm_data["supplier_dept"] = item.get("dept_nbr")
+                                # Merge MDM data ONLY for fields MDM provides
+                                # Preserve BQ data for fields MDM doesn't have
+                                
+                                # Keep BQ item_name if MDM didn't provide one
+                                if not mdm_data.get("item_name") and bq_item_name:
+                                    mdm_data["item_name"] = bq_item_name
+                                
+                                # Keep BQ dept if MDM doesn't have supplier_dept
+                                if not mdm_data.get("supplier_dept") and bq_dept_nbr:
+                                    mdm_data["supplier_dept"] = bq_dept_nbr
                                 
                                 item.update(mdm_data)
                                 item["trailer_status_desc"] = delivery_data["trailer_status_desc"]
@@ -489,9 +487,9 @@ def update_cache_all_deliveries():
                                 logger.info(f"[CACHE-UPDATE] Item {mds_id} - MDM fetched, show_band={item['show_department_band']}")
                             else:
                                 # MDM fetch failed, use dept_nbr from BQ if available
-                                logger.warning(f"[CACHE-UPDATE] MDM fetch failed for {mds_id}, using BQ data")
-                                if item.get("dept_nbr"):
-                                    item["supplier_dept"] = item.get("dept_nbr")
+                                logger.warning(f"[CACHE-UPDATE] MDM fetch failed for {mds_id}, keeping BQ data")
+                                if bq_dept_nbr:
+                                    item["supplier_dept"] = bq_dept_nbr
                                     item["trailer_status_desc"] = delivery_data["trailer_status_desc"]
                                     item["show_department_band"] = should_show_department_band(item)
                                 else:
