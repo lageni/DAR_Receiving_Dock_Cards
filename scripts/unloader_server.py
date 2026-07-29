@@ -82,45 +82,69 @@ def get_bigquery_client():
         return None
 
 
-def query_deliveries(door_start: int = 430, door_end: int = 450, days_back: int = 30) -> List[Dict]:
-    """Query BigQuery for trailer/delivery data filtered by door range.
+def query_deliveries(door_start: int = 430, door_end: int = 450, days_back: int = 7) -> List[Dict]:
+    """Query BigQuery for delivery/item data filtered by door range.
+    
+    Uses JOIN between TRAILER table (for door info) and DAR_DELIVERIES_CACHE (for item data).
     
     Args:
         door_start: Starting door number (default: 430)
         door_end: Ending door number (default: 450)
-        days_back: How many days to look back (default: 30)
+        days_back: How many days to look back (default: 7)
     
     Returns:
-        List of trailer/delivery records
+        List of delivery/item records
     """
     client = get_bigquery_client()
     if not client:
         logger.error("[BQ-ERROR] No BigQuery client available")
         return []
     
-    # Query actual TRAILER table as shown in sample
+    # JOIN TRAILER table (for door numbers) with DAR_DELIVERIES_CACHE (for item data)
     query = f"""
+    WITH trailers_at_doors AS (
+      SELECT DISTINCT 
+        DELIVERY_NUMBER,
+        TRAILER_ID,
+        CAST(DOOR_NUM AS INTEGER) AS DOOR_NUM,
+        TRAILER_STATUS_DESC,
+        DATETIME(ARRIVAL_TIME, 'America/Chicago') AS LOCAL_ARRIVAL
+      FROM `wmt-edw-prod.US_SUPPLY_CHAIN_SCT_NONCAT_VM.TRAILER`
+      WHERE CAST(DC_NUMBER AS INT64) = 6068
+        AND CAST(DOOR_NUM AS INTEGER) BETWEEN {door_start} AND {door_end}
+        AND GATE_IN_STATUS = 'ACCEPTED'
+        AND GATE_OUT_STATUS IS NULL
+        AND ARRIVAL_TIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days_back} DAY)
+    )
+    
     SELECT 
-      DELIVERY_NUMBER,
-      DATETIME(ARRIVAL_TIME, 'America/Chicago') AS LOCAL_ARRIVAL,
-      TRAILER_ID,
-      CAST(DOOR_NUM AS INTEGER) AS DOOR_NUM,
-      TRAILER_STATUS_DESC,
-      CAST(DC_NUMBER AS INT64) AS DC_NUMBER,
-      GATE_IN_STATUS,
-      GATE_OUT_STATUS,
-      ARRIVAL_TIME
-    FROM `wmt-edw-prod.US_SUPPLY_CHAIN_SCT_NONCAT_VM.TRAILER`
-    WHERE CAST(DC_NUMBER AS INT64) = 6068
-      AND GATE_IN_STATUS = 'ACCEPTED'
-      AND GATE_OUT_STATUS IS NULL
-      AND ARRIVAL_TIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days_back} DAY)
-      AND CAST(DOOR_NUM AS INTEGER) BETWEEN {door_start} AND {door_end}
-    ORDER BY ARRIVAL_TIME DESC
+      t.DELIVERY_NUMBER,
+      t.TRAILER_ID,
+      t.DOOR_NUM,
+      t.TRAILER_STATUS_DESC,
+      t.LOCAL_ARRIVAL,
+      d.ITEM_NUMBER,
+      d.ITEM1_DESC,
+      d.Cases,
+      d.ESTIMATED_BAD_CASES,
+      d.ESTIMATED_GOOD_CASES,
+      d.ESTIMATED_UNKNOWN_CASES,
+      d.ACL_PCT,
+      d.DEPT_NBR,
+      d.DEPT_CATEGORY_DESC,
+      d.VNPK_LENGTH_QTY,
+      d.VNPK_WIDTH_QTY,
+      d.VNPK_HEIGHT_QTY,
+      d.VNPK_QTY,
+      d.WHPK_QTY
+    FROM trailers_at_doors t
+    LEFT JOIN `wmt-ambient-centeng.6068_Engineering.DAR_DELIVERIES_CACHE` d
+      ON t.TRAILER_ID = d.TRAILER_ID
+    ORDER BY t.DOOR_NUM, t.DELIVERY_NUMBER, d.ITEM_NUMBER
     """
     
-    logger.info(f"[BQ] Querying trailers for DC 6068, doors {door_start}-{door_end}, last {days_back} days")
-    logger.info(f"[BQ-QUERY] {query}")
+    logger.info(f"[BQ] Querying deliveries for DC 6068, doors {door_start}-{door_end}, last {days_back} days")
+    logger.info(f"[BQ-QUERY] Joining TRAILER + DAR_DELIVERIES_CACHE")
     
     try:
         query_job = client.query(query)
@@ -132,22 +156,37 @@ def query_deliveries(door_start: int = 430, door_end: int = 450, days_back: int 
         deliveries = []
         for row in results:
             try:
+                # Calculate avg_read_rate from ACL_PCT (0.0-1.0 to percentage)
+                acl_pct = float(row.ACL_PCT) if row.ACL_PCT is not None else 0.0
+                avg_read_rate = acl_pct * 100  # Convert to percentage
+                
                 deliveries.append({
                     "delivery_nbr": str(row.DELIVERY_NUMBER) if row.DELIVERY_NUMBER else "Unknown",
                     "trailer_nbr": str(row.TRAILER_ID) if row.TRAILER_ID else "Unknown",
                     "trailer_status_desc": str(row.TRAILER_STATUS_DESC) if row.TRAILER_STATUS_DESC else "Unknown",
                     "door_number": int(row.DOOR_NUM) if row.DOOR_NUM else 0,
                     "arrival_time": str(row.LOCAL_ARRIVAL) if row.LOCAL_ARRIVAL else "",
-                    "gate_in_status": str(row.GATE_IN_STATUS) if row.GATE_IN_STATUS else "",
-                    "dc_number": int(row.DC_NUMBER) if row.DC_NUMBER else 6068,
-                    # Placeholder for item data - will be enriched later
-                    "items": []
+                    # Item-level data
+                    "mds_fam_id": str(row.ITEM_NUMBER) if row.ITEM_NUMBER else "N/A",
+                    "item_name": str(row.ITEM1_DESC) if row.ITEM1_DESC else "Unknown Item",
+                    "cases": int(row.Cases) if row.Cases else 0,
+                    "estimated_bad_cases": float(row.ESTIMATED_BAD_CASES) if row.ESTIMATED_BAD_CASES else 0.0,
+                    "estimated_good_cases": float(row.ESTIMATED_GOOD_CASES) if row.ESTIMATED_GOOD_CASES else 0.0,
+                    "estimated_unknown_cases": float(row.ESTIMATED_UNKNOWN_CASES) if row.ESTIMATED_UNKNOWN_CASES else 0.0,
+                    "avg_read_rate": avg_read_rate,
+                    "dept_nbr": str(row.DEPT_NBR) if row.DEPT_NBR else "",
+                    "dept_category": str(row.DEPT_CATEGORY_DESC) if row.DEPT_CATEGORY_DESC else "",
+                    "vnpk_length": str(row.VNPK_LENGTH_QTY) if row.VNPK_LENGTH_QTY else "",
+                    "vnpk_width": str(row.VNPK_WIDTH_QTY) if row.VNPK_WIDTH_QTY else "",
+                    "vnpk_height": str(row.VNPK_HEIGHT_QTY) if row.VNPK_HEIGHT_QTY else "",
+                    "vnpk_qty": str(row.VNPK_QTY) if row.VNPK_QTY else "",
+                    "whpk_qty": str(row.WHPK_QTY) if row.WHPK_QTY else ""
                 })
             except Exception as e:
                 logger.error(f"[BQ-ROW-ERROR] Failed to process row: {e}")
                 continue
         
-        logger.info(f"[BQ] Successfully processed {len(deliveries)} delivery records")
+        logger.info(f"[BQ] Successfully processed {len(deliveries)} item records")
         return deliveries
     
     except Exception as e:
@@ -160,11 +199,10 @@ def query_deliveries(door_start: int = 430, door_end: int = 450, days_back: int 
 def group_deliveries_by_number(raw_data: List[Dict]) -> Dict[str, Dict]:
     """Group raw BQ rows by delivery_nbr.
     
-    Since TRAILER table doesn't have item-level data, we just organize by delivery.
-    Items will be populated later from other sources (Informix, cache, etc.)
+    Now that we have item-level data from the JOIN, we group items by delivery.
     
     Returns:
-        Dict of {delivery_nbr: {delivery_info, items: []}}
+        Dict of {delivery_nbr: {delivery_info, items: [...]}}
     """
     deliveries = {}
     
@@ -176,6 +214,7 @@ def group_deliveries_by_number(raw_data: List[Dict]) -> Dict[str, Dict]:
                 logger.warning("[GROUP] Skipping row with unknown delivery_nbr")
                 continue
             
+            # Create delivery entry if doesn't exist
             if delivery_nbr not in deliveries:
                 deliveries[delivery_nbr] = {
                     "delivery_nbr": delivery_nbr,
@@ -183,13 +222,35 @@ def group_deliveries_by_number(raw_data: List[Dict]) -> Dict[str, Dict]:
                     "trailer_status_desc": row.get("trailer_status_desc", "Unknown"),
                     "door_number": row.get("door_number", 0),
                     "arrival_time": row.get("arrival_time", ""),
-                    "gate_in_status": row.get("gate_in_status", ""),
-                    "dc_number": row.get("dc_number", 6068),
-                    "items": row.get("items", [])  # Will be populated by get_delivery_items()
+                    "items": []
                 }
-                logger.info(f"[GROUP] Added delivery {delivery_nbr} (trailer: {row.get('trailer_nbr')}, door: {row.get('door_number')})")
+                logger.debug(f"[GROUP] Created delivery entry for {delivery_nbr}")
+            
+            # Add item to delivery (skip if no item data)
+            mds_id = row.get("mds_fam_id", "N/A")
+            if mds_id != "N/A":
+                item = {
+                    "mds_fam_id": mds_id,
+                    "item_name": row.get("item_name", "Unknown Item"),
+                    "cases": row.get("cases", 0),
+                    "estimated_bad_cases": row.get("estimated_bad_cases", 0.0),
+                    "estimated_good_cases": row.get("estimated_good_cases", 0.0),
+                    "estimated_unknown_cases": row.get("estimated_unknown_cases", 0.0),
+                    "avg_read_rate": row.get("avg_read_rate", 0.0),
+                    "dept_nbr": row.get("dept_nbr", ""),
+                    "dept_category": row.get("dept_category", ""),
+                    "vnpk_length": row.get("vnpk_length", ""),
+                    "vnpk_width": row.get("vnpk_width", ""),
+                    "vnpk_height": row.get("vnpk_height", ""),
+                    "vnpk_qty": row.get("vnpk_qty", ""),
+                    "whpk_qty": row.get("whpk_qty", "")
+                }
+                deliveries[delivery_nbr]["items"].append(item)
         
-        logger.info(f"[GROUP] Grouped {len(deliveries)} unique deliveries")
+        logger.info(f"[GROUP] Grouped {len(deliveries)} unique deliveries with items")
+        for del_nbr, del_data in deliveries.items():
+            logger.info(f"[GROUP] Delivery {del_nbr}: {len(del_data['items'])} items")
+        
         return deliveries
     
     except Exception as e:
@@ -197,38 +258,6 @@ def group_deliveries_by_number(raw_data: List[Dict]) -> Dict[str, Dict]:
         import traceback
         logger.error(f"[GROUP-ERROR-TRACE] {traceback.format_exc()}")
         return {}
-
-
-# ============================================================================
-# Item Data Integration (from Informix or other source)
-# ============================================================================
-
-def get_delivery_items(delivery_nbr: str) -> List[Dict]:
-    """Get item-level data for a delivery from Informix or cache.
-    
-    For now, returns empty list. In production, this would query Informix
-    similar to delivery_analysis.py
-    
-    Args:
-        delivery_nbr: Delivery number
-    
-    Returns:
-        List of items with read rate data
-    """
-    logger.info(f"[ITEMS] Fetching items for delivery {delivery_nbr}")
-    
-    try:
-        # TODO: Implement Informix query for delivery items
-        # Similar to delivery_analysis.py get_delivery_po_data()
-        # For now, return empty list
-        logger.warning(f"[ITEMS] Item fetching not yet implemented for delivery {delivery_nbr}")
-        return []
-    
-    except Exception as e:
-        logger.error(f"[ITEMS-ERROR] Failed to fetch items for delivery {delivery_nbr}: {e}")
-        import traceback
-        logger.error(f"[ITEMS-ERROR-TRACE] {traceback.format_exc()}")
-        return []
 
 
 # ============================================================================
@@ -415,7 +444,7 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
         cached_nbrs = set(get_cached_deliveries())
         logger.info(f"[CACHE-UPDATE] Found {len(cached_nbrs)} cached deliveries")
         
-        # Query BigQuery
+        # Query BigQuery (JOIN of TRAILER + DAR_DELIVERIES_CACHE)
         raw_data = query_deliveries(door_start, door_end)
         if not raw_data:
             logger.warning("[CACHE-UPDATE] No data from BigQuery")
@@ -434,8 +463,7 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
             logger.info(f"[CACHE-UPDATE] Processing delivery {delivery_nbr}")
             
             try:
-                # Get item-level data for this delivery
-                items = get_delivery_items(delivery_nbr)
+                items = delivery_data.get("items", [])
                 
                 # If no items found, create placeholder
                 if not items:
@@ -462,10 +490,22 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
                             logger.info(f"[CACHE-UPDATE] Fetching MDM for problematic item {mds_id} ({avg_read_rate:.1f}%)")
                             mdm_data = fetch_mdm_data(mds_id)
                             if mdm_data:
+                                # Merge MDM data, but keep BQ dept_nbr if MDM doesn't have it
+                                if not mdm_data.get("supplier_dept") and item.get("dept_nbr"):
+                                    mdm_data["supplier_dept"] = item.get("dept_nbr")
+                                
                                 item.update(mdm_data)
                                 item["trailer_status_desc"] = delivery_data["trailer_status_desc"]
                                 item["show_department_band"] = should_show_department_band(item)
                                 logger.info(f"[CACHE-UPDATE] Item {mds_id} - Show band: {item['show_department_band']}")
+                            else:
+                                # MDM fetch failed, use dept_nbr from BQ if available
+                                if item.get("dept_nbr"):
+                                    item["supplier_dept"] = item.get("dept_nbr")
+                                    item["trailer_status_desc"] = delivery_data["trailer_status_desc"]
+                                    item["show_department_band"] = should_show_department_band(item)
+                                else:
+                                    item["show_department_band"] = False
                         else:
                             item["show_department_band"] = False
                         
