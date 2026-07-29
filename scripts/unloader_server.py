@@ -332,15 +332,17 @@ def extract_mdm_fields(mdm_data: Dict) -> Dict:
             result["item_name"] = prod_def["description"]
             logger.debug(f"[MDM-EXTRACT] Item name: {prod_def['description']}")
         
-        # Image URL
+        # Image URL - use same order as old ACL app
         image_url = ""
         if isinstance(prod_def, dict) and "imageDimension" in prod_def:
             img_dim = prod_def["imageDimension"]
-            for size in ["medium", "large", "small"]:
-                if size in img_dim and img_dim[size]:
-                    image_url = img_dim[size]
-                    logger.debug(f"[MDM-EXTRACT] Image URL ({size}): {image_url[:50]}...")
-                    break
+            if isinstance(img_dim, dict):
+                # Try different sizes in order of preference
+                for size in ["IMAGE_SIZE_450", "IMAGE_SIZE_200", "IMAGE_SIZE_100", "IMAGE_SIZE_60"]:
+                    if size in img_dim and img_dim[size]:
+                        image_url = img_dim[size]
+                        logger.debug(f"[MDM-EXTRACT] Image URL ({size}): {image_url[:50]}...")
+                        break
         if image_url:
             result["image_url"] = image_url
         
