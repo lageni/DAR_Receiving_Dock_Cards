@@ -82,92 +82,75 @@ def get_bigquery_client():
         return None
 
 
-def query_deliveries(door_start: int = 430, door_end: int = 450, days_back: int = 7) -> List[Dict]:
-    """Query BigQuery for delivery/item data filtered by door range.
+def query_all_deliveries(days_back: int = 7) -> List[Dict]:
+    """Query BigQuery for ALL delivery/item data from DAR_DELIVERIES_CACHE.
     
-    Uses JOIN between TRAILER table (for door info) and DAR_DELIVERIES_CACHE (for item data).
+    NO door filtering - server caches everything, client filters by door.
     
     Args:
-        door_start: Starting door number (default: 430)
-        door_end: Ending door number (default: 450)
         days_back: How many days to look back (default: 7)
     
     Returns:
-        List of delivery/item records
+        List of all delivery/item records
     """
     client = get_bigquery_client()
     if not client:
         logger.error("[BQ-ERROR] No BigQuery client available")
         return []
     
-    # JOIN TRAILER table (for door numbers) with DAR_DELIVERIES_CACHE (for item data)
+    # Query DAR_DELIVERIES_CACHE directly - NO door filtering
+    # We get ALL deliveries and let the client filter by door
     query = f"""
-    WITH trailers_at_doors AS (
-      SELECT DISTINCT 
-        DELIVERY_NUMBER,
-        TRAILER_ID,
-        CAST(DOOR_NUM AS INTEGER) AS DOOR_NUM,
-        TRAILER_STATUS_DESC,
-        DATETIME(ARRIVAL_TIME, 'America/Chicago') AS LOCAL_ARRIVAL
-      FROM `wmt-edw-prod.US_SUPPLY_CHAIN_SCT_NONCAT_VM.TRAILER`
-      WHERE CAST(DC_NUMBER AS INT64) = 6068
-        AND CAST(DOOR_NUM AS INTEGER) BETWEEN {door_start} AND {door_end}
-        AND GATE_IN_STATUS = 'ACCEPTED'
-        AND GATE_OUT_STATUS IS NULL
-        AND ARRIVAL_TIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days_back} DAY)
-    )
-    
     SELECT 
-      t.DELIVERY_NUMBER,
-      t.TRAILER_ID,
-      t.DOOR_NUM,
-      t.TRAILER_STATUS_DESC,
-      t.LOCAL_ARRIVAL,
-      d.ITEM_NUMBER,
-      d.ITEM1_DESC,
-      d.Cases,
-      d.ESTIMATED_BAD_CASES,
-      d.ESTIMATED_GOOD_CASES,
-      d.ESTIMATED_UNKNOWN_CASES,
-      d.ACL_PCT,
-      d.DEPT_NBR,
-      d.DEPT_CATEGORY_DESC,
-      d.VNPK_LENGTH_QTY,
-      d.VNPK_WIDTH_QTY,
-      d.VNPK_HEIGHT_QTY,
-      d.VNPK_QTY,
-      d.WHPK_QTY
-    FROM trailers_at_doors t
-    LEFT JOIN `wmt-ambient-centeng.6068_Engineering.DAR_DELIVERIES_CACHE` d
-      ON t.TRAILER_ID = d.TRAILER_ID
-    ORDER BY t.DOOR_NUM, t.DELIVERY_NUMBER, d.ITEM_NUMBER
+      delivery_number,
+      TRAILER_ID,
+      TRAILER_STATUS_DESC,
+      ITEM_NUMBER,
+      ITEM1_DESC,
+      Cases,
+      ESTIMATED_BAD_CASES,
+      ESTIMATED_GOOD_CASES,
+      ESTIMATED_UNKNOWN_CASES,
+      ACL_PCT,
+      DEPT_NBR,
+      DEPT_CATEGORY_DESC,
+      VNPK_LENGTH_QTY,
+      VNPK_WIDTH_QTY,
+      VNPK_HEIGHT_QTY,
+      VNPK_QTY,
+      WHPK_QTY,
+      PO_NUMBER,
+      PO_TYPE
+    FROM `wmt-ambient-centeng.6068_Engineering.DAR_DELIVERIES_CACHE`
+    WHERE delivery_number IS NOT NULL
+      AND ITEM_NUMBER IS NOT NULL
+    ORDER BY delivery_number, ITEM_NUMBER
+    LIMIT 10000
     """
     
-    logger.info(f"[BQ] Querying deliveries for DC 6068, doors {door_start}-{door_end}, last {days_back} days")
-    logger.info(f"[BQ-QUERY] Joining TRAILER + DAR_DELIVERIES_CACHE")
+    logger.info(f"[BQ] Querying ALL deliveries from DAR_DELIVERIES_CACHE (last {days_back} days)")
+    logger.info(f"[BQ] NO door filtering - caching everything, client will filter")
     
     try:
         query_job = client.query(query)
         results = list(query_job.result())
         
-        logger.info(f"[BQ] Query returned {len(results)} rows")
+        logger.info(f"[BQ] Query returned {len(results)} item records")
         
         # Convert to list of dicts
         deliveries = []
         for row in results:
             try:
                 # Calculate avg_read_rate from ACL_PCT (0.0-1.0 to percentage)
-                acl_pct = float(row.ACL_PCT) if row.ACL_PCT is not None else 0.0
+                acl_pct = float(row.ACL_PCT) if row.ACL_PCT is not None else 1.0
                 avg_read_rate = acl_pct * 100  # Convert to percentage
                 
                 deliveries.append({
-                    "delivery_nbr": str(row.DELIVERY_NUMBER) if row.DELIVERY_NUMBER else "Unknown",
+                    "delivery_nbr": str(row.delivery_number),
                     "trailer_nbr": str(row.TRAILER_ID) if row.TRAILER_ID else "Unknown",
                     "trailer_status_desc": str(row.TRAILER_STATUS_DESC) if row.TRAILER_STATUS_DESC else "Unknown",
-                    "door_number": int(row.DOOR_NUM) if row.DOOR_NUM else 0,
-                    "arrival_time": str(row.LOCAL_ARRIVAL) if row.LOCAL_ARRIVAL else "",
                     # Item-level data
-                    "mds_fam_id": str(row.ITEM_NUMBER) if row.ITEM_NUMBER else "N/A",
+                    "mds_fam_id": str(row.ITEM_NUMBER),
                     "item_name": str(row.ITEM1_DESC) if row.ITEM1_DESC else "Unknown Item",
                     "cases": int(row.Cases) if row.Cases else 0,
                     "estimated_bad_cases": float(row.ESTIMATED_BAD_CASES) if row.ESTIMATED_BAD_CASES else 0.0,
@@ -180,13 +163,20 @@ def query_deliveries(door_start: int = 430, door_end: int = 450, days_back: int 
                     "vnpk_width": str(row.VNPK_WIDTH_QTY) if row.VNPK_WIDTH_QTY else "",
                     "vnpk_height": str(row.VNPK_HEIGHT_QTY) if row.VNPK_HEIGHT_QTY else "",
                     "vnpk_qty": str(row.VNPK_QTY) if row.VNPK_QTY else "",
-                    "whpk_qty": str(row.WHPK_QTY) if row.WHPK_QTY else ""
+                    "whpk_qty": str(row.WHPK_QTY) if row.WHPK_QTY else "",
+                    "po_number": str(row.PO_NUMBER) if row.PO_NUMBER else "",
+                    "po_type": int(row.PO_TYPE) if row.PO_TYPE else 0
                 })
             except Exception as e:
                 logger.error(f"[BQ-ROW-ERROR] Failed to process row: {e}")
                 continue
         
         logger.info(f"[BQ] Successfully processed {len(deliveries)} item records")
+        
+        # Count problematic items
+        problematic = [d for d in deliveries if d['avg_read_rate'] < 85.0]
+        logger.info(f"[BQ] Found {len(problematic)} PROBLEMATIC items (< 85% read rate)")
+        
         return deliveries
     
     except Exception as e:
@@ -435,17 +425,20 @@ def get_cached_deliveries() -> List[str]:
     return delivery_nbrs
 
 
-def update_cache_incremental(door_start: int = 430, door_end: int = 450):
-    """Update cache with only NEW deliveries from BigQuery."""
-    logger.info(f"[CACHE-UPDATE] Starting incremental update for doors {door_start}-{door_end}")
+def update_cache_all_deliveries():
+    """Update cache with ALL deliveries from BigQuery (no door filtering).
+    
+    Server caches EVERYTHING. Client filters by door when displaying.
+    """
+    logger.info(f"[CACHE-UPDATE] Starting cache update for ALL deliveries")
     
     try:
         # Get current cached deliveries
         cached_nbrs = set(get_cached_deliveries())
         logger.info(f"[CACHE-UPDATE] Found {len(cached_nbrs)} cached deliveries")
         
-        # Query BigQuery (JOIN of TRAILER + DAR_DELIVERIES_CACHE)
-        raw_data = query_deliveries(door_start, door_end)
+        # Query BigQuery for ALL deliveries (no door filter)
+        raw_data = query_all_deliveries()
         if not raw_data:
             logger.warning("[CACHE-UPDATE] No data from BigQuery")
             return
@@ -458,6 +451,10 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
         new_deliveries = {k: v for k, v in deliveries.items() if k not in cached_nbrs}
         logger.info(f"[CACHE-UPDATE] {len(new_deliveries)} NEW deliveries to cache")
         
+        if len(new_deliveries) == 0:
+            logger.info("[CACHE-UPDATE] No new deliveries - cache is up to date")
+            return
+        
         # Process new deliveries
         for delivery_nbr, delivery_data in new_deliveries.items():
             logger.info(f"[CACHE-UPDATE] Processing delivery {delivery_nbr}")
@@ -465,29 +462,21 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
             try:
                 items = delivery_data.get("items", [])
                 
-                # If no items found, create placeholder
-                if not items:
-                    logger.warning(f"[CACHE-UPDATE] No items found for delivery {delivery_nbr}, using placeholder")
-                    items = [{
-                        "mds_fam_id": "N/A",
-                        "avg_read_rate": 100.0,
-                        "estimated_bad_cases": 0,
-                        "estimated_good_cases": 0,
-                        "estimated_unknown_cases": 0,
-                        "item_name": "No item data available",
-                        "show_department_band": False
-                    }]
+                # Log item summary
+                total_items = len(items)
+                problematic_items = [i for i in items if i.get("avg_read_rate", 100) < 85.0]
+                logger.info(f"[CACHE-UPDATE] Delivery {delivery_nbr}: {total_items} items, {len(problematic_items)} problematic")
                 
-                # Enrich items with MDM data for problematic items
+                # Enrich ONLY problematic items with MDM data
                 enriched_items = []
                 for item in items:
                     try:
-                        mds_id = item.get("mds_fam_id", "N/A")
+                        mds_id = item.get("mds_fam_id")
                         avg_read_rate = item.get("avg_read_rate", 100.0)
                         
                         # Only fetch MDM for problematic items (< 85% read rate)
-                        if mds_id != "N/A" and avg_read_rate < 85.0:
-                            logger.info(f"[CACHE-UPDATE] Fetching MDM for problematic item {mds_id} ({avg_read_rate:.1f}%)")
+                        if avg_read_rate < 85.0:
+                            logger.info(f"[CACHE-UPDATE] PROBLEMATIC: Item {mds_id} ({avg_read_rate:.1f}%) - Fetching MDM")
                             mdm_data = fetch_mdm_data(mds_id)
                             if mdm_data:
                                 # Merge MDM data, but keep BQ dept_nbr if MDM doesn't have it
@@ -497,9 +486,10 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
                                 item.update(mdm_data)
                                 item["trailer_status_desc"] = delivery_data["trailer_status_desc"]
                                 item["show_department_band"] = should_show_department_band(item)
-                                logger.info(f"[CACHE-UPDATE] Item {mds_id} - Show band: {item['show_department_band']}")
+                                logger.info(f"[CACHE-UPDATE] Item {mds_id} - MDM fetched, show_band={item['show_department_band']}")
                             else:
                                 # MDM fetch failed, use dept_nbr from BQ if available
+                                logger.warning(f"[CACHE-UPDATE] MDM fetch failed for {mds_id}, using BQ data")
                                 if item.get("dept_nbr"):
                                     item["supplier_dept"] = item.get("dept_nbr")
                                     item["trailer_status_desc"] = delivery_data["trailer_status_desc"]
@@ -507,12 +497,13 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
                                 else:
                                     item["show_department_band"] = False
                         else:
+                            # Good items don't need MDM data
                             item["show_department_band"] = False
                         
                         enriched_items.append(item)
                     
                     except Exception as e:
-                        logger.error(f"[CACHE-UPDATE-ITEM-ERROR] Failed to enrich item: {e}")
+                        logger.error(f"[CACHE-UPDATE-ITEM-ERROR] Failed to enrich item {item.get('mds_fam_id')}: {e}")
                         item["show_department_band"] = False
                         enriched_items.append(item)
                 
@@ -524,7 +515,7 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
                 try:
                     with open(cache_file, 'w') as f:
                         json.dump(delivery_data, f, indent=2)
-                    logger.info(f"[CACHE-UPDATE] Cached delivery {delivery_nbr} ({len(enriched_items)} items)")
+                    logger.info(f"[CACHE-UPDATE]  Cached delivery {delivery_nbr} ({len(enriched_items)} items)")
                 except Exception as e:
                     logger.error(f"[CACHE-WRITE-ERROR] Failed to write cache file for {delivery_nbr}: {e}")
             
@@ -534,7 +525,7 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
                 logger.error(f"[CACHE-UPDATE-DELIVERY-ERROR-TRACE] {traceback.format_exc()}")
                 continue
         
-        logger.info("[CACHE-UPDATE] Incremental update complete")
+        logger.info("[CACHE-UPDATE]  Incremental update complete")
     
     except Exception as e:
         logger.error(f"[CACHE-UPDATE-ERROR] Critical failure in cache update: {e}")
@@ -542,8 +533,49 @@ def update_cache_incremental(door_start: int = 430, door_end: int = 450):
         logger.error(f"[CACHE-UPDATE-ERROR-TRACE] {traceback.format_exc()}")
 
 
+def get_door_assignments() -> Dict[str, int]:
+    """Get door assignments for all active trailers.
+    
+    Returns dict of {delivery_number: door_number}
+    """
+    client = get_bigquery_client()
+    if not client:
+        logger.error("[BQ-ERROR] No BigQuery client available for door assignments")
+        return {}
+    
+    query = """
+    SELECT DISTINCT 
+        DELIVERY_NUMBER,
+        CAST(DOOR_NUM AS INTEGER) AS DOOR_NUM
+    FROM `wmt-edw-prod.US_SUPPLY_CHAIN_SCT_NONCAT_VM.TRAILER`
+    WHERE CAST(DC_NUMBER AS INT64) = 6068
+        AND GATE_IN_STATUS = 'ACCEPTED'
+        AND GATE_OUT_STATUS IS NULL
+        AND ARRIVAL_TIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+    """
+    
+    try:
+        logger.info("[BQ-DOORS] Fetching door assignments for active trailers")
+        query_job = client.query(query)
+        results = list(query_job.result())
+        
+        door_map = {}
+        for row in results:
+            if row.DELIVERY_NUMBER and row.DOOR_NUM:
+                door_map[str(row.DELIVERY_NUMBER)] = int(row.DOOR_NUM)
+        
+        logger.info(f"[BQ-DOORS] Found {len(door_map)} delivery-to-door mappings")
+        return door_map
+    
+    except Exception as e:
+        logger.error(f"[BQ-DOORS-ERROR] Failed to get door assignments: {e}")
+        import traceback
+        logger.error(f"[BQ-DOORS-ERROR-TRACE] {traceback.format_exc()}")
+        return {}
+
+
 # ============================================================================
-# API Endpoints
+# Group Deliveries
 # ============================================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -613,7 +645,7 @@ async def api_update_cache():
     """API endpoint to trigger cache update."""
     try:
         logger.info("[API] Manual cache update triggered")
-        update_cache_incremental()
+        update_cache_all_deliveries()
         return {"status": "success", "message": "Cache updated successfully"}
     except Exception as e:
         logger.error(f"[API-ERROR] Cache update failed: {e}")
@@ -624,9 +656,17 @@ async def api_update_cache():
 
 @app.get("/api/deliveries")
 async def api_get_deliveries(door_start: int = 430, door_end: int = 450):
-    """Get cached deliveries filtered by door range."""
+    """Get cached deliveries filtered by door range.
+    
+    Server caches ALL deliveries. This endpoint filters by door on-demand.
+    """
     try:
         logger.info(f"[API] Fetching deliveries for doors {door_start}-{door_end}")
+        
+        # Get door assignments from TRAILER table
+        door_map = get_door_assignments()
+        logger.info(f"[API] Got {len(door_map)} door assignments")
+        
         cache_dir = CACHE_DIR / "deliveries"
         deliveries = []
         
@@ -639,10 +679,16 @@ async def api_get_deliveries(door_start: int = 430, door_end: int = 450):
                 with open(cache_file) as f:
                     delivery = json.load(f)
                     
+                    delivery_nbr = delivery.get("delivery_nbr")
+                    
+                    # Get door number from door_map
+                    door = door_map.get(delivery_nbr, 0)
+                    delivery["door_number"] = door
+                    
                     # Filter by door range
-                    door = delivery.get("door_number", 0)
                     if door_start <= door <= door_end:
                         deliveries.append(delivery)
+                        logger.debug(f"[API] Including delivery {delivery_nbr} at door {door}")
             except Exception as e:
                 logger.error(f"[API-FILE-ERROR] Failed to read {cache_file}: {e}")
                 continue
@@ -650,8 +696,8 @@ async def api_get_deliveries(door_start: int = 430, door_end: int = 450):
         # Sort by door number
         deliveries.sort(key=lambda d: d.get("door_number", 0))
         
-        logger.info(f"[API] Returning {len(deliveries)} deliveries")
-        return {"deliveries": deliveries, "count": len(deliveries)}
+        logger.info(f"[API] Returning {len(deliveries)} deliveries for doors {door_start}-{door_end}")
+        return {"deliveries": deliveries, "count": len(deliveries), "door_range": f"{door_start}-{door_end}"}
     
     except Exception as e:
         logger.error(f"[API-ERROR] Failed to get deliveries: {e}")
@@ -671,7 +717,7 @@ async def background_cache_updater():
     while True:
         try:
             logger.info("[BACKGROUND] Starting cache update cycle")
-            update_cache_incremental()
+            update_cache_all_deliveries()
             logger.info("[BACKGROUND] Cache update complete - sleeping 10 minutes")
         except Exception as e:
             logger.error(f"[BACKGROUND-ERROR] Cache update failed: {e}")
@@ -687,8 +733,8 @@ async def startup_event():
     import asyncio
     
     try:
-        logger.info("[STARTUP] Running initial cache update")
-        update_cache_incremental()
+        logger.info("[STARTUP] Running initial cache update (ALL deliveries, no door filter)")
+        update_cache_all_deliveries()
         logger.info("[STARTUP] Initial cache update complete")
     except Exception as e:
         logger.error(f"[STARTUP-ERROR] Initial cache update failed: {e}")
