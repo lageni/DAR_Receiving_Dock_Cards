@@ -111,42 +111,80 @@ def get_door_assignments() -> Dict[str, int]:
 # ============================================================================
 
 def get_deliveries_from_cache(door_start: int = 425, door_end: int = 500) -> List[Dict]:
-    """Read deliveries from cache filtered by door range."""
+    """Read deliveries from cache filtered by door range.
+    
+    Strategy:
+    1. Query TRAILER table to get ALL deliveries at these doors
+    2. Try to load cached data for each delivery
+    3. If no cache, show delivery with "No item data available" placeholder
+    """
     cache_dir = CACHE_DIR / "deliveries"
-    if not cache_dir.exists():
-        logger.warning(f"[CACHE] Cache directory not found: {cache_dir}")
-        return []
+    cache_dir.mkdir(parents=True, exist_ok=True)
     
     # Get door assignments from TRAILER table
     logger.info(f"[CACHE] Getting door assignments...")
     door_map = get_door_assignments()
     logger.info(f"[CACHE] Got {len(door_map)} door assignments")
     
+    # Get deliveries at these doors
+    deliveries_at_doors = {}
+    for delivery_nbr, door in door_map.items():
+        if door_start <= door <= door_end:
+            deliveries_at_doors[delivery_nbr] = door
+    
+    logger.info(f"[CACHE] Found {len(deliveries_at_doors)} deliveries at doors {door_start}-{door_end}")
+    
     deliveries = []
     
-    for cache_file in cache_dir.glob("delivery_*.json"):
-        try:
-            with open(cache_file) as f:
-                delivery = json.load(f)
-            
-            delivery_nbr = delivery.get("delivery_nbr")
-            
-            # Get door number from door_map
-            door = door_map.get(delivery_nbr, 0)
-            delivery["door_number"] = door
-            
-            # Filter by door range
-            if door_start <= door <= door_end:
-                deliveries.append(delivery)
-                logger.info(f"[CACHE] Including delivery {delivery_nbr} at door {door}")
-        except Exception as e:
-            logger.error(f"[CACHE-ERROR] Failed to read {cache_file}: {e}")
+    # Try to load cache for each delivery
+    for delivery_nbr, door in deliveries_at_doors.items():
+        cache_file = cache_dir / f"delivery_{delivery_nbr}.json"
+        
+        if cache_file.exists():
+            try:
+                with open(cache_file) as f:
+                    delivery = json.load(f)
+                    delivery["door_number"] = door
+                    deliveries.append(delivery)
+                    logger.info(f"[CACHE] Loaded cached data for delivery {delivery_nbr} at door {door}")
+            except Exception as e:
+                logger.error(f"[CACHE-ERROR] Failed to read {cache_file}: {e}")
+                # Show delivery anyway with placeholder
+                deliveries.append(create_placeholder_delivery(delivery_nbr, door))
+        else:
+            # No cache yet - show placeholder
+            logger.warning(f"[CACHE] No cache for delivery {delivery_nbr} at door {door} - using placeholder")
+            deliveries.append(create_placeholder_delivery(delivery_nbr, door))
     
     # Sort by door number
     deliveries.sort(key=lambda d: d.get("door_number", 0))
     
-    logger.info(f"[CACHE] Loaded {len(deliveries)} deliveries for doors {door_start}-{door_end}")
+    logger.info(f"[CACHE] Returning {len(deliveries)} deliveries for doors {door_start}-{door_end}")
     return deliveries
+
+
+def create_placeholder_delivery(delivery_nbr: str, door: int) -> Dict:
+    """Create placeholder delivery when cache doesn't exist yet."""
+    return {
+        "delivery_nbr": delivery_nbr,
+        "trailer_nbr": "Unknown",
+        "trailer_status_desc": "Loading...",
+        "door_number": door,
+        "arrival_time": "",
+        "items": [{
+            "mds_fam_id": "N/A",
+            "item_name": "No item data available",
+            "cases": 0,
+            "estimated_bad_cases": 0.0,
+            "estimated_good_cases": 0.0,
+            "estimated_unknown_cases": 0.0,
+            "avg_read_rate": 100.0,
+            "dept_nbr": "",
+            "dept_category": "",
+            "show_department_band": False
+        }],
+        "cached_at": None
+    }
 
 
 # ============================================================================
