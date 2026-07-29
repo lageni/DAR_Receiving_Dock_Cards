@@ -64,6 +64,49 @@ from main import get_department_band
 
 
 # ============================================================================
+# Door Assignment Query
+# ============================================================================
+
+def get_door_assignments() -> Dict[str, int]:
+    """Get door assignments for all active trailers.
+    
+    Returns dict of {delivery_number: door_number}
+    """
+    try:
+        from google.cloud import bigquery
+        client = bigquery.Client()
+        
+        query = """
+        SELECT DISTINCT 
+            DELIVERY_NUMBER,
+            CAST(DOOR_NUM AS INTEGER) AS DOOR_NUM
+        FROM `wmt-edw-prod.US_SUPPLY_CHAIN_SCT_NONCAT_VM.TRAILER`
+        WHERE CAST(DC_NUMBER AS INT64) = 6068
+            AND GATE_IN_STATUS = 'ACCEPTED'
+            AND GATE_OUT_STATUS IS NULL
+            AND ARRIVAL_TIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+        """
+        
+        logger.info("[BQ-DOORS] Fetching door assignments for active trailers")
+        query_job = client.query(query)
+        results = list(query_job.result())
+        
+        door_map = {}
+        for row in results:
+            if row.DELIVERY_NUMBER and row.DOOR_NUM:
+                door_map[str(row.DELIVERY_NUMBER)] = int(row.DOOR_NUM)
+        
+        logger.info(f"[BQ-DOORS] Found {len(door_map)} delivery-to-door mappings")
+        return door_map
+    
+    except Exception as e:
+        logger.error(f"[BQ-DOORS-ERROR] Failed to get door assignments: {e}")
+        import traceback
+        logger.error(f"[BQ-DOORS-ERROR-TRACE] {traceback.format_exc()}")
+        return {}
+
+
+# ============================================================================
 # Cache Reading
 # ============================================================================
 
@@ -74,6 +117,11 @@ def get_deliveries_from_cache(door_start: int = 430, door_end: int = 450) -> Lis
         logger.warning(f"[CACHE] Cache directory not found: {cache_dir}")
         return []
     
+    # Get door assignments from TRAILER table
+    logger.info(f"[CACHE] Getting door assignments...")
+    door_map = get_door_assignments()
+    logger.info(f"[CACHE] Got {len(door_map)} door assignments")
+    
     deliveries = []
     
     for cache_file in cache_dir.glob("delivery_*.json"):
@@ -81,10 +129,16 @@ def get_deliveries_from_cache(door_start: int = 430, door_end: int = 450) -> Lis
             with open(cache_file) as f:
                 delivery = json.load(f)
             
+            delivery_nbr = delivery.get("delivery_nbr")
+            
+            # Get door number from door_map
+            door = door_map.get(delivery_nbr, 0)
+            delivery["door_number"] = door
+            
             # Filter by door range
-            door = delivery.get("door_number", 0)
             if door_start <= door <= door_end:
                 deliveries.append(delivery)
+                logger.info(f"[CACHE] Including delivery {delivery_nbr} at door {door}")
         except Exception as e:
             logger.error(f"[CACHE-ERROR] Failed to read {cache_file}: {e}")
     
