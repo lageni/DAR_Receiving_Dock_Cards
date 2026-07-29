@@ -276,7 +276,7 @@ async def root(door_start: int = 425, door_end: int = 500):
     <div class="bg-blue-600 px-4 py-3 flex justify-between items-center">
         <div>
             <h1 class="text-2xl font-bold">Unloader Monitor</h1>
-            <p class="text-sm">Doors {door_start}-{door_end} | Auto-refresh: 30s</p>
+            <p class="text-sm">Doors {door_start}-{door_end} | Showing ONLY problematic items (&lt; 85% read rate) | Auto-refresh: 30s</p>
         </div>
         <div class="flex gap-2">
             <button onclick="toggleDevView()" class="px-4 py-2 bg-white text-blue-600 rounded font-semibold hover:bg-gray-100">
@@ -315,7 +315,17 @@ async def root(door_start: int = 425, door_end: int = 500):
             let html = '<div class="delivery-grid">';
             
             deliveriesData.forEach((delivery, idx) => {{
-                const items = delivery.items || [];
+                const allItems = delivery.items || [];
+                
+                // FILTER: Show ONLY problematic items (< 85% read rate)
+                const items = allItems.filter(item => {{
+                    const readRate = item.avg_read_rate || 100;
+                    return readRate < 85;
+                }});
+                
+                // Skip deliveries with no problematic items
+                if (items.length === 0) return;
+                
                 const deliveryNum = delivery.delivery_nbr;
                 const trailer = delivery.trailer_nbr;
                 const trailerStatus = delivery.trailer_status_desc || 'Unknown';
@@ -363,7 +373,7 @@ async def root(door_start: int = 425, door_end: int = 500):
                                 ${{totalUnknown > 0 ? ` | <span class="text-gray-300">Unknown: ${{totalUnknown}}</span>` : ''}}
                             </div>
                             <div class="dev-only text-xs mt-1">
-                                Total Items: ${{items.length}} | Total Cases: ${{totalCases}}
+                                Total Items in Delivery: ${{allItems.length}} | Problematic Items Shown: ${{items.length}} | Total Cases: ${{totalCases}}
                             </div>
                         </div>
                         
@@ -459,8 +469,8 @@ async def root(door_start: int = 425, door_end: int = 500):
         }}
         
         function generateImageHTML(url, name) {{
-            if (!url) return '<div class="text-gray-400">No Image</div>';
-            return `<img src="${{url}}" alt="${{name}}" class="max-w-full max-h-40 object-contain rounded" onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'text-gray-400\\'>Image Error</div>';" />`;
+            if (!url) return '<div class="text-gray-400 text-sm text-center"><div class="mb-1">No Image</div><div class="text-xs">(Not available in MDM)</div></div>';
+            return `<img src="${{url}}" alt="${{name}}" class="max-w-full max-h-40 object-contain rounded" onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'text-gray-400 text-sm text-center\\'>Image Error</div>';" />`;
         }}
         
         function startAutoScroll() {{
