@@ -346,12 +346,16 @@ def extract_mdm_fields(mdm_data: Dict) -> Dict:
         if image_url:
             result["image_url"] = image_url
         
-        # Catalog GTIN
-        if isinstance(prod_def, dict) and "gtin" in prod_def and prod_def["gtin"]:
-            result["catalog_gtin"] = str(prod_def["gtin"])
-            logger.debug(f"[MDM-EXTRACT] Catalog GTIN: {prod_def['gtin']}")
+        # Catalog GTIN - from dcProperties > supplyItem > catalogGTIN (like old app)
+        if "dcProperties" in mdm_data and isinstance(mdm_data["dcProperties"], dict):
+            dc_props = mdm_data["dcProperties"]
+            if "supplyItem" in dc_props and isinstance(dc_props["supplyItem"], dict):
+                supply_item = dc_props["supplyItem"]
+                if "catalogGTIN" in supply_item and supply_item["catalogGTIN"]:
+                    result["catalog_gtin"] = str(supply_item["catalogGTIN"])
+                    logger.debug(f"[MDM-EXTRACT] Catalog GTIN: {supply_item['catalogGTIN']}")
         
-        # Orderable GTIN
+        # Orderable GTIN from root level
         if "gtin" in mdm_data and mdm_data["gtin"]:
             result["gtin"] = str(mdm_data["gtin"])
             logger.debug(f"[MDM-EXTRACT] Orderable GTIN: {mdm_data['gtin']}")

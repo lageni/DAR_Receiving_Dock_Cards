@@ -273,18 +273,30 @@ async def root(door_start: int = 425, door_end: int = 500):
 </head>
 <body class="bg-gray-900 text-white">
     <!-- Header -->
-    <div class="bg-blue-600 px-4 py-3 flex justify-between items-center">
-        <div>
-            <h1 class="text-2xl font-bold">Unloader Monitor</h1>
-            <p class="text-sm">Doors {door_start}-{door_end} | Showing ONLY problematic items (&lt; 85% read rate) | Auto-refresh: 30s</p>
+    <div class="bg-blue-600 px-4 py-3">
+        <div class="flex justify-between items-center mb-2">
+            <div>
+                <h1 class="text-2xl font-bold">Unloader Monitor</h1>
+                <p class="text-sm">Showing ONLY problematic items (&lt; 85% read rate) | Auto-refresh: 30s</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="toggleDevView()" class="px-4 py-2 bg-white text-blue-600 rounded font-semibold hover:bg-gray-100">
+                    Toggle Dev View
+                </button>
+                <a href="http://localhost:8060" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">
+                    Server
+                </a>
+            </div>
         </div>
-        <div class="flex gap-2">
-            <button onclick="toggleDevView()" class="px-4 py-2 bg-white text-blue-600 rounded font-semibold hover:bg-gray-100">
-                Toggle Dev View
+        <div class="flex gap-2 items-center">
+            <label class="text-sm font-semibold">Door Range:</label>
+            <input type="number" id="doorStart" value="{door_start}" class="px-2 py-1 rounded text-gray-900 w-20" />
+            <span>to</span>
+            <input type="number" id="doorEnd" value="{door_end}" class="px-2 py-1 rounded text-gray-900 w-20" />
+            <button onclick="updateDoorRange()" class="px-4 py-1 bg-white text-blue-600 rounded font-semibold hover:bg-gray-100">
+                Update
             </button>
-            <a href="http://localhost:8060" class="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">
-                Server
-            </a>
+            <span class="text-sm" id="currentRange">Current: {door_start}-{door_end}</span>
         </div>
     </div>
     
@@ -299,6 +311,12 @@ async def root(door_start: int = 425, door_end: int = 500):
         function toggleDevView() {{
             devViewEnabled = !devViewEnabled;
             document.body.classList.toggle('dev-view', devViewEnabled);
+        }}
+        
+        function updateDoorRange() {{
+            const start = document.getElementById('doorStart').value;
+            const end = document.getElementById('doorEnd').value;
+            window.location.href = `/?door_start=${{start}}&door_end=${{end}}`;
         }}
         
         // Load deliveries data
@@ -417,6 +435,11 @@ async def root(door_start: int = 425, door_end: int = 500):
                     const mdsId = item.mds_fam_id || '';
                     const supplierDept = item.supplier_dept || item.dept_nbr || '';
                     const deptCategory = item.dept_category || 'Category';
+                    const catalogGtin = item.catalog_gtin || '';
+                    const orderableGtin = item.gtin || '';
+                    
+                    // Directive action card needed if catalog GTIN exists and differs from orderable
+                    const needsDirectiveCard = catalogGtin && catalogGtin !== orderableGtin;
                     
                     // Determine color based on read rate
                     let perfColor = '#6b7280';
@@ -427,7 +450,10 @@ async def root(door_start: int = 425, door_end: int = 500):
                     html += `
                         <div class="item-card bg-gray-700 rounded p-3 border-2" style="border-color: ${{perfColor}};">
                             <div class="dev-only text-xs text-gray-400 mb-1">MDS: ${{mdsId}}</div>
-                            <div class="text-sm font-bold mb-2">${{itemName.substring(0, 40)}}</div>
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="text-sm font-bold flex-1">${{itemName.substring(0, 40)}}</div>
+                                ${{needsDirectiveCard ? '<div class="px-2 py-1 bg-yellow-500 text-black text-xs font-bold rounded" title="Directive Action Card Required">DAC</div>' : ''}}
+                            </div>
                             
                             <div class="flex items-center justify-center mb-2" style="min-height: 150px;">
                                 ${{showBand ? generateDepartmentBandHTML(supplierDept, itemName, deptCategory) : generateImageHTML(imageUrl, itemName)}}
@@ -435,7 +461,7 @@ async def root(door_start: int = 425, door_end: int = 500):
                             
                             <div class="text-center">
                                 <div class="text-4xl font-bold" style="color: ${{perfColor}};">${{readRate.toFixed(0)}}%</div>
-                                ${{badCases > 0 ? `<div class="text-red-400 font-bold text-xl">${{badCases}} bad case${{badCases !== 1 ? 's' : ''}}</div>` : ''}}
+                                ${{badCases > 0 ? `<div class="text-red-400 font-bold text-xl">${{badCases}} bad case${{badCases !== 1 ? 's' : ''}}</div>` : (item.estimated_bad_cases > 0 && item.estimated_bad_cases < 1) ? '<div class="text-orange-400 font-bold text-sm">&lt; 1 bad case</div>' : ''}}
                             </div>
                         </div>
                     `;
