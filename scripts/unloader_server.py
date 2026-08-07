@@ -127,8 +127,8 @@ def query_all_deliveries(days_back: int = 7) -> List[Dict]:
         return []
     
     # STEP 2: Query DAR_DELIVERIES_CACHE for ONLY those active deliveries
-    # Convert list to comma-separated string for IN clause
-    delivery_list = ','.join(active_deliveries)
+    # Convert list to quoted string list for IN clause (STRING type in DAR_DELIVERIES_CACHE)
+    delivery_list = ','.join(f"'{d}'" for d in active_deliveries)
     
     query = f"""
     SELECT 
