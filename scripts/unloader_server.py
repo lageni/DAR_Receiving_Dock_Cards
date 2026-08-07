@@ -83,23 +83,53 @@ def get_bigquery_client():
 
 
 def query_all_deliveries(days_back: int = 7) -> List[Dict]:
-    """Query BigQuery for ALL delivery/item data from DAR_DELIVERIES_CACHE.
+    """Query BigQuery for ACTIVE delivery/item data from DAR_DELIVERIES_CACHE.
     
+    Filters by active trailers (GATE_IN_STATUS='ACCEPTED', GATE_OUT_STATUS IS NULL).
     NO door filtering - server caches everything, client filters by door.
     
     Args:
         days_back: How many days to look back (default: 7)
     
     Returns:
-        List of all delivery/item records
+        List of active delivery/item records
     """
     client = get_bigquery_client()
     if not client:
         logger.error("[BQ-ERROR] No BigQuery client available")
         return []
     
-    # Query DAR_DELIVERIES_CACHE directly - NO door filtering
-    # We get ALL deliveries and let the client filter by door
+    # STEP 1: Get active delivery numbers from TRAILER table (same as client!)
+    trailer_query = f"""
+    SELECT DISTINCT DELIVERY_NUMBER
+    FROM `wmt-edw-prod.US_SUPPLY_CHAIN_SCT_NONCAT_VM.TRAILER`
+    WHERE CAST(DC_NUMBER AS INT64) = 6068
+        AND GATE_IN_STATUS = 'ACCEPTED'
+        AND GATE_OUT_STATUS IS NULL
+        AND ARRIVAL_TIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days_back} DAY)
+    """
+    
+    logger.info(f"[BQ] Querying TRAILER table for active deliveries (last {days_back} days)")
+    
+    try:
+        trailer_job = client.query(trailer_query)
+        trailer_results = list(trailer_job.result())
+        active_deliveries = [str(row.DELIVERY_NUMBER) for row in trailer_results if row.DELIVERY_NUMBER]
+        
+        if not active_deliveries:
+            logger.warning("[BQ] No active deliveries found in TRAILER table")
+            return []
+        
+        logger.info(f"[BQ] Found {len(active_deliveries)} active deliveries: {min(active_deliveries)} - {max(active_deliveries)}")
+        
+    except Exception as e:
+        logger.error(f"[BQ-TRAILER-ERROR] Failed to query TRAILER table: {e}")
+        return []
+    
+    # STEP 2: Query DAR_DELIVERIES_CACHE for ONLY those active deliveries
+    # Convert list to comma-separated string for IN clause
+    delivery_list = ','.join(active_deliveries)
+    
     query = f"""
     SELECT 
       delivery_number,
@@ -122,13 +152,12 @@ def query_all_deliveries(days_back: int = 7) -> List[Dict]:
       PO_NUMBER,
       PO_TYPE
     FROM `wmt-ambient-centeng.6068_Engineering.DAR_DELIVERIES_CACHE`
-    WHERE delivery_number IS NOT NULL
+    WHERE delivery_number IN ({delivery_list})
       AND ITEM_NUMBER IS NOT NULL
     ORDER BY delivery_number, ITEM_NUMBER
-    LIMIT 10000
     """
     
-    logger.info(f"[BQ] Querying ALL deliveries from DAR_DELIVERIES_CACHE (last {days_back} days)")
+    logger.info(f"[BQ] Querying DAR_DELIVERIES_CACHE for {len(active_deliveries)} active deliveries")
     logger.info(f"[BQ] NO door filtering - caching everything, client will filter")
     
     try:
