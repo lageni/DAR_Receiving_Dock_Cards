@@ -358,16 +358,39 @@ def load_department_bands() -> dict:
         print(f"[WARNING] Failed to load department bands: {str(e)}")
         return []
 
+def get_contrasting_text_rgb(rgb: list) -> tuple:
+    """White text on a black department band, black text on every other color."""
+    return (255, 255, 255) if tuple(rgb[:3]) == (0, 0, 0) else (0, 0, 0)
+
+def _normalize_dept_number(raw) -> str:
+    """Strip a 'D.' prefix and leading zeros so department numbers compare as plain digits.
+
+    Handles inputs like "D.02", "02", 2, "23.0" (from numeric BQ columns), etc.
+    """
+    text = str(raw).strip()
+    if text.upper().startswith("D."):
+        text = text[2:]
+    elif text.upper().startswith("D"):
+        text = text[1:]
+    if "." in text:  # drop decimal remnants like "23.0" -> "23"
+        text = text.split(".")[0]
+    return text.lstrip("0") or "0"
+
 def get_department_band(dept_number: str) -> dict:
-    """Get department band info by department number."""
+    """Get department band info by department number.
+
+    Codes in department_bands.json can list multiple numbers sharing one color band,
+    e.g. "D.05/55/72" or "D.38/40" - every number after the slash must be checked,
+    not just the first, or departments like 55/72/40 never match.
+    """
     if not dept_number:
         return None
     bands = load_department_bands()
-    dept_clean = dept_number.lstrip("D.").lstrip("0") if isinstance(dept_number, str) else str(dept_number)
+    dept_clean = _normalize_dept_number(dept_number)
     for band in bands:
-        band_code = band.get("code", "").lstrip("D.").split("/")[0].lstrip("0")
-        if band_code == dept_clean:
-            return band
+        for band_number in band.get("code", "").split("/"):
+            if _normalize_dept_number(band_number) == dept_clean:
+                return band
     return None
 
 def check_non_conveyable(length: str, width: str, height: str) -> tuple:
@@ -1415,7 +1438,7 @@ def generate_pdf(item_data: dict, master_pdf: FPDF = None, return_pdf_object: bo
         pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
         pdf.set_xy(content_x + 0.05, current_y + 0.01)
         pdf.set_font("Helvetica", "B", 7)
-        pdf.set_text_color(0, 0, 0)  # BLACK TEXT
+        pdf.set_text_color(*get_contrasting_text_rgb(rgb))  # AUTO BLACK/WHITE FOR READABILITY
         pdf.cell(2.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
         current_y += band_height
         
@@ -2706,7 +2729,7 @@ def generate_batch_pdf(items_data: list) -> bytes:
                 master_pdf.rect(content_x, current_y, 3.0, band_height, 'FD')
                 master_pdf.set_xy(content_x + 0.05, current_y + 0.01)
                 master_pdf.set_font("Helvetica", "B", 7)
-                master_pdf.set_text_color(0, 0, 0)  # BLACK TEXT
+                master_pdf.set_text_color(*get_contrasting_text_rgb(rgb))  # AUTO BLACK/WHITE FOR READABILITY
                 master_pdf.cell(2.9, band_height - 0.01, f"Dept. {supplier_dept}", align='L')
                 current_y += band_height
                 

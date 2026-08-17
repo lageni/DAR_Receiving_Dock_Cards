@@ -60,7 +60,7 @@ app.add_middleware(
 
 # Import department band function from main
 sys.path.insert(0, str(Path(__file__).parent))
-from main import get_department_band
+from main import get_department_band, load_department_bands, get_contrasting_text_rgb
 
 
 # ============================================================================
@@ -202,13 +202,15 @@ def generate_department_band_html(supplier_dept: str, item_name: str, category: 
     
     rgb = dept_band["rgb"]
     color = f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})"
+    text_r, text_g, text_b = get_contrasting_text_rgb(rgb)
+    text_color = f"rgb({text_r}, {text_g}, {text_b})"
     
     category_text = category or dept_band.get("name", "Category")
     
     return f"""
     <div class="department-bands">
         <!-- Band 1: Department Number -->
-        <div class="dept-band" style="background-color: {color}; color: #000; padding: 8px; font-weight: bold; font-size: 14px; border: 2px solid #000;">
+        <div class="dept-band" style="background-color: {color}; color: {text_color}; padding: 8px; font-weight: bold; font-size: 14px; border: 2px solid #000;">
             Dept. {supplier_dept}
         </div>
         
@@ -324,6 +326,9 @@ async def root(door_start: int = 425, door_end: int = 500):
         
         // Load deliveries data
         const deliveriesData = {json.dumps(deliveries)};
+        
+        // Department color lookup - single source of truth is reference/department_bands.json
+        const DEPARTMENT_BANDS = {json.dumps(load_department_bands())};
         
         function renderDeliveries() {{
             const container = document.getElementById('contentArea');
@@ -476,15 +481,52 @@ async def root(door_start: int = 425, door_end: int = 500):
             return html;
         }}
         
+        function normalizeDeptNumber(raw) {{
+            // Mirrors main.py's _normalize_dept_number() - strip a "D." prefix, decimal
+            // remnants (e.g. "23.0"), and leading zeros so codes compare as plain digits.
+            let text = String(raw).trim();
+            if (text.toUpperCase().startsWith('D.')) {{
+                text = text.slice(2);
+            }} else if (text.toUpperCase().startsWith('D')) {{
+                text = text.slice(1);
+            }}
+            if (text.includes('.')) {{
+                text = text.split('.')[0];
+            }}
+            text = text.replace(/^0+/, '');
+            return text || '0';
+        }}
+        
+        function getDeptBand(dept) {{
+            if (!dept) return null;
+            const deptClean = normalizeDeptNumber(dept);
+            for (const band of DEPARTMENT_BANDS) {{
+                const codes = (band.code || '').split('/');
+                for (const code of codes) {{
+                    if (normalizeDeptNumber(code) === deptClean) return band;
+                }}
+            }}
+            return null;
+        }}
+        
+        function getContrastingTextColor(hex) {{
+            // White text on a black department band, black text on every other color.
+            return (hex || '').replace('#', '').toLowerCase() === '000000' ? '#fff' : '#000';
+        }}
+        
         function generateDepartmentBandHTML(dept, itemName, deptCategory) {{
             if (!dept) return '<div class="text-gray-400">No dept band data</div>';
             
-            // Use actual category from BQ data
-            const category = deptCategory || 'Category';
+            const band = getDeptBand(dept);
+            // Gray fallback (not orange!) so an unmapped department is obviously "unknown"
+            // instead of silently lying with a color that means something else.
+            const bandColor = band ? band.color_hex : '#6b7280';
+            const textColor = getContrastingTextColor(bandColor);
+            const category = deptCategory || (band ? band.name : 'Category');
             
             return `
                 <div class="w-full">
-                    <div style="background-color: #ff8c00; color: #000; padding: 8px; font-weight: bold; border: 2px solid #000;">
+                    <div style="background-color: ${{bandColor}}; color: ${{textColor}}; padding: 8px; font-weight: bold; border: 2px solid #000;">
                         Dept. ${{dept}}
                     </div>
                     <div style="background-color: rgb(196, 165, 123); color: #000; padding: 8px; font-weight: bold; border: 2px solid #000; border-top: none;">

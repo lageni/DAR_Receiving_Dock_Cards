@@ -329,6 +329,14 @@
       "icon": "onesie"
     },
     {
+      "code": "D.27/28",
+      "name": "Socks/Hosiery",
+      "color_hex": "#E91E8C",
+      "color_pms": "170 U",
+      "rgb": [233, 30, 140],
+      "icon": "sock"
+    },
+    {
       "code": "D.29",
       "name": "Socks/Hosiery",
       "color_hex": "#E91E8C",
@@ -343,6 +351,14 @@
       "color_pms": "170 U",
       "rgb": [232, 93, 117],
       "icon": "underwear"
+    },
+    {
+      "code": "D.29",
+      "name": "Sleepwear/Scrubs",
+      "color_hex": "#E85D75",
+      "color_pms": "170 U",
+      "rgb": [232, 93, 117],
+      "icon": "sleepwear"
     },
     {
       "code": "D.29",
@@ -447,6 +463,214 @@
       "color_pms": "Pink U",
       "rgb": [255, 105, 180],
       "icon": "dress"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Foundations",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "bra"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Underwear",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "underwear"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Socks",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "sock"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Swimwear",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "swimsuit"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Outerwear",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "jacket"
+    },
+    {
+      "code": "D.33",
+      "name": "Girls Accessories",
+      "color_hex": "#FF69B4",
+      "color_pms": "Pink U",
+      "rgb": [255, 105, 180],
+      "icon": "accessory"
+    },
+    {
+      "code": "D.34",
+      "name": "Ladies Wear",
+      "color_hex": "#8031A7",
+      "color_pms": "2593 U",
+      "rgb": [128, 49, 167],
+      "icon": "dress"
+    },
+    {
+      "code": "D.34",
+      "name": "Juniors Wear",
+      "color_hex": "#8031A7",
+      "color_pms": "2593 U",
+      "rgb": [128, 49, 167],
+      "icon": "dress"
+    },
+    {
+      "code": "D.34",
+      "name": "Plus Sizes",
+      "color_hex": "#8031A7",
+      "color_pms": "2593 U",
+      "rgb": [128, 49, 167],
+      "icon": "dress"
+    },
+    {
+      "code": "D.34",
+      "name": "Outerwear",
+      "color_hex": "#8031A7",
+      "color_pms": "2593 U",
+      "rgb": [128, 49, 167],
+      "icon": "jacket"
+    },
+    {
+      "code": "D.34",
+      "name": "Swimwear",
+      "color_hex": "#8031A7",
+      "color_pms": "2593 U",
+      "rgb": [128, 49, 167],
+      "icon": "swimsuit"
+    },
+    {
+      "code": "D.38/40",
+      "name": "Pharmacy",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "rx"
+    },
+    {
+      "code": "D.41",
+      "name": "Team Sports",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "jersey"
+    },
+    {
+      "code": "D.44",
+      "name": "Baking",
+      "color_hex": "#FF8C00",
+      "color_pms": "264 U",
+      "rgb": [255, 140, 0],
+      "icon": "cake"
+    },
+    {
+      "code": "D.44",
+      "name": "Life Transitions",
+      "color_hex": "#FF8C00",
+      "color_pms": "264 U",
+      "rgb": [255, 140, 0],
+      "icon": "rings"
+    },
+    {
+      "code": "D.44",
+      "name": "Memories",
+      "color_hex": "#FF8C00",
+      "color_pms": "264 U",
+      "rgb": [255, 140, 0],
+      "icon": "photos"
+    },
+    {
+      "code": "D.46/59",
+      "name": "Cosmetics/Fragrance",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "lipstick"
+    },
+    {
+      "code": "D.49/50",
+      "name": "Optical",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "glasses"
+    },
+    {
+      "code": "D.52/84",
+      "name": "Floral",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "flower"
+    },
+    {
+      "code": "D.56",
+      "name": "Lawn & Garden",
+      "color_hex": "#00A046",
+      "color_pms": "355 U",
+      "rgb": [0, 160, 70],
+      "icon": "leaf"
+    },
+    {
+      "code": "D.58/87",
+      "name": "Connection Center",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "phone"
+    },
+    {
+      "code": "D.71",
+      "name": "Furniture",
+      "color_hex": "#4F9D42",
+      "color_pms": "362 U",
+      "rgb": [79, 157, 66],
+      "icon": "chair"
+    },
+    {
+      "code": "D.74",
+      "name": "Luggage",
+      "color_hex": "#4F9D42",
+      "color_pms": "362 U",
+      "rgb": [79, 157, 66],
+      "icon": "suitcase"
+    },
+    {
+      "code": "D.74",
+      "name": "Home Management",
+      "color_hex": "#4F9D42",
+      "color_pms": "362 U",
+      "rgb": [79, 157, 66],
+      "icon": "drawer"
+    },
+    {
+      "code": "D.79",
+      "name": "Infant Consumables",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "bottle"
+    },
+    {
+      "code": "D.82",
+      "name": "Impulse Buy",
+      "color_hex": "#000000",
+      "color_pms": "Black",
+      "rgb": [0, 0, 0],
+      "icon": "cart"
     }
   ]
 }
