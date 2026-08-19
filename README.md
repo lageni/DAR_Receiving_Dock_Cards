@@ -67,7 +67,12 @@ KILL.bat
 2. **Edit `.env` with actual credentials:**
    - `MDM_API_KEY` - Get from MDM team
    - `MDM_FACILITY_NUM`, `MDM_FACILITY_COUNTRY_CODE`, `MDM_WMT_USERID`
-   - `GCS_PROJECT_ID` - Your BigQuery project (used for ADC quota project)
+   - `GCS_PROJECT_ID` - **Required.** Your BigQuery project id (e.g.
+     `wmt-ambient-centeng`). Passed explicitly to `bigquery.Client()` by both
+     the server and client, so BigQuery works even on machines where the
+     `gcloud` CLI isn't installed/on PATH (ADC login is still needed for
+     credentials - see step 3 - but project *detection* no longer depends on
+     shelling out to `gcloud` at runtime).
 
 3. **Authenticate with GCP for BigQuery access:**
    ```bash
@@ -212,6 +217,15 @@ GCS_PROJECT_ID=your-bigquery-project-id
 - Verify `.env` file exists with API keys
 - Check VPN connection (for MDM API + BigQuery)
 - Run `python scripts\setup_gcp_auth.py --check` to confirm GCP auth
+
+### Logs show `[BQ-ERROR] Failed to initialize BigQuery client: Project was not passed and could not be determined from the environment.`
+- Make sure `GCS_PROJECT_ID` is set in `.env` (both server and client read it
+  via `scripts/bq_client.py` and pass it explicitly to `bigquery.Client()`).
+- This error can also mean your ADC login is stale/missing - re-run
+  `python scripts\setup_gcp_auth.py`.
+- Note: even with `GCS_PROJECT_ID` set, you still need valid ADC credentials
+  (step 3 of First-Time Setup) for the actual query permissions/auth - the
+  env var only fixes *project detection*, not authentication itself.
 
 ### Client Shows Placeholder Items ("No item data available")
 - Wait for the server's background cache updater to run (every 10 minutes),

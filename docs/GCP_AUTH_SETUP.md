@@ -58,5 +58,6 @@ gcloud auth application-default set-quota-project <YOUR_PROJECT_ID>
 |---|---|
 | `gcloud: command not found` | Install Google Cloud SDK, restart terminal |
 | `DefaultCredentialsError` in Python | Run `python scripts\setup_gcp_auth.py` |
+| `Project was not passed and could not be determined from the environment` | Set `GCS_PROJECT_ID` in `.env`. Under the hood, personal ADC logins (`authorized_user` credentials) normally rely on the `gcloud` CLI being installed *and on PATH* to auto-detect the active project at runtime - if `gcloud` goes missing/uninstalled on the machine later, that detection silently fails even though your ADC file and `gcloud config` still look correct. `scripts/bq_client.py` sidesteps this by passing `GCS_PROJECT_ID` to `bigquery.Client()` explicitly, so it no longer depends on `gcloud` being present after initial login. |
 | Login works but BigQuery still 403s | Ask a BigQuery dataset owner to grant your account `roles/bigquery.dataViewer` (or use the `bq-ad-group-locater` process to get added to the right AD group) |
 | Credentials expired | Re-run `python scripts\setup_gcp_auth.py` — it detects and re-runs login if the file is missing/invalid |

@@ -22,6 +22,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from bq_client import get_bigquery_client
+
 # Load environment variables
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -72,9 +74,11 @@ def get_door_assignments() -> Dict[str, int]:
     Returns dict of {delivery_number: door_number}
     """
     try:
-        from google.cloud import bigquery
-        client = bigquery.Client()
-        
+        client = get_bigquery_client()
+        if not client:
+            logger.error("[BQ-ERROR] No BigQuery client available for door assignments")
+            return {}
+
         query = """
         SELECT DISTINCT 
             DELIVERY_NUMBER,

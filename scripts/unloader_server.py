@@ -23,6 +23,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 
+from bq_client import get_bigquery_client
+
 # Load environment variables
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
@@ -67,19 +69,9 @@ app.add_middleware(
 # ============================================================================
 # BigQuery Integration
 # ============================================================================
-
-def get_bigquery_client():
-    """Get authenticated BigQuery client."""
-    try:
-        from google.cloud import bigquery
-        
-        # Try to use default credentials
-        client = bigquery.Client()
-        logger.info("[BQ] BigQuery client initialized")
-        return client
-    except Exception as e:
-        logger.error(f"[BQ-ERROR] Failed to initialize BigQuery client: {e}")
-        return None
+# get_bigquery_client() now lives in bq_client.py (shared with
+# unloader_client.py) so both apps resolve the project the same way instead
+# of relying on `gcloud` being on PATH. See docs/GCP_AUTH_SETUP.md.
 
 
 def query_all_deliveries(days_back: int = 7) -> List[Dict]:
