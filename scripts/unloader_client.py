@@ -58,9 +58,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Import department band function from main
-sys.path.insert(0, str(Path(__file__).parent))
-from main import get_department_band, load_department_bands, get_contrasting_text_rgb
+# Department band lookup - standalone module, no dependency on the archived ACL/DAR app
+from department_bands import get_department_band, load_department_bands, get_contrasting_text_rgb
 
 
 # ============================================================================

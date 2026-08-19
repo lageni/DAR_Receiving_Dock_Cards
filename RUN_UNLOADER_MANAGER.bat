@@ -22,7 +22,7 @@ if exist ".venv\Scripts\activate.bat" (
     echo [OK] Virtual environment activated
 ) else (
     echo [ERROR] No .venv found!
-    echo Run RUN.bat first to set up the main ACL app
+    echo Run RUN_UNLOADER.bat first to set up the environment
     pause
     exit /b 1
 )

@@ -3,8 +3,8 @@ GCP Authentication Setup for Unloader / ACL BigQuery Access
 =============================================================
 
 Sets up Application Default Credentials (ADC) so `bigquery.Client()`
-calls in unloader_server.py, unloader_client.py, and sync_bigquery.py
-"just work" without any code changes.
+calls in unloader_server.py and unloader_client.py "just work" without
+any code changes. (The archived ACL app's sync_bigquery.py uses this too.)
 
 Usage:
     python scripts/setup_gcp_auth.py            # interactive full setup

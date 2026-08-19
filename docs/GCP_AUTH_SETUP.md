@@ -1,10 +1,12 @@
 # GCP Authentication Setup (Local ADC)
 
-The Unloader and ACL BigQuery features (`unloader_server.py`, `unloader_client.py`,
-`sync_bigquery.py`) authenticate to Google BigQuery using **Application Default
-Credentials (ADC)** — your own Walmart Google identity, logged in locally via
-`gcloud`. There is no service account involved; each developer/machine logs in
-for themselves.
+The Unloader app (`unloader_server.py`, `unloader_client.py`) authenticates to
+Google BigQuery using **Application Default Credentials (ADC)** — your own
+Walmart Google identity, logged in locally via `gcloud`. There is no service
+account involved; each developer/machine logs in for themselves.
+
+(The archived ACL app's `sync_bigquery.py` - see `archive/old_acl_app/` - uses
+the same auth setup.)
 
 ## One-Time Setup
 
@@ -36,7 +38,7 @@ even inside the repo).
 
 ## Automatic Checks
 
-`RUN.bat`, `RUN_UNLOADER.bat`, and `RUN_UNLOADER_CLIENT.bat` all run a quick,
+`RUN_UNLOADER.bat` and `RUN_UNLOADER_CLIENT.bat` both run a quick,
 non-interactive check (`python scripts\setup_gcp_auth.py --check`) before
 starting their server/client. If credentials are missing, they'll automatically
 kick off the interactive login flow for you — you shouldn't need to remember to

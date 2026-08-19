@@ -1,36 +1,16 @@
-# ACL Freight Awareness - DAR Receiving Dock Cards
+# Unloader Monitor - DAR Receiving Dock Cards
 
-Real-time ACL monitoring system with client/server architecture for warehouse receiving dock operations.
+BigQuery-based delivery/unloader monitoring for warehouse receiving dock operations.
+
+> **Looking for the old ACL Freight Awareness app (ports 8050/8051)?** It's been
+> archived - see [`archive/old_acl_app/`](archive/old_acl_app/README.md). This
+> README now covers the **Unloader Monitor**, which is the actively maintained app.
 
 ---
 
 ## Quick Start
 
-### ACL Freight Awareness (Ports 8050/8051)
-
-#### Server (Analysis & Cache Writer)
-```bash
-RUN.bat
-```
-- **Port:** 8050
-- **Role:** Analyzes deliveries from Informix, writes cache files
-- **Background:** ACL worker updates every 2 minutes
-- **Access:** http://localhost:8050/delivery-analysis (manual testing)
-
-#### Client (Live Monitor Display)
-```bash
-RUN_CLIENT.bat
-```
-- **Port:** 8051
-- **Role:** Reads cache, displays ACL freight status
-- **Auto-refresh:** Every 30 seconds
-- **Access:** http://localhost:8051
-
----
-
-### Unloader Monitor (Ports 8060/8061)
-
-#### Server (BigQuery Cache Writer)
+### Server (BigQuery Cache Writer)
 ```bash
 RUN_UNLOADER.bat
 ```
@@ -40,7 +20,7 @@ RUN_UNLOADER.bat
 - **Background:** Cache updates every 10 minutes
 - **Access:** http://localhost:8060
 
-#### Client (Door Monitor Display)
+### Client (Door Monitor Display)
 ```bash
 RUN_UNLOADER_CLIENT.bat
 ```
@@ -51,7 +31,7 @@ RUN_UNLOADER_CLIENT.bat
 - **Auto-open:** Browser opens automatically
 - **Access:** http://localhost:8061
 
-#### Manager (Summary View)
+### Manager (Summary View)
 ```bash
 RUN_UNLOADER_MANAGER.bat
 ```
@@ -62,26 +42,23 @@ RUN_UNLOADER_MANAGER.bat
 - **Auto-open:** Browser opens automatically
 - **Access:** http://localhost:8062
 
----
-
-#### Stop All Processes
+### Stop All Processes
 ```bash
 KILL.bat
 ```
-- Terminates processes on ports 8050, 8051, 8060, 8061
-- Useful when processes are stuck or need restart
+- Terminates processes on ports 8060, 8061, 8062
 
 ---
 
-### Deployment (Production/Testing Machine)
+## Deployment (Production/Testing Machine)
 
-#### Prerequisites
+### Prerequisites
 1. **Python 3.10+** installed and added to PATH
 2. **Walmart VPN** or Eagle WiFi connection
 3. **L: Drive access** to `L:\Engineering\DAR Docktag Cards\`
 4. **Clone repository** to testing machine
 
-#### First-Time Setup
+### First-Time Setup
 1. **Copy `.env.example` to `.env`**
    ```bash
    copy .env.example .env
@@ -89,72 +66,63 @@ KILL.bat
 
 2. **Edit `.env` with actual credentials:**
    - `MDM_API_KEY` - Get from MDM team
-   - `INFORMIX_HOST`, `INFORMIX_USER`, `INFORMIX_PASSWORD` - Database credentials
-   - `DATABASE_PATH` - Path to read_rates.db (default: `L:\Engineering\DAR Docktag Cards\read_rates.db`)
+   - `MDM_FACILITY_NUM`, `MDM_FACILITY_COUNTRY_CODE`, `MDM_WMT_USERID`
    - `GCS_PROJECT_ID` - Your BigQuery project (used for ADC quota project)
-   - All other settings (see `.env.example` for descriptions)
 
-3. **Authenticate with GCP for BigQuery access** (Unloader + ACL BigQuery sync):
+3. **Authenticate with GCP for BigQuery access:**
    ```bash
    python scripts\setup_gcp_auth.py
    ```
    Logs you in locally via Application Default Credentials - no service account,
    no manual env vars. See [`docs/GCP_AUTH_SETUP.md`](docs/GCP_AUTH_SETUP.md) for
-   full details and troubleshooting. `RUN.bat` / `RUN_UNLOADER.bat` /
+   full details and troubleshooting. `RUN_UNLOADER.bat` and
    `RUN_UNLOADER_CLIENT.bat` also auto-check this on every startup and will
    prompt you to log in if credentials are missing.
 
-4. **Run server first time** (will auto-create venv and install dependencies):
+4. **Run the server first time** (will auto-create venv and install dependencies):
    ```bash
-   RUN.bat
+   RUN_UNLOADER.bat
    ```
-   - Creates `.venv/` directory
-   - Installs dependencies from Walmart Artifactory
-   - Starts server on port 8050
 
-4. **Run client** (in separate terminal):
+5. **Run the client** (in a separate terminal):
    ```bash
-   RUN_CLIENT.bat
+   RUN_UNLOADER_CLIENT.bat
    ```
-   - Uses same `.venv/` as server
-   - Starts client on port 8051
 
-#### Network Access
+6. **Run the manager view** (optional, in a separate terminal):
+   ```bash
+   RUN_UNLOADER_MANAGER.bat
+   ```
+
+### Network Access
 To access from other machines on the network:
-- Server: `http://<MACHINE-IP>:8050`
-- Client: `http://<MACHINE-IP>:8051`
-
-Example: `http://10.145.220.133:8051`
-
-#### Startup Scripts Handle Everything
- - Activate virtual environment automatically
- - Create venv if it doesn't exist
- - Install dependencies on first run
- - No manual activation needed
+- Server: `http://<MACHINE-IP>:8060`
+- Client: `http://<MACHINE-IP>:8061`
+- Manager: `http://<MACHINE-IP>:8062`
 
 ---
 
 ## Architecture
 
 ```
-ABIA API (Active Deliveries)
-         ↓
-    SERVER (Port 8050)
-    - Analyzes deliveries
-    - Checks read rates (SQLite)
-    - Fetches MDM data (images, info)
-    - Calculates bad cases
-    - Writes cache files
-         ↓
-  CACHE (L:\Engineering\DAR Docktag Cards\cache_data)
-    - analysis_{delivery}.json
-    - mdm_{item}.json
-         ↓
-    CLIENT (Port 8051)
-    - Reads cache
-    - Displays grid of deliveries
-    - Auto-scrolls through items
-    - Ranked by bad cases
+BigQuery (DAR_DELIVERIES_CACHE)
+         |
+    SERVER (Port 8060)
+    - Queries active deliveries
+    - Fetches MDM data for problematic items (< 85% read rate)
+    - Writes cache files (no door filtering - caches everything)
+    - Background refresh every 10 minutes
+         |
+  CACHE (L:\Engineering\DAR Docktag Cards\cache_data_unloader)
+    - deliveries/delivery_{nbr}.json
+    - items/mdm_{mds_id}.json
+         |
+    +----+----+
+    |         |
+ CLIENT    MANAGER
+(8061)      (8062)
+Door       Progress bars
+rolodex    by door
 ```
 
 ---
@@ -162,83 +130,53 @@ ABIA API (Active Deliveries)
 ## Key Files
 
 ### Startup Scripts
-- `RUN.bat` - Start ACL server (port 8050)
-- `RUN_CLIENT.bat` - Start ACL client viewer (port 8051)
 - `RUN_UNLOADER.bat` - Start Unloader server (port 8060)
 - `RUN_UNLOADER_CLIENT.bat` - Start Unloader client viewer (port 8061)
-- `KILL.bat` - Stop all processes on ports 8050/8051/8060/8061
+- `RUN_UNLOADER_MANAGER.bat` - Start Unloader manager summary view (port 8062)
+- `KILL.bat` - Stop all processes on ports 8060/8061/8062
 
 ### Application Code (scripts/)
-**ACL Freight Awareness:**
-- `main.py` - FastAPI server (analysis engine, cache writer)
-- `client_viewer.py` - FastAPI client (display only)
-- `acl_background_worker.py` - Background ACL monitor
-- `delivery_analysis.py` - Delivery analysis logic
-
-**Unloader Monitor:**
 - `unloader_server.py` - BigQuery-based server (port 8060)
 - `unloader_client.py` - Door range viewer (port 8061)
-
-**Shared Utilities:**
-- `cache_manager.py` - Shared cache module
-- `informix_connect.py` - Informix database connection
-- `batch_report.py` - Read rates analysis
-- `sync_bigquery.py` - Standalone BigQuery sync CLI script
-- `db.py` - Database initialization
+- `unloader_manager.py` - Manager summary view (port 8062)
+- `department_bands.py` - Department band lookup for ICC Drop items
 - `setup_gcp_auth.py` - Local GCP ADC login/setup (see `docs/GCP_AUTH_SETUP.md`)
 
-**Debug/One-Off Scripts** (`scripts/debug/`):
-- Ad-hoc investigation scripts used while chasing specific bugs
-  (e.g. `diagnose_acl_cache.py`, `check_delivery_10997992.py`). Not part of the
-  runtime app - safe to ignore unless you're debugging the same issue.
-
 ### Configuration
-- `.env` - Environment variables (API keys, DB paths)
+- `.env` - Environment variables (API keys, project IDs)
 - `pyproject.toml` - Python dependencies
 - `requirements.txt` - Dependency list
 
 ### Reference
-- `reference/department_bands.json` - Department data
+- `reference/department_bands.json` - Department color/band data
 - `reference/mdm_item_api_response_example.json` - MDM API example
 
 ### Documentation
 - `docs/GCP_AUTH_SETUP.md` - How to set up local GCP authentication (BigQuery)
 - `docs/UNLOADER_FEATURE_SPEC.md` - Complete unloader feature specification
-- `docs/ARCHITECTURE_CORRECTED.md`, `docs/CLIENT_SERVER_ARCHITECTURE.md` - System architecture
-- `docs/ACL_DEBUGGING_GUIDE.md` - ACL cache debugging steps
 - `docs/archive/` - Historical progress notes and completed-feature write-ups
   (kept for reference, not actively maintained)
+
+### Archived
+- `archive/old_acl_app/` - The original ACL Freight Awareness + Delivery
+  Analysis app (ports 8050/8051). Frozen, not actively maintained. See its
+  own README for how to run it if you ever need it again.
 
 ---
 
 ## Features
 
-### ACL Freight Awareness Server
-- **Informix PO Query** - Test endpoint at `/delivery-analysis`
-- **Read Rates Analysis** - SQL-optimized, pre-filters problematic items (< 85%)
-- **MDM Integration** - Fetches item images, names, dimensions
-- **Cache Writing** - Analysis results saved for instant client access
-- **Background Worker** - Auto-analyzes ACL deliveries every 2 minutes
-- **Import Detection** - Department bands only generated for IMPORT PO events
-
-### ACL Freight Awareness Client
-- **All Deliveries Visible** - No scrolling, grid layout
-- **Auto-Scroll Items** - 2 items per page, 5 second rotation
-- **Ranked Display** - Worst deliveries (most bad cases) first
-- **Dev View Toggle** - Hide/show technical details (MDS#, dimensions)
-- **Color-Coded** - Red (urgent), Yellow (warning), Green (OK), Gray (pending)
-
-### Unloader Monitor Server (NEW)
+### Unloader Monitor Server
 - **BigQuery Data Source** - Queries `DAR_DELIVERIES_CACHE` table
 - **Incremental Caching** - Only pulls NEW deliveries from BQ
-- **Door Range Filtering** - Default: 430-450 (configurable)
+- **Door Range Filtering** - Client-side, default: 425-500 (configurable)
 - **MDM Integration** - Fetches catalog GTIN + images for problematic items
 - **ICC Drop Logic** - Detects trailers needing department bands
 - **Background Updates** - Cache refreshes every 10 minutes
 - **Separate Cache** - Isolated in `cache_data_unloader/` folder
 
-### Unloader Monitor Client (NEW)
-- **Door Range Display** - Shows deliveries for doors 430-450 (default)
+### Unloader Monitor Client
+- **Door Range Display** - Shows deliveries for doors 425-500 (default)
 - **Rolodex View** - Auto-scrolls through items (2 per page, 5 sec)
 - **Department Bands** - ICC Drop items show dept bands instead of images
 - **Case Estimates** - Unknown, Bad, Good case counts
@@ -246,113 +184,47 @@ ABIA API (Active Deliveries)
 - **Auto-Refresh** - Page reloads every 30 seconds
 - **Color-Coded Performance** - Green (>85%), Yellow (50-85%), Red (<50%)
 
----
-
-## Cache Structure
-
-### Analysis Cache
-**File:** `cache_data/deliveries/analysis_{delivery_number}.json`
-
-```json
-{
-  "problematic_mds_ids": ["12345", "67890"],
-  "problematic_details": {
-    "12345": {
-      "avg_perf": 62.5,
-      "bad_cases": 75,
-      "recommendation": "REQUIRES MANUAL INSPECTION",
-      "color_hex": "#f59e0b"
-    }
-  },
-  "problematic_items_data": [
-    {
-      "mds_fam_id": "12345",
-      "item_name": "Great Value Widget",
-      "image_url": "https://...",
-      "vnpk_length": "12",
-      "vnpk_width": "8",
-      "vnpk_height": "6"
-    }
-  ],
-  "approved_count": 420
-}
-```
-
-### MDM Cache
-**File:** `cache_data/items/mdm_{mds_id}.json`
-
-Contains item images, names, dimensions from MDM API.
+### Unloader Manager
+- **Horizontal Progress Bars** - Good/Bad/Unknown case distribution by door
+- **Quick Overview** - At-a-glance summary for managers
+- **Auto-Refresh** - Every 30 seconds
 
 ---
 
 ## Environment Variables
 
-Create `.env` file with:
+Create a `.env` file with:
 
 ```env
 MDM_API_KEY=your_key
 MDM_FACILITY_NUM=6068
 MDM_FACILITY_COUNTRY_CODE=US
 MDM_WMT_USERID=mdm-ui
-DATABASE_PATH=L:\Engineering\DAR Docktag Cards\read_rates.db
+GCS_PROJECT_ID=your-bigquery-project-id
 ```
-
----
-
-## Optimizations
-
-### SQL Pre-Filtering
-- **Before:** Load 131k items, filter in Python
-- **After:** SQL WHERE IN clause loads only needed items
-- **Result:** 100-1000x faster queries
-
-### Analysis Caching
-- **Before:** Re-analyze every request
-- **After:** Cache results for 2 days
-- **Result:** Instant subsequent loads
-
-### Bad Cases Pre-Filter
-- **Before:** Load all items, check performance
-- **After:** SQL CTE filters performance < 85% at database level
-- **Result:** Only loads problematic items
 
 ---
 
 ## Troubleshooting
 
 ### Server Won't Start
-- Check port 8050 not in use
+- Check port 8060 not in use
 - Verify `.env` file exists with API keys
-- Check VPN connection (for MDM API)
+- Check VPN connection (for MDM API + BigQuery)
+- Run `python scripts\setup_gcp_auth.py --check` to confirm GCP auth
 
-### Client Shows "Pending Analysis"
-- Wait 2 minutes for background worker to analyze
-- Or click delivery on server (port 8050) to trigger manual analysis
+### Client Shows Placeholder Items ("No item data available")
+- Wait for the server's background cache updater to run (every 10 minutes),
+  or hit `http://localhost:8060` and click "Update Cache" to trigger manually
 
-### No Cache Found
-- Ensure server is running (port 8050)
-- Check background worker logs: `[ACL-WORKER]`
-- Verify L: drive accessible
+### No Deliveries Showing
+- Ensure server is running (port 8060)
+- Check `L:\Engineering\DAR Docktag Cards\cache_data_unloader\logs\` for errors
+- Verify L: drive is accessible
 
 ---
 
 ## Development
-
-### Sync BigQuery Data (Standalone)
-```bash
-python sync_bigquery.py
-```
-
-**What it does:**
-- Automatically detects missing dates in SQLite database
-- Syncs only new data from BigQuery ACL_READ_RATE table
-- Filters out DPAL/LBSS pick types
-- Shows progress and statistics
-
-**Requirements:**
-- Google Cloud credentials configured (`python scripts\setup_gcp_auth.py` - see `docs/GCP_AUTH_SETUP.md`)
-- VPN connection to Walmart network
-- BigQuery access to `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
 
 ### Install Dependencies
 ```bash
@@ -361,8 +233,8 @@ uv pip install -r pyproject.toml --index-url https://pypi.ci.artifacts.walmart.c
 
 ### Clear Cache
 ```bash
-del "L:\Engineering\DAR Docktag Cards\cache_data\deliveries\*.json"
-del "L:\Engineering\DAR Docktag Cards\cache_data\items\*.json"
+del "L:\Engineering\DAR Docktag Cards\cache_data_unloader\deliveries\*.json"
+del "L:\Engineering\DAR Docktag Cards\cache_data_unloader\items\*.json"
 ```
 
 ### Git
@@ -380,27 +252,5 @@ git push
 
 ---
 
-## Recent Fixes
-
-### 2026-07-24: Performance Calculation Fix
-- Fixed `get_avg_performance()` to use weighted average: `total(acl_null_cnt) / total(acl_event_cnt)`
-- Old method incorrectly averaged individual percentages
-- Clarified: `acl_null_cnt` = successful reads (misleading name)
-- Item 674874972 now correctly shows 82.84% and gets flagged (< 85%)
-
-### 2026-07-24: SQLite Connection Optimization
-- All DB reads now use context managers (`with` statement) for automatic cleanup
-- Read-only mode with 20-second timeout prevents database locks
-- Detailed logging shows exactly what's being read from the database
-- Fixes: Server/client both reading DB without interference
-
-### 2026-07-24: File Logging Added
-- Server and client now log to `L:\Engineering\DAR Docktag Cards\cache_data\logs\`
-- Daily log files: `server_YYYYMMDD.log` and `client_YYYYMMDD.log`
-- Logs show DB queries, cache operations, errors, and performance metrics
-- Both console and file output for easy debugging
-
----
-
-Last Updated: 2026-07-24
-Version: 2.0 (Client/Server Architecture)
+Last Updated: 2026-08-19
+Version: 3.0 (Unloader Monitor is now the primary app; ACL Freight Awareness archived)

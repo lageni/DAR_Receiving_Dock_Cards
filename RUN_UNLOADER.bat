@@ -15,16 +15,39 @@ echo.
 
 cd /d "%~dp0"
 
-REM Activate virtual environment
+REM First-time setup: create .env from template if missing
+if not exist ".env" (
+    echo [SETUP] No .env found - creating template...
+    (
+        echo # MDM Item API Credentials
+        echo MDM_API_KEY=PASTE_YOUR_KEY_HERE
+        echo MDM_FACILITY_NUM=6068
+        echo MDM_FACILITY_COUNTRY_CODE=US
+        echo MDM_WMT_USERID=mdm-ui
+        echo GCS_PROJECT_ID=PASTE_YOUR_BQ_PROJECT_HERE
+    ) > .env
+    echo [WARN] .env created - please fill in MDM_API_KEY and GCS_PROJECT_ID
+    notepad .env
+)
+
+REM Activate virtual environment, creating it on first run
 echo [SERVER] Activating virtual environment...
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
     echo [OK] Virtual environment activated
 ) else (
-    echo [ERROR] No .venv found!
-    echo Run RUN.bat first to set up the main ACL app
-    pause
-    exit /b 1
+    echo [SETUP] No .venv found - creating one now...
+    python -m venv .venv
+    call .venv\Scripts\activate.bat
+    echo [OK] Virtual environment created and activated
+    echo [SETUP] Installing dependencies from Walmart Artifactory...
+    pip install -r requirements.txt --index-url https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple --allow-insecure-host pypi.ci.artifacts.walmart.com
+    if errorlevel 1 (
+        echo [ERROR] Dependency install failed - check VPN/Eagle WiFi connection
+        pause
+        exit /b 1
+    )
+    echo [OK] Dependencies installed
 )
 
 echo.
