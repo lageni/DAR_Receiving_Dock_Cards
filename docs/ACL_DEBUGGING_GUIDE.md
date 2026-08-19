@@ -44,7 +44,7 @@ python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 **3. Run diagnostic script:**
 ```bash
 cd CodePuppyDAR
-python diagnose_acl_cache.py
+python scripts\debug\diagnose_acl_cache.py
 ```
 
 This will show EXACTLY what's in the worker's cache.

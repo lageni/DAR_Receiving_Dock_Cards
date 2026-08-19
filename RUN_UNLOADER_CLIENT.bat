@@ -28,6 +28,14 @@ if exist ".venv\Scripts\activate.bat" (
 )
 
 echo.
+echo [CLIENT] Checking GCP authentication (BigQuery)...
+python scripts\setup_gcp_auth.py --check
+if errorlevel 1 (
+    echo [WARN] GCP not authenticated - running setup now...
+    python scripts\setup_gcp_auth.py
+)
+
+echo.
 echo Starting unloader client...
 echo.
 echo Opening browser: http://localhost:8061

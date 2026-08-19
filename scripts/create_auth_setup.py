@@ -1,1 +1,0 @@
-with open(chr(34)+chr(115)+chr(101)+chr(116)+chr(117)+chr(112)+chr(95)+chr(103)+chr(99)+chr(112)+chr(95)+chr(97)+chr(117)+chr(116)+chr(104)+chr(46)+chr(112)+chr(121)+chr(34),chr(34)+chr(119)+chr(34)) as f: f.write(chr(34)+chr(34)+chr(34)+chr(68)+chr(111)+chr(99)+chr(34)+chr(34)+chr(34))

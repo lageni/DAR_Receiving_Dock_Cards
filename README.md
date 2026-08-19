@@ -91,9 +91,20 @@ KILL.bat
    - `MDM_API_KEY` - Get from MDM team
    - `INFORMIX_HOST`, `INFORMIX_USER`, `INFORMIX_PASSWORD` - Database credentials
    - `DATABASE_PATH` - Path to read_rates.db (default: `L:\Engineering\DAR Docktag Cards\read_rates.db`)
+   - `GCS_PROJECT_ID` - Your BigQuery project (used for ADC quota project)
    - All other settings (see `.env.example` for descriptions)
 
-3. **Run server first time** (will auto-create venv and install dependencies):
+3. **Authenticate with GCP for BigQuery access** (Unloader + ACL BigQuery sync):
+   ```bash
+   python scripts\setup_gcp_auth.py
+   ```
+   Logs you in locally via Application Default Credentials - no service account,
+   no manual env vars. See [`docs/GCP_AUTH_SETUP.md`](docs/GCP_AUTH_SETUP.md) for
+   full details and troubleshooting. `RUN.bat` / `RUN_UNLOADER.bat` /
+   `RUN_UNLOADER_CLIENT.bat` also auto-check this on every startup and will
+   prompt you to log in if credentials are missing.
+
+4. **Run server first time** (will auto-create venv and install dependencies):
    ```bash
    RUN.bat
    ```
@@ -174,6 +185,12 @@ ABIA API (Active Deliveries)
 - `batch_report.py` - Read rates analysis
 - `sync_bigquery.py` - Standalone BigQuery sync CLI script
 - `db.py` - Database initialization
+- `setup_gcp_auth.py` - Local GCP ADC login/setup (see `docs/GCP_AUTH_SETUP.md`)
+
+**Debug/One-Off Scripts** (`scripts/debug/`):
+- Ad-hoc investigation scripts used while chasing specific bugs
+  (e.g. `diagnose_acl_cache.py`, `check_delivery_10997992.py`). Not part of the
+  runtime app - safe to ignore unless you're debugging the same issue.
 
 ### Configuration
 - `.env` - Environment variables (API keys, DB paths)
@@ -185,7 +202,12 @@ ABIA API (Active Deliveries)
 - `reference/mdm_item_api_response_example.json` - MDM API example
 
 ### Documentation
-- `_docs/UNLOADER_FEATURE_SPEC.md` - Complete unloader feature specification
+- `docs/GCP_AUTH_SETUP.md` - How to set up local GCP authentication (BigQuery)
+- `docs/UNLOADER_FEATURE_SPEC.md` - Complete unloader feature specification
+- `docs/ARCHITECTURE_CORRECTED.md`, `docs/CLIENT_SERVER_ARCHITECTURE.md` - System architecture
+- `docs/ACL_DEBUGGING_GUIDE.md` - ACL cache debugging steps
+- `docs/archive/` - Historical progress notes and completed-feature write-ups
+  (kept for reference, not actively maintained)
 
 ---
 
@@ -328,7 +350,7 @@ python sync_bigquery.py
 - Shows progress and statistics
 
 **Requirements:**
-- Google Cloud credentials configured
+- Google Cloud credentials configured (`python scripts\setup_gcp_auth.py` - see `docs/GCP_AUTH_SETUP.md`)
 - VPN connection to Walmart network
 - BigQuery access to `wmt-ambient-centeng.6068_Engineering.ACL_READ_RATE`
 

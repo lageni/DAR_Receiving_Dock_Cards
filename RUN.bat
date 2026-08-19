@@ -85,6 +85,15 @@ if errorlevel 1 (
 )
 echo [OK] Database initialized
 
+REM Verify GCP authentication (needed for BigQuery sync / admin debug page)
+echo.
+echo [INFO] Checking GCP authentication...
+python scripts\setup_gcp_auth.py --check
+if errorlevel 1 (
+    echo [WARN] GCP not authenticated - BigQuery sync will fail until you run:
+    echo        python scripts\setup_gcp_auth.py
+)
+
 REM Verify connectivity (informational)
 echo.
 echo [INFO] Testing network connectivity...
